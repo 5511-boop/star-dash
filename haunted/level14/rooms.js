@@ -126,14 +126,14 @@ const thornMaze = {
     this.orbs = orbRow(E, R, 3, -1.3, 21.5, 1.3, 2.2);
   },
   init(){ return { vs: this.v.init(), got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  solve(st){ st.got = [1, 1, 1]; st.vs.len = st.vs.len.map(() => 0); st.vs.wait = st.vs.wait.map(() => 1e9); },
   colliders(st, R){ return this.v.rects(st.vs, R); },
   onFlash(st, R, E, idx, x, z){ this.v.burnNear(st.vs, x, R.lz(z), 4.5, E); },
   onBridge(st, R, E, sb){ this.v.burnSeg(st.vs, sbLocal(R, sb), 1, E); },
   host(dt, st, R, E){
     this.v.tick(dt, st.vs, R, E);
     SEED4.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A sky seed! (${st.got.filter(Boolean).length}/3)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three seeds — the hedges part and the door opens!'); }
+    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); this.solve(st); E.ev('door', 'Three seeds — the thorns wither away and the door opens!'); }
   },
   visual(dt, t, st, R){ this.v.visual(st.vs, R); this.sm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
   objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 glowing seeds. <b>Thorn vines</b> grow across the paths and snag you — <b>flash</b> them (or light-step through them) to burn them back. (${st.got.filter(Boolean).length}/3)`; }
@@ -217,7 +217,7 @@ const bramble = {
     this.rose = new T.Mesh(new T.SphereGeometry(.45, 12, 8), E.glow(0xff3a6a, 1)); R.place(this.rose, 0, 16.3, .8);
   },
   init(){ return { burn: brambleCells.map(() => 0), rose: 0 }; },
-  solve(st){ st.rose = 1; },
+  solve(st){ st.rose = 1; st.burn = st.burn.map(() => 1e9); },
   colliders(st, R){ return brambleCells.map(([x, l1, l2], i) => st.burn[i] > 0 ? null : R.rect(x, l1, x + 1, l2)).filter(Boolean); },
   onBridge(st, R, E, sb){ const s = sbLocal(R, sb); let n = 0; brambleCells.forEach(([x, l1, l2], i) => { if (segDistL(x + .5, (l1 + l2) / 2, ...s) < 1.1){ st.burn[i] = BELT7.find(([a, b]) => l1 >= a && l1 < b)[2] + 1.5; n++; } }); if (n) E.ev('whoosh', 'The light burns a tunnel through the bramble!'); },
   host(dt, st, R, E){
