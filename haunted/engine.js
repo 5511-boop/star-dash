@@ -142,7 +142,7 @@ document.body.innerHTML = `
   <div id="arrow" hidden></div>
   <div id="hint"></div>
 </div>
-<button id="btnExit" hidden>Leave</button><div id="leftBtns"><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺<span class="full"> Room start (T)</span></button><button id="btnSkip" hidden title="Skip to the next level">⏭<span class="full"> Skip level</span></button></div>
+<button id="btnExit" hidden>Leave</button><div id="leftBtns"><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺<span class="full"> Room start (T)</span></button><button id="btnSkip" hidden title="Skip this room">⏭<span class="full"> Skip room</span></button></div>
 <div id="touch" hidden><div id="joyBase"><div id="joyKnob"></div></div>
   <button class="tb" id="runBtn">RUN</button><button class="tb" id="dashBtn" hidden>⚡</button><button class="tb" id="powBtn" hidden>☀</button></div>
 <div id="menu" class="screen"><div class="card">
@@ -1259,7 +1259,7 @@ function onData(m){
     case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (role === 'host') hostPing(m.w, m.x, m.z); if (m.sw) toast(`${remoteName} wants to SWAP — press G or tap them to accept!`); break;
     case 'again': if (role === 'host' && phase === 'won') startGame(S.startRoom); break;
     case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
-    case 'skip': if (role === 'host' && phase === 'play'){ toast('Your partner skipped the level!'); goNextLevel(); } break;
+    case 'skiproom': if (role === 'host' && phase === 'play') hostSkipRoom(m.r); break;
     case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
     case 'tp': if (role === 'guest'){ me.pos.set(m.x, 0, m.z); me.slide = null; me.dash = null; me.grap = null; } break;
     case 'fell': if (role === 'host'){ const ri = roomAt(other.target.z), R = ROOMS[ri]; if (R && R.def.onFall) R.def.onFall(S.rs[ri], R, E, 1); } break;
@@ -1318,7 +1318,7 @@ function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
     if (role === 'guest' && prev !== 'play') for (const g of GHOSTS){ g.x = g.tx; g.z = g.tz; }
-    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = !(LEVELS.some(l => l.n === LEVEL + 1)); $('hint').hidden = isTouch;
+    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = false; $('hint').hidden = isTouch;
     $('dashBtn').hidden = !has('dash'); $('powBtn').hidden = !has('flash'); $('oilM').hidden = !has('oil');
     spawn(); meChar.group.visible = true; otherChar.group.visible = role !== 'solo';
     const partner = role === 'solo' ? 'You arrive' : `You and <b>${esc(remoteName)}</b> arrive`;
@@ -1452,13 +1452,23 @@ $('btnLeave').onclick = () => toMenu();
 $('btnMenu').onclick = () => toMenu();
 $('btnExit').onclick = () => toMenu();
 $('btnRespawn').onclick = e => { e.currentTarget.blur(); respawnRoom(); };
-$('btnSkip').onclick = e => { e.currentTarget.blur(); skipLevel(); };
-// skip straight to the next level (co-op: your partner comes along)
-function skipLevel(){
+$('btnSkip').onclick = e => { e.currentTarget.blur(); skipRoom(); };
+// skip the room you're in: it counts as solved and everyone in it (or behind it) hops to the start of the next room
+function skipRoom(){
   if (phase !== 'play') return;
-  if (!confirm(`Skip to Level ${LEVEL + 1}?` + (role === 'solo' ? '' : ' Your partner will come with you.'))) return;
-  if (role === 'guest'){ send({ t: 'skip' }); toast('Skipping…'); }
-  else goNextLevel();
+  const ri = roomAt(me.pos.z), R = ROOMS[ri]; if (!R) return;
+  if (!confirm(`Skip ${R.name}?` + (role === 'solo' ? '' : ' Your partner will come with you.'))) return;
+  if (role === 'guest'){ send({ t: 'skiproom', r: ri }); toast('Skipping…'); }
+  else hostSkipRoom(ri);
+}
+function hostSkipRoom(ri){
+  const R = ROOMS[ri]; if (!R || R.isOpen('exit') && ri < ROOMS.length - 1 && !curP.some(p => roomAt(p.pos.z) === ri)) return;
+  if (R.def.solve) R.def.solve(S.rs[ri], R, E);
+  R.open('exit'); S.frozen = [0, 0];
+  const N = ROOMS[ri + 1];
+  for (const p of curP){ const pr = roomAt(p.pos.z); if (pr < 0 || pr > ri) continue;
+    if (N){ const sp = N.spawnW[p.idx]; E.teleport(p.idx, sp[0], sp[1]); } else E.teleport(p.idx, p.idx ? 1.5 : -1.5, WIN_Z - 2); }
+  ev('door', `Skipped ${R.name}!`);
 }
 // stuck? hop back to the start of the room you're in (not the level). Only you move — the room and your partner stay as they are.
 let respawnCD = 0;
@@ -1647,6 +1657,6 @@ requestAnimationFrame(loop);
 return {
   S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS, requestSwap, getAnchor: () => soloAnchor,
   setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
-  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, respawnRoom, skipLevel, btn, carrying, doPing, hostPing
+  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, respawnRoom, skipRoom, btn, carrying, doPing, hostPing
 };
 }
