@@ -19,4 +19,5 @@ Two-player browser games. One player creates a game and shares the 4-letter code
   - Level 14, The Sky Gardens: https://5511-boop.github.io/star-dash/haunted/level14/
   - Level 15, The Pharaoh's Tomb: https://5511-boop.github.io/star-dash/haunted/level15/
   - Level 16, The Wax Museum: https://5511-boop.github.io/star-dash/haunted/level16/
+  - Level 17, The Abyssal Depths: https://5511-boop.github.io/star-dash/haunted/level17/
 - **Star Dash** (co-op star collecting): https://5511-boop.github.io/star-dash/

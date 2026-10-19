@@ -1489,7 +1489,7 @@ $('btnNext').onclick = () => {
 };
 {
   const ls = $('levelSel');
-  [[1, 'Hollow Manor'], [2, 'Grimwood Carnival'], [3, 'The Clocktower'], [4, 'The Sunken Lighthouse'], [5, 'The Frozen Monastery'], [6, "The Witch's Bog"], [7, 'The Ghost Train'], [8, 'The Opera House'], [9, 'The Ruined Cathedral'], [10, 'The Mirror Palace'], [11, 'The Spectral Archive'], [12, 'The Toy Factory'], [13, 'The Coal Mine'], [14, 'The Sky Gardens'], [15, "The Pharaoh's Tomb"], [16, 'The Wax Museum']].forEach(([n, t]) => { const o = document.createElement('option'); o.value = n; o.textContent = n + '. ' + t; ls.appendChild(o); });
+  [[1, 'Hollow Manor'], [2, 'Grimwood Carnival'], [3, 'The Clocktower'], [4, 'The Sunken Lighthouse'], [5, 'The Frozen Monastery'], [6, "The Witch's Bog"], [7, 'The Ghost Train'], [8, 'The Opera House'], [9, 'The Ruined Cathedral'], [10, 'The Mirror Palace'], [11, 'The Spectral Archive'], [12, 'The Toy Factory'], [13, 'The Coal Mine'], [14, 'The Sky Gardens'], [15, "The Pharaoh's Tomb"], [16, 'The Wax Museum'], [17, 'The Abyssal Depths']].forEach(([n, t]) => { const o = document.createElement('option'); o.value = n; o.textContent = n + '. ' + t; ls.appendChild(o); });
   ls.value = '1';
   ls.addEventListener('change', e => { const n = +e.target.value; if (n !== 1) location.href = levelUrl(n); });
   try {

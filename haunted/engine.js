@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 16;                     // highest level that exists on the site
+const BUILT = 17;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -1055,6 +1055,7 @@ function playerList(){
   if (role === 'guest') L.push({ idx: 1, pos: me.pos, ry: me.ry, moving: me.moving, inp: me.inp });
   for (const p of L){ p.frozen = S.frozen[p.idx] > 0; p.dashing = E.dashing(p.idx); p.running = p.idx === myIdx() ? me.running : other.running; p.sight = p.idx === myIdx() ? me.sight > 0 : !!other.sight; p.oil = p.idx === myIdx() ? me.oil : (other.oil ?? 1); }
   for (const p of L) p.hidden = has('shadow') && L.some(q => q !== p && !q.frozen && (() => { const dx = p.pos.x - q.pos.x, dz = p.pos.z - q.pos.z, d = Math.hypot(dx, dz); return d < 1.9 && d > .2 && (dx * Math.sin(q.ry) + dz * Math.cos(q.ry)) / d < -.45; })());
+  for (const p of L){ if (p.hidden) continue; const ri = roomAt(p.pos.z), Rr = ROOMS[ri]; if (Rr && Rr.def.shadows && Rr.def.shadows(S.rs[ri], Rr, E).some(r => p.pos.x > r.x1 && p.pos.x < r.x2 && p.pos.z > r.z1 && p.pos.z < r.z2)) p.hidden = true; }
   return L;
 }
 function ev(k, m = '', a = 0, x, z){ const e = { t: 'ev', k, m, a }; if (x !== undefined){ e.x = r2(x); e.z = r2(z); } playEv(e); send(e); }
@@ -1557,6 +1558,10 @@ function tick(dt){
     { const Rm = ROOMS[roomAt(me.pos.z)]; if (Rm && Rm.def.lantern && meChar.light){ const k = Rm.def.lantern(S.rs[Rm.i], Rm, E); meChar.light.distance *= k; meChar.light.intensity *= k; } }
     meChar.rig.scale.setScalar(me.dash || me.grap ? .85 : 1);
     updateCharVisuals(meChar, S.frozen[myIdx()]);
+    { let hid = false; const Rm = ROOMS[roomAt(me.pos.z)];
+      if (has('shadow') && otherChar.group.visible && role !== 'solo'){ const q = other.target, dx = me.pos.x - q.x, dz = me.pos.z - q.z, d = Math.hypot(dx, dz); hid = d < 1.9 && d > .2 && (dx * Math.sin(other.ry) + dz * Math.cos(other.ry)) / d < -.45; }
+      if (!hid && Rm && Rm.def.shadows) hid = Rm.def.shadows(S.rs[Rm.i], Rm, E).some(r => me.pos.x > r.x1 && me.pos.x < r.x2 && me.pos.z > r.z1 && me.pos.z < r.z2);
+      me.hiddenL = hid; meChar.bodyMat.transparent = true; meChar.bodyMat.opacity += ((hid ? .35 : 1) - meChar.bodyMat.opacity) * damp(8, dt); }
     meChar.label.setText(myFrozen() ? `❄ ${Math.ceil(S.frozen[myIdx()])}` : (myName || 'You'), myFrozen() ? '#bfeaff' : CSSCOL[myIdx()]);
     if (otherChar.group.visible && other.seen){
       otherChar.group.position.lerp(other.target, damp(14, dt));
