@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 8;                     // highest level that exists on the site
+const BUILT = 9;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -481,7 +481,7 @@ CFG.rooms.forEach((def, i) => {
     g.x = g.tx = g.home[0]; g.z = g.tz = g.home[1]; g.y = 0; g.ry = gdef.ry || 0; g.rest = 1.5; g.ret = false; g.wx = null; g.wt = 0; g.w = 0; g.mem = {}; g.stun = 0;
     GHOSTS.push(g); return g;
   };
-  R.hook = (x, lz) => { const h = { x, z: R.Z(lz), room: i }; HOOKS.push(h); return h; };
+  R.hook = (x, lz, opt = {}) => { const h = { x, z: R.Z(lz), room: i, ...opt }; HOOKS.push(h); return h; };
   R.spectral = (x1, lz1, x2, lz2) => { const r = R.rect(x1, lz1, x2, lz2); SPECTRAL.push(r); return r; };
   R.low = (x1, lz1, x2, lz2) => { const r = R.rect(x1, lz1, x2, lz2); LOWS.push(r); return r; };
   R.cracked = (n, x1, lz1, x2, lz2) => { const c = { id: R.id(n), rect: R.rect(x1, lz1, x2, lz2), room: i }; CRACKED.push(c); return c; };
@@ -612,7 +612,7 @@ for (const r of LOWS){ const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x
 const crackTex = canvasTex(128, 128, (x, w, h) => { x.fillStyle = '#5a4a40'; x.fillRect(0, 0, w, h); x.strokeStyle = '#1a1210'; x.lineWidth = 4; for (let i = 0; i < 6; i++){ x.beginPath(); x.moveTo(w / 2, h / 2); x.lineTo(Math.random() * w, Math.random() * h); x.stroke(); } });
 for (const c of CRACKED){ const r = c.rect; c.mesh = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, WALL_H, r.z2 - r.z1), mat(0xffffff, { map: crackTex })); c.mesh.position.set((r.x1 + r.x2) / 2, WALL_H / 2, (r.z1 + r.z2) / 2); scene.add(c.mesh); }
 const hookMat = mat(0xd4af37, { metalness: .8, roughness: .3, emissive: 0x6a5010, emissiveIntensity: .5 });
-for (const h of HOOKS){ const ring = new THREE.Mesh(new THREE.TorusGeometry(.45, .08, 8, 20), hookMat); ring.position.set(h.x, 2.6, h.z); scene.add(ring); h.mesh = ring; const post = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 2.2, 6), hookMat); post.position.set(h.x, 1.1, h.z); scene.add(post); }
+for (const h of HOOKS){ h.mat = hookMat.clone(); const ring = new THREE.Mesh(new THREE.TorusGeometry(.45, .08, 8, 20), h.mat); ring.position.set(h.x, 2.6, h.z); scene.add(ring); h.mesh = ring; const post = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 2.2, 6), h.mat); post.position.set(h.x, 1.1, h.z); scene.add(post); h.post = post; if (h.noPost) post.visible = false; }
 
 /* ===================== chars ===================== */
 const meChar = makeChar(COLORS[0]);
@@ -732,19 +732,28 @@ function rawInput(){
 
 /* ===================== powers (local side) ===================== */
 function facing(){ return [Math.sin(me.ry), Math.cos(me.ry)]; }
+function findHook(){
+  const [fx, fz] = facing(); let best = null, bd = 9.5;
+  let bs = -1, bdist = 0;
+  for (const h of HOOKS){ if (h.off || h.hidden) continue; const dx = h.x - me.pos.x, dz = h.z - me.pos.z, d = Math.hypot(dx, dz); if (d < 1.2 || d > bd) continue; const c = (dx * fx + dz * fz) / d; if (c < .7) continue; const sc = c - d * .01; if (sc > bs){ bs = sc; best = h; bdist = d; } }
+  return best ? [best, bdist] : null;
+}
 function actDash(isHold){
   if (phase !== 'play' || myFrozen()) return;
   const c = carrying(myIdx());
-  if (c && (has('throw') || c.R.def.allowThrow)){ sendAb({ k: 'throw', ry: me.ry }); sfx.throw(); return; }
-  if (has('decoy') && isHold){
+  if (has('decoy') && isHold && !c){
     if (me.decoyCD > 0){ toast('Decoy not ready yet.'); return; }
     me.decoyCD = 15; sendAb({ k: 'decoy', x: me.pos.x, z: me.pos.z }); sfx.place(); return;
   }
   if (has('grapple')){
-    const [fx, fz] = facing(); let best = null, bd = 9.5;
-    for (const h of HOOKS){ const dx = h.x - me.pos.x, dz = h.z - me.pos.z, d = Math.hypot(dx, dz); if (d < 1.2 || d > bd) continue; if ((dx * fx + dz * fz) / d < .7) continue; bd = d; best = h; }
-    if (best){ me.grap = { sx: me.pos.x, sz: me.pos.z, tx: best.x, tz: best.z, t: 0, d: .18 + bd * .035 }; sfx.hook(); return; }
+    const f = findHook();
+    if (f){
+      const [h, d] = f;
+      if (h.pull){ sendAb({ k: 'pull', hid: HOOKS.indexOf(h) }); sfx.hook(); return; }
+      me.grap = { sx: me.pos.x, sz: me.pos.z, tx: h.x, tz: h.z, h, t: 0, d: .18 + d * .035 }; sfx.hook(); return;
+    }
   }
+  if (c && (has('throw') || c.R.def.allowThrow)){ sendAb({ k: 'throw', ry: me.ry }); sfx.throw(); return; }
   if (me.dashCD > 0) return;
   let [mx, mz] = me.inp; if (Math.hypot(mx, mz) < .2){ [mx, mz] = facing(); } const l = Math.hypot(mx, mz) || 1;
   me.dash = { dx: mx / l, dz: mz / l, t: .2 }; me.dashCD = 1.1; me.ry = Math.atan2(mx, mz); sfx.dash();
@@ -832,7 +841,7 @@ function updateMe(dt){
   if (lockMove){ me.moving = false; me.running = false; return; }
   // grapple zip: fly straight to the hook, ignoring pits
   if (me.grap){
-    const g = me.grap; g.t += dt; const f = Math.min(1, g.t / g.d);
+    const g = me.grap; g.t += dt; const f = Math.min(1, g.t / g.d); if (g.h){ g.tx = g.h.x; g.tz = g.h.z; }
     me.pos.x = g.sx + (g.tx - g.sx) * f; me.pos.z = g.sz + (g.tz - g.sz) * f; me.ry = Math.atan2(g.tx - g.sx, g.tz - g.sz); me.moving = true;
     if (f >= 1){ me.grap = null; const p = me.pos.clone(); resolve(p, colliders(myIdx())); me.pos.copy(p); }
     return;
@@ -852,6 +861,7 @@ function updateMe(dt){
     me.pos.x += d.dx * DASHV * dt; me.pos.z += d.dz * DASHV * dt;
     resolve(me.pos, rects); me.moving = true;
     if (d.t <= 0) me.dash = null;
+    if (R && R.def.noDashJump && overPit(R, st, me.pos)) me.dash = null;      // updrafts: no leaping this chasm
     return afterMove(R, st);
   }
   // ---- ice: slide until something stops you (your partner counts!)
@@ -985,6 +995,7 @@ function hostAbility(idx, a){
       if (R && R.def.onFlash) R.def.onFlash(st, R, E, idx, a.x, a.z);
       break;
     case 'bolt': S.bolts.push({ x: a.x, z: a.z, vx: Math.sin(a.ry) * 16, vz: Math.cos(a.ry) * 16, t: .9, by: idx }); if (idx !== myIdx()) ev('bolt'); break;
+    case 'pull': { const h = HOOKS[a.hid]; if (h && h.room >= 0){ const Rr = ROOMS[h.room]; if (Rr.def.onPull) Rr.def.onPull(S.rs[h.room], Rr, E, idx, h); } break; }
     case 'decoy': S.decoys.push({ x: r2(a.x), z: r2(a.z), t: 6 }); ev('place', `${names()[idx]} dropped a decoy lantern!`); break;
     case 'swap': {
       swapReq[idx] = S.elapsed;
@@ -1428,6 +1439,7 @@ function defaultItem(k){
 function updateWorldVisuals(dt, t){
   for (const id of DOOR_IDS){ const m = DOORS[id].mesh; m.position.y += ((S.doors[id] ? -2.55 : 0) - m.position.y) * damp(5, dt); }
   for (const c of CRACKED) c.mesh.visible = !S.broken[c.id];
+  for (const h of HOOKS){ h.mesh.position.set(h.x, h.y ?? 2.6, h.z); h.post.position.set(h.x, 1.1, h.z); h.mesh.visible = !h.hidden; h.post.visible = !h.hidden && !h.noPost; h.mat.emissiveIntensity = h.off ? .05 : .5 + Math.sin(t * 4) * .2; h.mesh.rotation.y += dt; }
   ROOMS.forEach((R, i) => R.def.visual && R.def.visual(dt, t, S.rs[i], R, E));
   for (const id of PLATE_IDS){
     const p = PLATES[id]; if (!p.mesh) continue;
