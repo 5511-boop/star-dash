@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 9;                     // highest level that exists on the site
+const BUILT = 10;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -164,7 +164,7 @@ if (isTouch) document.body.classList.add('touch');
 {
   const keysTxt = ['WASD move', 'Shift run'];
   if (has('dash')) keysTxt.push('Space ⚡'); if (has('flash')) keysTxt.push('F ☀' + (has('sight') ? ' (hold: sight)' : ''));
-  if (has('ping')) keysTxt.push('click: ping'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('H hint');
+  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('H hint');
   $('hint').textContent = keysTxt.join(' · ');
 }
 
@@ -228,6 +228,7 @@ const sfx = {
   throw(){ noise(.15, .06, 1800); },
   splash(){ noise(.4, .12, 900); },
   boom(){ noise(.8, .25, 400); beep(60, .6, 'sawtooth', .12, -30); },
+  crash(){ noise(.25, .18, 3000); beep(2400, .12, 'triangle', .05); beep(3100, .1, 'triangle', .04, 0, .05); beep(1800, .15, 'triangle', .04, 0, .1); },
   swap(){ beep(500, .3, 'sine', .1, 500); beep(1000, .3, 'sine', .1, -500, .05); },
   hook(){ beep(900, .25, 'square', .05, -500); },
   rewind(){ [900, 700, 500, 350].forEach((f, i) => beep(f, .08, 'sine', .08, 0, i * .05)); },
@@ -525,6 +526,7 @@ function EAPI(){
     get sight(){ return me.sight > 0; },
     get S(){ return S; },
     solo: SOLO, names, myIdx,
+    soul: idx => idx < 0 ? -1 : SOLO() ? (S.soulFlip ? 1 : 0) : idx,
     me, other,
     ev, toast, flash,
     freeze(idx, secs = FREEZE, msg = ''){ if (S.frozen[idx] > 0) return; S.frozen[idx] = secs; S.freezes++; ev('freeze', msg, idx); },
@@ -667,6 +669,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyF') pressPow();
   if (e.code === 'KeyQ' && has('ping') && phase === 'play') doPing(me.pos.x, me.pos.z);
   if (e.code === 'KeyR' && has('rewind')) doRewind();
+  if (e.code === 'KeyG' && has('swap')) requestSwap();
   if (e.code === 'KeyH') showHint();
   if (e.code && (e.code.startsWith('Arrow') || e.code === 'Space')) e.preventDefault();
 });
@@ -753,7 +756,7 @@ function actDash(isHold){
       me.grap = { sx: me.pos.x, sz: me.pos.z, tx: h.x, tz: h.z, h, t: 0, d: .18 + d * .035 }; sfx.hook(); return;
     }
   }
-  if (c && (has('throw') || c.R.def.allowThrow)){ sendAb({ k: 'throw', ry: me.ry }); sfx.throw(); return; }
+  if (c && !c.R.def.noThrow && (has('throw') || c.R.def.allowThrow)){ sendAb({ k: 'throw', ry: me.ry }); sfx.throw(); return; }
   if (me.dashCD > 0) return;
   let [mx, mz] = me.inp; if (Math.hypot(mx, mz) < .2){ [mx, mz] = facing(); } const l = Math.hypot(mx, mz) || 1;
   me.dash = { dx: mx / l, dz: mz / l, t: .2 }; me.dashCD = 1.1; me.ry = Math.atan2(mx, mz); sfx.dash();
@@ -784,8 +787,20 @@ function screenPing(sx, sy){
   v.unproject(camera); const o = camera.position, dx = v.x - o.x, dy = v.y - o.y, dz = v.z - o.z;
   if (dy >= -1e-4) return;
   const t = -o.y / dy, x = o.x + dx * t, z = o.z + dz * t;
-  if (has('swap') && otherChar.group.visible && Math.hypot(x - other.target.x, z - other.target.z) < 1.3){ sendAb({ k: 'swap' }); doPing(other.target.x, other.target.z, true); toast('Swap request sent — your partner taps YOU to accept.'); return; }
+  if (has('swap') && SOLO() && Math.hypot(x - me.pos.x, z - me.pos.z) < 1.3){ requestSwap(); return; }
+  if (has('swap') && otherChar.group.visible && Math.hypot(x - other.target.x, z - other.target.z) < 1.3){ requestSwap(); doPing(other.target.x, other.target.z, true); return; }
   doPing(x, z);
+}
+let soloAnchor = null, anchorMesh = null, swapCD = 0;
+function requestSwap(){
+  if (phase !== 'play' || myFrozen() || swapCD > 0) return;
+  swapCD = 1;
+  if (SOLO()){
+    if (!soloAnchor){ soloAnchor = { x: me.pos.x, z: me.pos.z }; toast('Soul anchor placed — press G again to jump back to it.'); sfx.place(); }
+    else { me.pos.set(soloAnchor.x, 0, soloAnchor.z); me.slide = null; me.dash = null; me.grap = null; soloAnchor = null; sfx.swap(); flash(); S.soulFlip = S.soulFlip ? 0 : 1; meChar.bodyMat.color.setHex(COLORS[S.soulFlip]); toast(S.soulFlip ? 'Your soul shimmers PINK — pink glass lets you through.' : 'Your soul shimmers BLUE — blue glass lets you through.'); ROOMS.forEach((R, i) => R.def.onSwap && R.def.onSwap(S.rs[i], R, E)); }
+    return;
+  }
+  sendAb({ k: 'swap' }); toast('Swap requested — your partner presses G (or taps you) to swap!');
 }
 function doPing(x, z, swap = false){ addPing(x, z, myIdx(), swap); send({ t: 'ping', x: r2(x), z: r2(z), w: myIdx(), sw: swap ? 1 : 0 }); sfx.ping(); if (role !== 'guest') hostPing(myIdx(), x, z); }
 function hostPing(idx, x, z){ ROOMS.forEach((R, i) => { if (R.def.onPing && z <= R.zS && z > R.zN) R.def.onPing(S.rs[i], R, E, idx, x, z); }); }
@@ -848,6 +863,7 @@ function updateMe(dt){
   }
   let [mx, mz, run] = myFrozen() ? [0, 0, 0] : inp;
   if (myFrozen()){ me.dash = null; }
+  if (R && R.def.inputMod){ const im = R.def.inputMod(st, R, E, me.pos, myIdx()); if (im){ mx *= im[0]; mz *= im[1]; } }
   const mod = (R && R.def.speed) ? (R.def.speed(st, R, E, myIdx()) || {}) : {};
   me.moving = Math.hypot(mx, mz) > .1;
   me.running = me.moving && run && !mod.noRun && me.stamina > 0;
@@ -1003,6 +1019,7 @@ function hostAbility(idx, a){
         swapReq[0] = swapReq[1] = -9;
         const a0 = P[0].pos.clone(), a1 = P[1].pos.clone();
         E.teleport(P[0].idx, a1.x, a1.z); E.teleport(P[1].idx, a0.x, a0.z); ev('swap', 'Soul swap!');
+        ROOMS.forEach((Rr, i) => Rr.def.onSwap && Rr.def.onSwap(S.rs[i], Rr, E));
       }
       break; }
     case 'pow': {
@@ -1055,6 +1072,7 @@ function playEv(e){
     case 'whoosh': sfx.whoosh(); break;
     case 'gong': sfx.gong(e.a || 110); break;
     case 'splash': sfx.splash(); break;
+    case 'crash': sfx.crash(); break;
     case 'swap': sfx.swap(); break;
     case 'bolt': sfx.bolt(); break;
     case 'flashfx': if (e.x !== undefined) flashFx(e.x, e.z, e.a); break;
@@ -1207,7 +1225,7 @@ function onData(m){
       if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
       break;
     case 'ab': if (role === 'host') hostAbility(1, m); break;
-    case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (role === 'host') hostPing(m.w, m.x, m.z); if (m.sw) toast(`${remoteName} wants to SWAP — tap them to accept!`); break;
+    case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (role === 'host') hostPing(m.w, m.x, m.z); if (m.sw) toast(`${remoteName} wants to SWAP — press G or tap them to accept!`); break;
     case 'again': if (role === 'host' && phase === 'won') startGame(S.startRoom); break;
     case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
     case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
@@ -1263,7 +1281,7 @@ function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('
 function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
 function chosenStart(){ return clamp(parseInt($('startRoom').value) || 0, 0, Math.min(reached, ROOMS.length - 1)); }
 function startGame(startRoom = 0){ resetWorld(); solveUpTo(startRoom); setPhase('play'); }
-function spawn(){ fallCD = 0; const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
+function spawn(){ fallCD = 0; soloAnchor = null; S.soulFlip = 0; if (SOLO()) meChar.bodyMat.color.setHex(COLORS[0]); const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
 function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
@@ -1330,6 +1348,7 @@ function powIcons(){
   if (has('dash')) out.push(`<div class="pw">⚡${cd(me.dashCD, 1.1)}<small>Spc</small></div>`);
   if (has('flash')) out.push(`<div class="pw">☀${cd(me.powCD, 5)}<small>F</small></div>`);
   if (has('decoy')) out.push(`<div class="pw">🏮${cd(me.decoyCD, 15)}<small>hold</small></div>`);
+  if (has('swap')) out.push(`<div class="pw">🔁${cd(swapCD, 1)}<small>G/tap ${SOLO() ? 'self' : 'partner'}</small></div>`);
   if (has('rewind')) out.push(`<div class="pw">⏪${cd(me.rewCD, 10)}<small>R</small></div>`);
   return out.join('');
 }
@@ -1475,6 +1494,7 @@ function updateWorldVisuals(dt, t){
     sbMesh.visible = true; sbMesh.scale.set(len, 1, 1); sbMesh.position.set((b.x1 + b.x2) / 2, .12, (b.z1 + b.z2) / 2); sbMesh.rotation.y = -Math.atan2(b.z2 - b.z1, b.x2 - b.x1);
     sbMesh.material.opacity = .35 + Math.min(1, b.t) * .4;
   } else if (sbMesh) sbMesh.visible = false;
+  if (soloAnchor){ if (!anchorMesh){ anchorMesh = new THREE.Mesh(new THREE.TorusGeometry(.6, .08, 8, 24), glow(0xd8a8ff, 1.5)); anchorMesh.rotation.x = Math.PI / 2; scene.add(anchorMesh); } anchorMesh.visible = true; anchorMesh.position.set(soloAnchor.x, .1, soloAnchor.z); anchorMesh.rotation.z += dt * 2; } else if (anchorMesh) anchorMesh.visible = false;
   for (let i = PINGS.length - 1; i >= 0; i--){ const p = PINGS[i]; p.t -= dt; const s = 1 + (4 - p.t) * .15; p.ring.scale.setScalar(s); p.g.children.forEach(c => c.material.opacity = Math.max(0, p.t / 4)); if (p.t <= 0){ scene.remove(p.g); PINGS.splice(i, 1); } }
   for (let i = fxLights.length - 1; i >= 0; i--){ const f = fxLights[i]; f.t -= dt; f.l.intensity = Math.max(0, f.t / .45 * 30); f.s.scale.setScalar(1 + (.45 - f.t) * 12); f.s.material.opacity = Math.max(0, f.t / .45 * .45); if (f.t <= 0){ scene.remove(f.l); scene.remove(f.s); fxLights.splice(i, 1); } }
   // ghosts
@@ -1508,7 +1528,7 @@ const camPos = new THREE.Vector3(0, 16, 20), camLook = new THREE.Vector3();
 camera.position.copy(camPos);
 function tick(dt){
   clockT += dt; fallCD -= dt;
-  me.dashCD = Math.max(0, me.dashCD - dt); me.powCD = Math.max(0, me.powCD - dt); me.rewCD = Math.max(0, me.rewCD - dt); me.decoyCD = Math.max(0, me.decoyCD - dt);
+  me.dashCD = Math.max(0, me.dashCD - dt); swapCD = Math.max(0, swapCD - dt); me.powCD = Math.max(0, me.powCD - dt); me.rewCD = Math.max(0, me.rewCD - dt); me.decoyCD = Math.max(0, me.decoyCD - dt);
   if (btn.dash){ btn.dashT += dt; if (has('decoy') && !btn.dashUsed && btn.dashT > .65 && !carrying(myIdx())){ btn.dashUsed = true; actDash(true); } }
   if (btn.pow){ btn.powT += dt; if (has('sight') && btn.powT > .3 && phase === 'play'){ btn.powUsed = true; if (me.sightE > 0){ me.sight = 1; me.sightE = Math.max(0, me.sightE - dt / 5); } else me.sight = 0; } }
   else me.sightE = Math.min(1, me.sightE + dt / 6);
@@ -1562,7 +1582,7 @@ requestAnimationFrame(loop);
 
 // handle for automated tests
 return {
-  S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS,
+  S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS, requestSwap, getAnchor: () => soloAnchor,
   setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
   pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, btn, carrying, doPing, hostPing
 };
