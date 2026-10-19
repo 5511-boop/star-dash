@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 19;                     // highest level that exists on the site
+const BUILT = 20;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -633,10 +633,11 @@ function applyColors(){
 
 /* ===================== world reset / chapter select ===================== */
 function initRoomState(R){ R.local = {}; const st = R.def.init ? R.def.init(R, E) : {}; return st; }
+const lastPow = [{ t: -9 }, { t: -9 }], swapReq = [-9, -9];
 function resetWorld(){
   for (const id of DOOR_IDS) S.doors[id] = 0;
   for (const id of PLATE_IDS){ S.plateOn[id] = 0; hostMem[id] = 0; }
-  S.frozen = [0, 0]; S.freezes = 0; S.elapsed = 0; S.startRoom = 0; S.broken = {}; S.decoys = []; S.bolts = []; S.sb = null; S.echoes = []; S.ev = [];
+  S.frozen = [0, 0]; S.freezes = 0; S.elapsed = 0; S.startRoom = 0; S.broken = {}; S.decoys = []; S.bolts = []; S.sb = null; S.echoes = []; S.ev = []; lastPow[0] = { t: -9 }; lastPow[1] = { t: -9 }; swapReq[0] = swapReq[1] = -9;
   S.rs = ROOMS.map(R => initRoomState(R));
   for (const g of GHOSTS) ghostHome(g);
   me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = [];
@@ -1006,7 +1007,6 @@ function explode(R, ri, x, z){
 }
 
 /* ===================== host: powers ===================== */
-const lastPow = [{ t: -9 }, { t: -9 }], swapReq = [-9, -9];
 function hostAbility(idx, a){
   const P = curP, p = P.find(q => q.idx === idx);
   const ri = p ? roomAt(p.pos.z) : -1, R = ROOMS[ri], st = S.rs[ri];
@@ -1034,21 +1034,27 @@ function hostAbility(idx, a){
     case 'pow': {
       lastPow[idx] = { t: S.elapsed, x: a.x, z: a.z };
       const o = lastPow[1 - idx];
-      if (P.length === 2 && S.elapsed - o.t < .6){
+      if (P.length === 2 && Math.abs(S.elapsed - o.t) < .6){
         const d = Math.hypot(o.x - a.x, o.z - a.z);
         lastPow[0] = { t: -9 }; lastPow[1] = { t: -9 };
         if (has('blast') && d < 3.2){
-          ev('blast', 'SOUL BLAST!', 0, (o.x + a.x) / 2, (o.z + a.z) / 2);
-          for (const g of GHOSTS) if (g.y < 5 && !g.noStun && Math.hypot(g.x - a.x, g.z - a.z) < 9) g.stun = Math.max(g.stun, 8);
-          ROOMS.forEach((Rr, i) => { if (Rr.def.onBlast && Rr.inside(new THREE.Vector3(a.x, 0, a.z))) Rr.def.onBlast(S.rs[i], Rr, E, a.x, a.z); });
+          soulBlast((o.x + a.x) / 2, (o.z + a.z) / 2);
         } else if (has('bridge') && d >= 2.5 && d <= 14){
           makeBridge(o.x, o.z, a.x, a.z, 5, 1); ev('chime', 'A spirit bridge shimmers between you!', 3);
         }
+      } else if (has('blast')){
+        const ec = echoList().find(e => e[0] === idx && Math.hypot(e[1] - a.x, e[2] - a.z) < 3.2);
+        if (ec){ S.echoes = S.echoes.filter(e => e.idx !== idx); soulBlast((ec[1] + a.x) / 2, (ec[2] + a.z) / 2); }
       }
       break; }
   }
 }
 
+function soulBlast(x, z){
+  ev('blast', 'SOUL BLAST!', 0, x, z);
+  for (const g of GHOSTS) if (g.y < 5 && !g.noStun && !g.blastImmune && Math.hypot(g.x - x, g.z - z) < 9) g.stun = Math.max(g.stun, 8);
+  ROOMS.forEach((Rr, i) => { if (Rr.def.onBlast && Rr.inside(new THREE.Vector3(x, 0, z))) Rr.def.onBlast(S.rs[i], Rr, E, x, z); });
+}
 function makeBridge(x1, z1, x2, z2, t, joint){
   S.sb = { x1: r2(x1), z1: r2(z1), x2: r2(x2), z2: r2(z2), t, joint };
   ROOMS.forEach((Rr, i) => Rr.def.onBridge && Rr.def.onBridge(S.rs[i], Rr, E, S.sb));
@@ -1325,6 +1331,7 @@ function setPhase(p){
     $('wonStars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
     $('wonTitle').textContent = CFG.winTitle || 'You escaped! 🌙';
     $('wonSub').textContent = (role === 'solo' ? 'You made it out alive.' : `${names()[0]} and ${names()[1]} made it out alive.`) + ' (★★★ = frozen 2 times or fewer)';
+    if (CFG.winSub) $('wonSub').textContent = (role === 'solo' ? 'You' : `${names()[0]} and ${names()[1]}`) + ' ' + CFG.winSub + ' (★★★ = frozen 2 times or fewer)';
     $('wonRows').innerHTML =
       `<div class="row"><span>Escape time</span><span>${fmtTime(t)}${full ? '' : ' (from room ' + (S.startRoom + 1) + ')'}</span></div>` +
       `<div class="row"><span>Times frozen</span><span>${S.freezes}</span></div>` +

@@ -22,4 +22,5 @@ Two-player browser games. One player creates a game and shares the 4-letter code
   - Level 17, The Abyssal Depths: https://5511-boop.github.io/star-dash/haunted/level17/
   - Level 18, The Volcano Forge: https://5511-boop.github.io/star-dash/haunted/level18/
   - Level 19, The Dream Realm: https://5511-boop.github.io/star-dash/haunted/level19/
+  - Level 20, The Heart of Hollow Manor (final level): https://5511-boop.github.io/star-dash/haunted/level20/
 - **Star Dash** (co-op star collecting): https://5511-boop.github.io/star-dash/
