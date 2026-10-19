@@ -35,3 +35,26 @@ export function waterMat(E){
 export function plankMat(E){ return E.mat(0xffffff, { map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#8a6238'; x.fillRect(0, 0, w, h); x.fillStyle = '#6a4826'; for (let i = 0; i < 4; i++) x.fillRect(0, i * 16 + 14, w, 2); }, 2, 2) }); }
 export const near = (R, p, x, lz, r) => Math.hypot(p.pos.x - x, R.lz(p.pos.z) - lz) < r;
 export const inRect = (R, pos, x1, lz1, x2, lz2) => pos.x > x1 && pos.x < x2 && R.lz(pos.z) > lz1 && R.lz(pos.z) < lz2;
+// Hollow Knight: an empty suit of armour. Can't be stunned (flash, throws, bolts do nothing) and can't pass ANY wall —
+// not even ghost walls — so it gets stuck behind them while you phase through.
+export function knight(R, E, home, opt = {}){
+  return R.ghost({ home, look: 'knight', tint: opt.tint || 0x8a8aa6, sp: 0, flashImmune: true, noStun: true, label: opt.label || 'a Hollow Knight', b: opt.b, scale: opt.scale, gone: opt.gone, touch: opt.touch,
+    think: (g, dt, st, R2, E2, P) => {
+      const m = g.mem;
+      if (opt.idle && opt.idle(st)){ return true; }
+      const sp = (typeof opt.sp === 'function' ? opt.sp(st) : (opt.sp || 2.4)) * E2.GMULT;
+      const T = E2.targetsOf(g, P).filter(p => R2.inside(p.pos) && (!opt.wants || opt.wants(g, p, st)));
+      let best = null, bd = opt.radius || 40;
+      for (const p of T){ const d = Math.hypot(p.pos.x - g.x, p.pos.z - g.z); if (d < bd){ bd = d; best = p; } }
+      let tx = g.home[0], tz = g.home[1];
+      if (best){ tx = best.pos.x; tz = best.pos.z; } else if (opt.patrol){ const pts = opt.patrol; m.pi = m.pi || 0; const [px, pl] = pts[m.pi]; tx = px; tz = R2.Z(pl); if (Math.hypot(g.x - tx, g.z - tz) < .3) m.pi = (m.pi + 1) % pts.length; }
+      const ox = g.x, oz = g.z;
+      E2.stepToward(g, tx, tz, best ? sp : sp * .6, dt);
+      const rects = E2.staticRects(); E2.resolve(g, rects);
+      if (opt.b){ g.x = E2.clamp(g.x, g.b[0], g.b[1]); g.z = E2.clamp(g.z, g.b[2], g.b[3]); }
+      m.stuck = Math.hypot(g.x - ox, g.z - oz) < sp * dt * .25 && best ? (m.stuck || 0) + dt : 0;
+      if (opt.onStep) opt.onStep(g, dt, st, m, best);
+      E2.ghostTouch(g, T, E2.names(), opt.touch || .95);
+      return true;
+    } });
+}

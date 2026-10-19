@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 10;                     // highest level that exists on the site
+const BUILT = 11;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -601,13 +601,14 @@ function losBlocked(x1, z1, x2, z2){
   for (let i = 1; i < 10; i++){ const x = x1 + (x2 - x1) * i / 10, z = z1 + (z2 - z1) * i / 10; if (rs.some(r => x > r.x1 && x < r.x2 && z > r.z1 && z < r.z2)) return true; }
   return false;
 }
+const spectralMat = new THREE.MeshStandardMaterial({ color: 0x9a6bff, emissive: 0x6a3aff, emissiveIntensity: .6, transparent: true, opacity: .35 });
+E.spectralMat = spectralMat;
 Object.assign(E, { stepToward, ghostTouch, inBounds, colliders, resolve, AI, inCone, losBlocked, targetsOf, overPit,
   staticRects: () => colliders(-1, { vaulting: true }) });
 ROOMS.forEach(R => floor(-10, R.zN, 10, R.zS, R.def.floor ? R.def.floor(E) : mat(0x3a3040), .002));
 ROOMS.forEach(R => R.def.build && R.def.build(R, E));
 
 // visuals for engine-level map pieces registered by rooms
-const spectralMat = new THREE.MeshStandardMaterial({ color: 0x9a6bff, emissive: 0x6a3aff, emissiveIntensity: .6, transparent: true, opacity: .35 });
 for (const r of SPECTRAL){ const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, WALL_H, r.z2 - r.z1), spectralMat); m.position.set((r.x1 + r.x2) / 2, WALL_H / 2, (r.z1 + r.z2) / 2); scene.add(m); }
 const lowMat = mat(CFG.lowColor || 0x6a5a4a);
 for (const r of LOWS){ const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, .7, r.z2 - r.z1), lowMat); m.position.set((r.x1 + r.x2) / 2, .35, (r.z1 + r.z2) / 2); scene.add(m); }
@@ -825,7 +826,7 @@ function colliders(idx, opts = {}){
   const list = RECTS.slice();
   for (const id of DOOR_IDS) if (!S.doors[id]) list.push(DOORS[id].rect);
   for (const c of CRACKED) if (!S.broken[c.id]) list.push(c.rect);
-  if (!opts.phasing) for (const r of SPECTRAL) list.push(r);
+  if (!opts.phasing){ for (const r of SPECTRAL) list.push(r); ROOMS.forEach((R, i) => { if (R.def.spectral) for (const r of R.def.spectral(S.rs[i], R, E)) list.push(r); }); }
   if (!opts.vaulting) for (const r of LOWS) list.push(r);
   ROOMS.forEach((R, i) => { if (R.def.colliders) for (const r of R.def.colliders(S.rs[i], R, E, idx)) list.push(r); });
   return list;
@@ -870,7 +871,8 @@ function updateMe(dt){
   if (me.running) me.stamina = Math.max(0, me.stamina - dt);
   else me.stamina = Math.min(STAM, me.stamina + dt * (me.moving ? .45 : .8));
   let sp = (me.running ? RUN : WALK) * (mod.mult || 1);
-  const rects = colliders(myIdx(), { phasing: has('phase') && me.running, vaulting: has('vault') && !!me.dash });
+  me.phasing = has('phase') && me.running && !(R && R.def.solidCarry && carrying(myIdx()));
+  const rects = colliders(myIdx(), { phasing: me.phasing, vaulting: has('vault') && !!me.dash });
   // ---- dash
   if (me.dash){
     const d = me.dash; d.t -= dt;
@@ -963,7 +965,7 @@ function hostItems(dt, P){
           const c = P.find(q => q.idx !== it.by && S.frozen[q.idx] <= 0 && !carrying(q.idx) && Math.hypot(q.pos.x - it.x, q.pos.z - wz) < 1.1);
           if (c && !it.nocatch){ it.s = 1; it.w = c.idx; it.y = 0; ev('pick', `${names()[c.idx]} caught it!`); if (R.def.onCatch) R.def.onCatch(st, R, E, it, c.idx); continue; }
           const g = GHOSTS.find(g => g.room === ri && g.y < 5 && !g.harmlessHit && Math.hypot(g.x - it.x, g.z - wz) < 1);
-          if (g){ if (!(R.def.onHitGhost && R.def.onHitGhost(st, R, E, it, g) === false)) { g.stun = Math.max(g.stun, it.k === 'bomb' ? 0 : 2.5); } it.ft = it.fd; }
+          if (g){ if (!(R.def.onHitGhost && R.def.onHitGhost(st, R, E, it, g) === false)) { if (!g.noStun) g.stun = Math.max(g.stun, it.k === 'bomb' ? 0 : 2.5); } it.ft = it.fd; }
         }
         if (it.ft >= it.fd){ it.s = 0; it.y = 0; ev('thud'); if (it.k === 'bomb') it.fuse = 1.3; if (R.def.onLand) R.def.onLand(st, R, E, it); }
       } else if (it.s === 0){
@@ -994,7 +996,7 @@ function throwItem(idx, ry){
 function explode(R, ri, x, z){
   ev('boom', '', 0, x, z);
   for (const c of CRACKED) if (!S.broken[c.id]){ const r = c.rect, cx = clamp(x, r.x1, r.x2), cz = clamp(z, r.z1, r.z2); if (Math.hypot(x - cx, z - cz) < 3) { S.broken[c.id] = 1; } }
-  for (const g of GHOSTS) if (g.room === ri && Math.hypot(g.x - x, g.z - z) < 4.5 && !g.bombImmune) g.stun = Math.max(g.stun, 4);
+  for (const g of GHOSTS) if (g.room === ri && Math.hypot(g.x - x, g.z - z) < 4.5 && !g.bombImmune && !g.noStun) g.stun = Math.max(g.stun, 4);
   for (const p of curP) if (Math.hypot(p.pos.x - x, p.pos.z - z) < 2.2) E.freeze(p.idx, 3, `${names()[p.idx]} got caught in the blast!`);
 }
 
@@ -1007,7 +1009,7 @@ function hostAbility(idx, a){
     case 'throw': throwItem(idx, a.ry); break;
     case 'flash':
       if (idx !== myIdx()) ev('flashfx', '', idx, a.x, a.z);
-      for (const g of GHOSTS) if (g.y < 5 && !g.flashImmune && Math.hypot(g.x - a.x, g.z - a.z) < 5.5) g.stun = Math.max(g.stun, g.flashStun || 3.5);
+      for (const g of GHOSTS) if (g.y < 5 && !g.flashImmune && !g.noStun && Math.hypot(g.x - a.x, g.z - a.z) < 5.5) g.stun = Math.max(g.stun, g.flashStun || 3.5);
       if (R && R.def.onFlash) R.def.onFlash(st, R, E, idx, a.x, a.z);
       break;
     case 'bolt': S.bolts.push({ x: a.x, z: a.z, vx: Math.sin(a.ry) * 16, vz: Math.cos(a.ry) * 16, t: .9, by: idx }); if (idx !== myIdx()) ev('bolt'); break;
@@ -1030,7 +1032,7 @@ function hostAbility(idx, a){
         lastPow[0] = { t: -9 }; lastPow[1] = { t: -9 };
         if (has('blast') && d < 3.2){
           ev('blast', 'SOUL BLAST!', 0, (o.x + a.x) / 2, (o.z + a.z) / 2);
-          for (const g of GHOSTS) if (g.y < 5 && Math.hypot(g.x - a.x, g.z - a.z) < 9) g.stun = Math.max(g.stun, 8);
+          for (const g of GHOSTS) if (g.y < 5 && !g.noStun && Math.hypot(g.x - a.x, g.z - a.z) < 9) g.stun = Math.max(g.stun, 8);
           ROOMS.forEach((Rr, i) => { if (Rr.def.onBlast && Rr.inside(new THREE.Vector3(a.x, 0, a.z))) Rr.def.onBlast(S.rs[i], Rr, E, a.x, a.z); });
         } else if (has('bridge') && d >= 2.5 && d <= 14){
           S.sb = { x1: r2(o.x), z1: r2(o.z), x2: r2(a.x), z2: r2(a.z), t: 5 }; ev('chime', 'A spirit bridge shimmers between you!', 3);
@@ -1105,7 +1107,7 @@ function hostTick(dt){
   for (const b of S.bolts){
     b.t -= dt; b.x += b.vx * dt; b.z += b.vz * dt;
     const g = GHOSTS.find(g => g.y < 5 && Math.hypot(g.x - b.x, g.z - b.z) < 1);
-    if (g){ g.stun = Math.max(g.stun, 6); b.t = 0; ev('zap'); const R = ROOMS[g.room]; if (R.def.onBoltHit) R.def.onBoltHit(S.rs[g.room], R, E, g); }
+    if (g){ if (!g.noStun) g.stun = Math.max(g.stun, 6); b.t = 0; ev('zap'); const R = ROOMS[g.room]; if (R.def.onBoltHit) R.def.onBoltHit(S.rs[g.room], R, E, g); }
     if (colliders(-1).some(r => b.x > r.x1 && b.x < r.x2 && b.z > r.z1 && b.z < r.z2)) b.t = 0;
   }
   S.bolts = S.bolts.filter(b => b.t > 0);
@@ -1499,6 +1501,7 @@ function updateWorldVisuals(dt, t){
   for (let i = fxLights.length - 1; i >= 0; i--){ const f = fxLights[i]; f.t -= dt; f.l.intensity = Math.max(0, f.t / .45 * 30); f.s.scale.setScalar(1 + (.45 - f.t) * 12); f.s.material.opacity = Math.max(0, f.t / .45 * .45); if (f.t <= 0){ scene.remove(f.l); scene.remove(f.s); fxLights.splice(i, 1); } }
   // ghosts
   let nearest = 99;
+  spectralMat.emissiveIntensity = me.sight > 0 ? 1.8 : .6; spectralMat.color.setHex(me.sight > 0 ? 0xeee6ff : 0x9a6bff);
   for (const g of GHOSTS){
     if (role === 'guest'){ g.x += (g.tx - g.x) * damp(10, dt); g.z += (g.tz - g.z) * damp(10, dt); }
     const m = g.mesh, shake = g.w ? Math.sin(t * 60) * .04 : 0;

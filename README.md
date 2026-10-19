@@ -13,4 +13,5 @@ Two-player browser games. One player creates a game and shares the 4-letter code
   - Level 8, The Opera House: https://5511-boop.github.io/star-dash/haunted/level8/
   - Level 9, The Ruined Cathedral: https://5511-boop.github.io/star-dash/haunted/level9/
   - Level 10, The Mirror Palace: https://5511-boop.github.io/star-dash/haunted/level10/
+  - Level 11, The Spectral Archive: https://5511-boop.github.io/star-dash/haunted/level11/
 - **Star Dash** (co-op star collecting): https://5511-boop.github.io/star-dash/
