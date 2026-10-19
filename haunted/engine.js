@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 18;                     // highest level that exists on the site
+const BUILT = 19;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -429,7 +429,9 @@ const myIdx = () => role === 'guest' ? 1 : 0;
 const names = () => myIdx() === 0 ? [myName || 'You', remoteName] : [remoteName, myName || 'You'];
 const SOLO = () => role === 'solo';
 const ECHO = 5;
-const S = { doors: {}, plateOn: {}, frozen: [0, 0], freezes: 0, elapsed: 0, startRoom: 0, rs: [], broken: {}, decoys: [], bolts: [], sb: null, fx: [] };
+const S = { doors: {}, plateOn: {}, frozen: [0, 0], freezes: 0, elapsed: 0, startRoom: 0, rs: [], broken: {}, decoys: [], bolts: [], sb: null, fx: [], echoes: [], ev: [] };
+function echoPos(e){ const p = e.p; if (e.t >= p[p.length - 1][0]) return [p[p.length - 1][1], p[p.length - 1][2]]; for (let i = 1; i < p.length; i++) if (p[i][0] >= e.t){ const a = p[i - 1], b = p[i], f = (e.t - a[0]) / ((b[0] - a[0]) || 1); return [a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; } return [p[0][1], p[0][2]]; }
+function echoList(){ return role === 'guest' ? (S.ev || []) : S.echoes.map(e => { const [x, z] = echoPos(e); return [e.idx, r2(x), r2(z)]; }); }
 const hostMem = {};
 const me = { pos: new THREE.Vector3(0, 0, 6), ry: Math.PI, moving: false, running: false, stamina: 2.5, slide: null, inp: [0, 0, 0], dash: null, grap: null, dashCD: 0, powCD: 0, sight: 0, sightE: 1, oil: 1, hist: [], rewCD: 0, decoyCD: 0 };
 const other = { target: new THREE.Vector3(0, 0, 6), ry: 0, moving: false, running: false, seen: false, inp: [0, 0, 0], dashing: 0, sight: 0, oil: 1 };
@@ -546,6 +548,7 @@ function EAPI(){
     dashing: idx => idx === myIdx() ? !!(me.dash || me.grap) : !!other.dashing,
     segDist,
     ghostsOf: ri => GHOSTS.filter(g => g.room === ri),
+    echoes: () => echoList(),
   };
   return _api;
 }
@@ -633,7 +636,7 @@ function initRoomState(R){ R.local = {}; const st = R.def.init ? R.def.init(R, E
 function resetWorld(){
   for (const id of DOOR_IDS) S.doors[id] = 0;
   for (const id of PLATE_IDS){ S.plateOn[id] = 0; hostMem[id] = 0; }
-  S.frozen = [0, 0]; S.freezes = 0; S.elapsed = 0; S.startRoom = 0; S.broken = {}; S.decoys = []; S.bolts = []; S.sb = null;
+  S.frozen = [0, 0]; S.freezes = 0; S.elapsed = 0; S.startRoom = 0; S.broken = {}; S.decoys = []; S.bolts = []; S.sb = null; S.echoes = []; S.ev = [];
   S.rs = ROOMS.map(R => initRoomState(R));
   for (const g of GHOSTS) ghostHome(g);
   me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = [];
@@ -779,7 +782,9 @@ function doRewind(){
   const target = me.hist.find(h => h[0] >= S.elapsed - 3.05) || me.hist[0];
   if (!target) return;
   if (roomAt(target[1] === undefined ? me.pos.z : target[2]) !== roomAt(me.pos.z)) { toast('Can\'t rewind into another room.'); return; }
+  const t0 = target[0], path = me.hist.filter(h => h[0] >= t0).map(h => [r2(h[0] - t0), r2(h[1]), r2(h[2])]); path.push([r2(S.elapsed - t0), r2(me.pos.x), r2(me.pos.z)]);
   me.pos.set(target[1], 0, target[2]); me.slide = null; me.dash = null; me.grap = null; me.rewCD = 10; sfx.rewind(); flash();
+  if (path.length > 1) sendAb({ k: 'echo', p: path });
 }
 function screenPing(sx, sy){
   if (!has('ping') || phase !== 'play') return;
@@ -1015,6 +1020,7 @@ function hostAbility(idx, a){
       break;
     case 'bolt': S.bolts.push({ x: a.x, z: a.z, vx: Math.sin(a.ry) * 16, vz: Math.cos(a.ry) * 16, t: .9, by: idx }); if (idx !== myIdx()) ev('bolt'); break;
     case 'pull': { const h = HOOKS[a.hid]; if (h && h.room >= 0){ const Rr = ROOMS[h.room]; if (Rr.def.onPull) Rr.def.onPull(S.rs[h.room], Rr, E, idx, h); } break; }
+    case 'echo': { S.echoes.push({ idx, p: a.p, t: 0 }); const ri = roomAt(a.p[0][2]), Rr = ROOMS[ri]; if (Rr && Rr.def.onEcho) Rr.def.onEcho(S.rs[ri], Rr, E, idx); break; }
     case 'decoy': S.decoys.push({ x: r2(a.x), z: r2(a.z), t: 6 }); ev('place', `${names()[idx]} dropped a decoy lantern!`); break;
     case 'swap': {
       swapReq[idx] = S.elapsed;
@@ -1096,10 +1102,12 @@ function hostTick(dt){
   if (phase !== 'play') return;
   S.elapsed += dt;
   const P = curP = playerList();
+  for (const e of S.echoes) e.t += dt; S.echoes = S.echoes.filter(e => e.t < e.p[e.p.length - 1][0] + .5);
+  const ECH = echoList().map(([i, x, z]) => ({ x, z }));
   const extra = ROOMS.map((R, i) => R.def.occupants ? R.def.occupants(S.rs[i], R, E) : []);
   for (const id of PLATE_IDS){
     const pl = PLATES[id];
-    const occ = P.some(p => onPlate(pl, p.pos)) || (pl.room >= 0 && extra[pl.room].some(o => onPlate(pl, o)));
+    const occ = P.some(p => onPlate(pl, p.pos)) || (pl.room >= 0 && extra[pl.room].some(o => onPlate(pl, o))) || ECH.some(o => onPlate(pl, o));
     edges[id] = occ && !S.plateOn[id];
     S.plateOn[id] = occ ? 1 : 0;
     if (occ) hostMem[id] = SOLO() ? ECHO : 0; else hostMem[id] = Math.max(0, hostMem[id] - dt);
@@ -1246,7 +1254,7 @@ function onData(m){
       DOOR_IDS.forEach((id, i) => S.doors[id] = m.d[i] === '1' ? 1 : 0);
       PLATE_IDS.forEach((id, i) => S.plateOn[id] = m.pl[i] === '1' ? 1 : 0);
       S.frozen = m.fr; S.freezes = m.fz; S.elapsed = m.el; S.startRoom = m.sr; S.rs = m.rs;
-      S.broken = m.br || {}; S.decoys = m.dc || []; S.bolts = m.bo || []; S.sb = m.sb || null;
+      S.broken = m.br || {}; S.decoys = m.dc || []; S.bolts = m.bo || []; S.sb = m.sb || null; S.ev = m.ec || [];
       m.gh.forEach((v, i) => { const g = GHOSTS[i]; g.tx = v[0]; g.tz = v[1]; g.y = v[2]; g.ry = v[3]; g.w = v[4]; });
       other.target.set(m.hp[0], 0, m.hp[1]); other.ry = m.hp[2]; other.moving = !!m.hp[3]; other.running = !!m.hp[4]; other.dashing = m.hp[5] || 0; other.sight = m.hp[6] || 0; other.oil = m.hp[7] ?? 1;
       other.inp = m.in || [0, 0, 0];
@@ -1276,7 +1284,7 @@ function sendState(){
     d: DOOR_IDS.map(id => S.doors[id] ? '1' : '0').join(''),
     pl: PLATE_IDS.map(id => S.plateOn[id] ? '1' : '0').join(''),
     fr: S.frozen.map(r2), fz: S.freezes, el: r2(S.elapsed), sr: S.startRoom, rs: S.rs,
-    br: S.broken, dc: S.decoys, bo: S.bolts.map(b => ({ x: r2(b.x), z: r2(b.z) })), sb: S.sb,
+    br: S.broken, dc: S.decoys, bo: S.bolts.map(b => ({ x: r2(b.x), z: r2(b.z) })), sb: S.sb, ec: echoList(),
     gh: GHOSTS.map(g => [r2(g.x), r2(g.z), r2(g.y), r2(g.ry), g.w]),
     hp: p, in: me.inp.map(r2)
   });
@@ -1446,7 +1454,7 @@ try {
 
 /* ===================== visuals ===================== */
 const itemMeshes = new Map();
-const decoyMeshes = [], boltMeshes = [];
+const decoyMeshes = [], boltMeshes = [], echoMeshes = [];
 let sbMesh = null;
 function itemMesh(R, ri, k, idx){
   const key = ri + ':' + idx;
@@ -1494,6 +1502,7 @@ function updateWorldVisuals(dt, t){
   });
   for (const [k, m] of itemMeshes) if (!seen.has(k)) m.visible = false;
   // decoys / bolts / spirit bridge / pings / flash fx
+  { const el = echoList(); while (echoMeshes.length < el.length){ const c = makeChar(0xffffff, true); c.bodyMat.emissive = new THREE.Color(0x8a8aff); c.bodyMat.emissiveIntensity = .7; echoMeshes.push(c); } echoMeshes.forEach((c, i) => { const e = el[i]; c.group.visible = !!e; if (e){ c.bodyMat.color.setHex(COLORS[e[0]]); const dx = e[1] - c.group.position.x, dz = e[2] - c.group.position.z; if (Math.hypot(dx, dz) > .02) c.group.rotation.y = Math.atan2(dx, dz); c.group.position.set(e[1], 0, e[2]); } }); }
   while (decoyMeshes.length < S.decoys.length){ const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.BoxGeometry(.35, .5, .35), glow(0xffcf7a, 2))); const l = new THREE.PointLight(0xffb36b, 5, 8, 1.2); l.position.y = 1; g.add(l); scene.add(g); decoyMeshes.push(g); }
   decoyMeshes.forEach((m, i) => { const d = S.decoys[i]; m.visible = !!d; if (d){ m.position.set(d.x, .3 + Math.sin(t * 6) * .05, d.z); } });
   while (boltMeshes.length < S.bolts.length){ const b = new THREE.Mesh(new THREE.SphereGeometry(.25, 10, 8), glow(0x9fe8ff, 2.5)); scene.add(b); boltMeshes.push(b); }
