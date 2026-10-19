@@ -15,4 +15,5 @@ Two-player browser games. One player creates a game and shares the 4-letter code
   - Level 10, The Mirror Palace: https://5511-boop.github.io/star-dash/haunted/level10/
   - Level 11, The Spectral Archive: https://5511-boop.github.io/star-dash/haunted/level11/
   - Level 12, The Toy Factory: https://5511-boop.github.io/star-dash/haunted/level12/
+  - Level 13, The Coal Mine: https://5511-boop.github.io/star-dash/haunted/level13/
 - **Star Dash** (co-op star collecting): https://5511-boop.github.io/star-dash/
