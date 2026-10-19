@@ -120,7 +120,11 @@ style.textContent = `
   #powBtn{right:calc(132px + env(safe-area-inset-right));bottom:calc(60px + env(safe-area-inset-bottom));width:72px;height:72px;background:#fff3a044;border:3px solid #fff3a0cc;font-size:26px}
   .tb.on{filter:brightness(1.6)}
   .tb.cd{opacity:.45}
-  #btnExit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:11;padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}`;
+  #btnExit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:11;padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}
+  #btnRespawn{position:fixed;top:calc(10px + env(safe-area-inset-top));left:12px;z-index:11;padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}
+  #hudTop{padding:0 72px}
+  body.touch #btnRespawn .full{display:none}
+  body:not(.touch) #btnRespawn .short{display:none}`;
 document.head.appendChild(style);
 const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
@@ -136,7 +140,7 @@ document.body.innerHTML = `
   <div id="arrow" hidden></div>
   <div id="hint"></div>
 </div>
-<button id="btnExit" hidden>Leave</button>
+<button id="btnExit" hidden>Leave</button><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺ <span class="full">Room start (T)</span><span class="short">Room</span></button>
 <div id="touch" hidden><div id="joyBase"><div id="joyKnob"></div></div>
   <button class="tb" id="runBtn">RUN</button><button class="tb" id="dashBtn" hidden>⚡</button><button class="tb" id="powBtn" hidden>☀</button></div>
 <div id="menu" class="screen"><div class="card">
@@ -164,7 +168,7 @@ if (isTouch) document.body.classList.add('touch');
 {
   const keysTxt = ['WASD move', 'Shift run'];
   if (has('dash')) keysTxt.push('Space ⚡'); if (has('flash')) keysTxt.push('F ☀' + (has('sight') ? ' (hold: sight)' : ''));
-  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('H hint');
+  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('T room start'); keysTxt.push('H hint');
   $('hint').textContent = keysTxt.join(' · ');
 }
 
@@ -676,6 +680,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyR' && has('rewind')) doRewind();
   if (e.code === 'KeyG' && has('swap')) requestSwap();
   if (e.code === 'KeyH') showHint();
+  if (e.code === 'KeyT') respawnRoom();
   if (e.code && (e.code.startsWith('Arrow') || e.code === 'Space')) e.preventDefault();
 });
 addEventListener('keyup', e => {
@@ -1267,7 +1272,7 @@ function onData(m){
       if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
       if (m.ph !== phase) setPhase(m.ph);
       break;
-    case 'ev': if (role === 'guest' || m.k === 'fallo' || m.k === 'zap') playEv(m); break;
+    case 'ev': if (role === 'guest' || m.k === 'fallo' || m.k === 'zap' || m.k === 'respo') playEv(m); break;
   }
 }
 function onDisconnect(){
@@ -1302,7 +1307,7 @@ function show(id){ screens.forEach(s => $(s).hidden = s !== id); }
 function status(t){ $('status').textContent = t; }
 let toastT = 0, storyT = 0, roomTime = 0, lastRoom = -1, hintT = 0;
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); toastT = 3.2; }
-function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
+function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('btnRespawn').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
 function chosenStart(){ return clamp(parseInt($('startRoom').value) || 0, 0, Math.min(reached, ROOMS.length - 1)); }
 function startGame(startRoom = 0){ resetWorld(); solveUpTo(startRoom); setPhase('play'); }
 function spawn(){ fallCD = 0; soloAnchor = null; S.soulFlip = 0; if (SOLO()) meChar.bodyMat.color.setHex(COLORS[0]); const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
@@ -1310,7 +1315,7 @@ function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
     if (role === 'guest' && prev !== 'play') for (const g of GHOSTS){ g.x = g.tx; g.z = g.tz; }
-    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('hint').hidden = isTouch;
+    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('hint').hidden = isTouch;
     $('dashBtn').hidden = !has('dash'); $('powBtn').hidden = !has('flash'); $('oilM').hidden = !has('oil');
     spawn(); meChar.group.visible = true; otherChar.group.visible = role !== 'solo';
     const partner = role === 'solo' ? 'You arrive' : `You and <b>${esc(remoteName)}</b> arrive`;
@@ -1443,6 +1448,20 @@ $('btnStart').onclick = () => { unlockAudio(); if (role === 'host' && conn && co
 $('btnLeave').onclick = () => toMenu();
 $('btnMenu').onclick = () => toMenu();
 $('btnExit').onclick = () => toMenu();
+$('btnRespawn').onclick = e => { e.currentTarget.blur(); respawnRoom(); };
+// stuck? hop back to the start of the room you're in (not the level). Only you move — the room and your partner stay as they are.
+let respawnCD = 0;
+function respawnRoom(){
+  if (phase !== 'play' || lockMove) return;
+  if (myFrozen()){ toast('You\'re frozen — wait to thaw (or for your partner) first.'); return; }
+  if (S.elapsed < respawnCD){ toast('One moment…'); return; }
+  const ri = roomAt(me.pos.z), R = ROOMS[ri]; if (!R) return;
+  const sp = R.spawnW[myIdx()];
+  me.pos.set(sp[0], 0, sp[1]); me.slide = null; me.dash = null; me.grap = null; me.hist = []; me.ry = Math.PI; fallCD = .5;
+  respawnCD = S.elapsed + 2;
+  toast('Back to the start of ' + R.name + '.');
+  if (role !== 'solo') send({ t: 'ev', k: 'respo', m: `${myName || 'Your partner'} went back to the start of the room.` });
+}
 $('btnAgain').onclick = () => {
   unlockAudio();
   if (role === 'guest'){ send({ t: 'again' }); $('btnAgain').disabled = true; $('btnAgain').textContent = 'Starting…'; }
@@ -1617,6 +1636,6 @@ requestAnimationFrame(loop);
 return {
   S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS, requestSwap, getAnchor: () => soloAnchor,
   setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
-  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, btn, carrying, doPing, hostPing
+  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, respawnRoom, btn, carrying, doPing, hostPing
 };
 }
