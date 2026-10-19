@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 6;                     // highest level that exists on the site
+const BUILT = 7;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -778,7 +778,8 @@ function screenPing(sx, sy){
   if (has('swap') && otherChar.group.visible && Math.hypot(x - other.target.x, z - other.target.z) < 1.3){ sendAb({ k: 'swap' }); doPing(other.target.x, other.target.z, true); toast('Swap request sent — your partner taps YOU to accept.'); return; }
   doPing(x, z);
 }
-function doPing(x, z, swap = false){ addPing(x, z, myIdx(), swap); send({ t: 'ping', x: r2(x), z: r2(z), w: myIdx(), sw: swap ? 1 : 0 }); sfx.ping(); }
+function doPing(x, z, swap = false){ addPing(x, z, myIdx(), swap); send({ t: 'ping', x: r2(x), z: r2(z), w: myIdx(), sw: swap ? 1 : 0 }); sfx.ping(); if (role !== 'guest') hostPing(myIdx(), x, z); }
+function hostPing(idx, x, z){ ROOMS.forEach((R, i) => { if (R.def.onPing && z <= R.zS && z > R.zN) R.def.onPing(S.rs[i], R, E, idx, x, z); }); }
 const pingGeo = new THREE.RingGeometry(.6, .85, 28);
 function addPing(x, z, who, swap){
   const g = new THREE.Group();
@@ -1195,7 +1196,7 @@ function onData(m){
       if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
       break;
     case 'ab': if (role === 'host') hostAbility(1, m); break;
-    case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (m.sw) toast(`${remoteName} wants to SWAP — tap them to accept!`); break;
+    case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (role === 'host') hostPing(m.w, m.x, m.z); if (m.sw) toast(`${remoteName} wants to SWAP — tap them to accept!`); break;
     case 'again': if (role === 'host' && phase === 'won') startGame(S.startRoom); break;
     case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
     case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
@@ -1551,6 +1552,6 @@ requestAnimationFrame(loop);
 return {
   S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS,
   setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
-  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, btn, carrying
+  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, btn, carrying, doPing, hostPing
 };
 }
