@@ -10,4 +10,5 @@ Two-player browser games. One player creates a game and shares the 4-letter code
   - Level 5, The Frozen Monastery: https://5511-boop.github.io/star-dash/haunted/level5/
   - Level 6, The Witch's Bog: https://5511-boop.github.io/star-dash/haunted/level6/
   - Level 7, The Ghost Train: https://5511-boop.github.io/star-dash/haunted/level7/
+  - Level 8, The Opera House: https://5511-boop.github.io/star-dash/haunted/level8/
 - **Star Dash** (co-op star collecting): https://5511-boop.github.io/star-dash/
