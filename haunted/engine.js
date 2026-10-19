@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 13;                     // highest level that exists on the site
+const BUILT = 14;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -767,11 +767,11 @@ function actPow(){
   const now = performance.now() / 1000;
   if (has('rewind') && now - btn.lastPowTap < .32){ btn.lastPowTap = -9; doRewind(); return; }
   btn.lastPowTap = now;
-  sendAb({ k: 'pow', x: me.pos.x, z: me.pos.z });                      // used for bridge / blast sync
+  sendAb({ k: 'pow', x: me.pos.x, z: me.pos.z, ry: r2(me.ry) });       // used for bridge / blast sync
   if (me.powCD > 0) return;
   if (has('bolt') && me.moving){ me.powCD = 3; sendAb({ k: 'bolt', x: me.pos.x, z: me.pos.z, ry: me.ry }); sfx.bolt(); return; }
   me.powCD = 5; if (has('oil')) me.oil = Math.max(0, me.oil - .08);
-  sendAb({ k: 'flash', x: me.pos.x, z: me.pos.z }); flashFx(me.pos.x, me.pos.z, myIdx());
+  sendAb({ k: 'flash', x: me.pos.x, z: me.pos.z, ry: r2(me.ry) }); flashFx(me.pos.x, me.pos.z, myIdx());
 }
 function doRewind(){
   if (!has('rewind') || phase !== 'play' || myFrozen()) return;
@@ -1011,6 +1011,7 @@ function hostAbility(idx, a){
       if (idx !== myIdx()) ev('flashfx', '', idx, a.x, a.z);
       for (const g of GHOSTS) if (g.y < 5 && !g.flashImmune && !g.noStun && Math.hypot(g.x - a.x, g.z - a.z) < 5.5) g.stun = Math.max(g.stun, g.flashStun || 3.5);
       if (R && R.def.onFlash) R.def.onFlash(st, R, E, idx, a.x, a.z);
+      if (has('bridge') && a.ry !== undefined && !(S.sb && S.sb.joint)){ const L = SOLO() ? 8 : 4; makeBridge(a.x, a.z, a.x + Math.sin(a.ry) * L, a.z + Math.cos(a.ry) * L, 3.5, 0); }
       break;
     case 'bolt': S.bolts.push({ x: a.x, z: a.z, vx: Math.sin(a.ry) * 16, vz: Math.cos(a.ry) * 16, t: .9, by: idx }); if (idx !== myIdx()) ev('bolt'); break;
     case 'pull': { const h = HOOKS[a.hid]; if (h && h.room >= 0){ const Rr = ROOMS[h.room]; if (Rr.def.onPull) Rr.def.onPull(S.rs[h.room], Rr, E, idx, h); } break; }
@@ -1035,13 +1036,17 @@ function hostAbility(idx, a){
           for (const g of GHOSTS) if (g.y < 5 && !g.noStun && Math.hypot(g.x - a.x, g.z - a.z) < 9) g.stun = Math.max(g.stun, 8);
           ROOMS.forEach((Rr, i) => { if (Rr.def.onBlast && Rr.inside(new THREE.Vector3(a.x, 0, a.z))) Rr.def.onBlast(S.rs[i], Rr, E, a.x, a.z); });
         } else if (has('bridge') && d >= 2.5 && d <= 14){
-          S.sb = { x1: r2(o.x), z1: r2(o.z), x2: r2(a.x), z2: r2(a.z), t: 5 }; ev('chime', 'A spirit bridge shimmers between you!', 3);
+          makeBridge(o.x, o.z, a.x, a.z, 5, 1); ev('chime', 'A spirit bridge shimmers between you!', 3);
         }
       }
       break; }
   }
 }
 
+function makeBridge(x1, z1, x2, z2, t, joint){
+  S.sb = { x1: r2(x1), z1: r2(z1), x2: r2(x2), z2: r2(z2), t, joint };
+  ROOMS.forEach((Rr, i) => Rr.def.onBridge && Rr.def.onBridge(S.rs[i], Rr, E, S.sb));
+}
 /* ===================== host simulation ===================== */
 function playerList(){
   const host = role === 'guest' ? other : me;
