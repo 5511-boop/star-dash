@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 15;                     // highest level that exists on the site
+const BUILT = 16;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -827,7 +827,7 @@ function colliders(idx, opts = {}){
   for (const id of DOOR_IDS) if (!S.doors[id]) list.push(DOORS[id].rect);
   for (const c of CRACKED) if (!S.broken[c.id]) list.push(c.rect);
   if (!opts.phasing){ for (const r of SPECTRAL) list.push(r); ROOMS.forEach((R, i) => { if (R.def.spectral) for (const r of R.def.spectral(S.rs[i], R, E)) list.push(r); }); }
-  if (!opts.vaulting) for (const r of LOWS) list.push(r);
+  if (!opts.vaulting){ for (const r of LOWS) list.push(r); ROOMS.forEach((R, i) => { if (R.def.lows) for (const r of R.def.lows(S.rs[i], R, E)) list.push(r); }); }
   ROOMS.forEach((R, i) => { if (R.def.colliders) for (const r of R.def.colliders(S.rs[i], R, E, idx)) list.push(r); });
   return list;
 }
@@ -1115,7 +1115,7 @@ function hostTick(dt){
     if (g){ if (!g.noStun) g.stun = Math.max(g.stun, 6); b.t = 0; ev('zap'); const R = ROOMS[g.room]; if (R.def.onBoltHit) R.def.onBoltHit(S.rs[g.room], R, E, g); }
     if (b.t > 0) ROOMS.forEach((Rr, i) => { if (b.t <= 0 || !Rr.def.boltTargets) return; for (const [tx, tz, id, rad] of Rr.def.boltTargets(S.rs[i], Rr, E)){ if (Math.hypot(b.x - tx, b.z - tz) < (rad || .8)){ b.t = 0; ev('zap'); Rr.def.onBoltTarget(S.rs[i], Rr, E, id, b); break; } } });
     if (b.t > 0) ROOMS.forEach((Rr, i) => { if (Rr.def.boltStep && Rr.inside(new THREE.Vector3(b.x, 0, b.z))) Rr.def.boltStep(S.rs[i], Rr, E, b, dt); });
-    if (colliders(-1).some(r => b.x > r.x1 && b.x < r.x2 && b.z > r.z1 && b.z < r.z2)) b.t = 0;
+    if (colliders(-1, { vaulting: true }).some(r => b.x > r.x1 && b.x < r.x2 && b.z > r.z1 && b.z < r.z2)) b.t = 0;
   }
   S.bolts = S.bolts.filter(b => b.t > 0);
   if (S.sb){ S.sb.t -= dt; if (S.sb.t <= 0) S.sb = null; }
