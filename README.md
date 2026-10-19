@@ -17,4 +17,5 @@ Two-player browser games. One player creates a game and shares the 4-letter code
   - Level 12, The Toy Factory: https://5511-boop.github.io/star-dash/haunted/level12/
   - Level 13, The Coal Mine: https://5511-boop.github.io/star-dash/haunted/level13/
   - Level 14, The Sky Gardens: https://5511-boop.github.io/star-dash/haunted/level14/
+  - Level 15, The Pharaoh's Tomb: https://5511-boop.github.io/star-dash/haunted/level15/
 - **Star Dash** (co-op star collecting): https://5511-boop.github.io/star-dash/
