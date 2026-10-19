@@ -1,5 +1,5 @@
-// Hollow Manor shared engine (Levels 2+). A level supplies a list of room plugins; the engine handles
-// the house layout, players, ghosts, plates, doors, networking (PeerJS), HUD and menus.
+// Hollow Manor shared engine (Levels 2–20). A level supplies a list of room plugins; the engine handles
+// the house layout, players, powers, items, ghosts, plates, doors, networking (PeerJS), HUD and menus.
 export function run(THREE, CFG){
 
 /* ===================== helpers ===================== */
@@ -20,7 +20,17 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const fmtTime = s => { s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 function mulberry32(a){ return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-const LEVELS = [{ n: 1, name: 'Hollow Manor' }, { n: 2, name: 'Grimwood Carnival' }, { n: 3, name: 'The Clocktower' }];
+const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
+  'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
+  'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
+const BUILT = 4;                     // highest level that exists on the site
+const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
+// powers unlock at a level and are kept for every later level
+const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
+const has = k => LEVEL >= (UNLOCK[k] || 99);
+const GMULT = CFG.ghostMult || (1 + Math.max(0, LEVEL - 3) * .03);
+const FREEZE = CFG.freezeSecs || (LEVEL >= 4 ? 6 + Math.floor((LEVEL - 4) / 4) : 6);
+const RESET_RULE = LEVEL >= 8;
 function levelUrl(n){
   const p = location.pathname, i = p.indexOf('/haunted/');
   const base = i >= 0 ? p.slice(0, i + 9) : (LEVEL === 1 ? './' : '../');
@@ -39,15 +49,17 @@ style.textContent = `
   [hidden]{display:none!important}
   .screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;background:radial-gradient(circle at 50% 40%,#0000 0%,#000a 80%)}
   .card{background:var(--card);border:1px solid #ffffff1a;border-radius:20px;padding:24px 22px;width:min(390px,100%);text-align:center;box-shadow:0 20px 60px #000c;max-height:calc(100% - 8px);overflow:auto}
-  h1{margin:0 0 2px;font-size:38px;letter-spacing:1px;font-weight:700;color:#efe8ff;text-shadow:0 0 18px var(--accent)}
+  h1{margin:0 0 2px;font-size:36px;letter-spacing:1px;font-weight:700;color:#efe8ff;text-shadow:0 0 18px var(--accent)}
   .lvl{font-family:system-ui,sans-serif;font-size:12px;font-weight:800;letter-spacing:3px;color:var(--accent);margin-bottom:6px}
+  .feat{font-family:system-ui,sans-serif;font-size:13px;background:#ffffff10;border:1px solid var(--accent);border-radius:12px;padding:8px 10px;margin:0 0 14px;color:#fff;line-height:1.35}
+  .feat b{color:var(--gold)}
   h2{margin:0 0 8px;font-size:26px}
-  .sub{margin:0 0 16px;color:var(--dim);font-size:15px;line-height:1.4}
+  .sub{margin:0 0 14px;color:var(--dim);font-size:15px;line-height:1.4}
   label{display:block;text-align:left;font-size:13px;margin-bottom:12px;color:var(--dim)}
   input,select{font:inherit;font-family:system-ui,sans-serif;font-size:18px;width:100%;padding:11px 14px;border-radius:12px;border:2px solid #3a3160;margin-top:6px;
     background:#0d0b1a;color:var(--ink);-webkit-user-select:text;user-select:text}
-  select{font-size:16px;-webkit-appearance:none;appearance:none}
-  .two{display:flex;gap:8px}.two label{flex:1}
+  select{font-size:15px;-webkit-appearance:none;appearance:none}
+  .two{display:flex;gap:8px}.two label{flex:1;min-width:0}
   input:focus,select:focus{outline:none;border-color:var(--accent)}
   button{font:inherit;font-family:system-ui,sans-serif;cursor:pointer;border:0;border-radius:14px;padding:13px 16px;font-weight:700;font-size:17px;background:#2a2446;color:var(--ink)}
   button:disabled{opacity:.45;cursor:default}
@@ -60,11 +72,14 @@ style.textContent = `
   .code{font-size:54px;font-weight:800;letter-spacing:10px;margin:4px 0 6px;color:var(--gold);font-family:system-ui,sans-serif}
   .rows{margin:14px 0 16px;display:grid;gap:6px}
   .row{display:flex;justify-content:space-between;background:#ffffff0d;border-radius:10px;padding:10px 12px;font-family:system-ui,sans-serif;font-weight:600}
+  .stars{font-size:40px;color:var(--gold);letter-spacing:6px;margin:4px 0}
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10;padding:calc(10px + env(safe-area-inset-top)) 12px 0;font-family:system-ui,sans-serif}
-  #hudTop{display:flex;justify-content:center;gap:8px;align-items:center}
+  #hudTop{display:flex;justify-content:center;gap:8px;align-items:center;flex-wrap:wrap}
   .pill{background:#0b0918cc;border:1px solid #ffffff1f;border-radius:999px;padding:6px 14px;font-weight:700;font-size:15px}
+  #hintBtn{pointer-events:auto;background:#3a2a10dd;border-color:var(--gold);color:var(--gold);cursor:pointer}
   #roomName{font-family:Georgia,serif;font-size:16px}
   #objective{margin:8px auto 0;max-width:560px;text-align:center;background:#0b0918b3;border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.35;color:#ddd5ff}
+  #objective.hint{border:1px solid var(--gold);color:#ffe9b8}
   #panel{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);background:#120d22ee;border:2px solid var(--accent);border-radius:18px;padding:14px 18px;text-align:center;
     width:min(420px,calc(100% - 24px));font-size:16px;line-height:1.45}
   #panel .big1{font-size:30px;font-weight:800;color:var(--gold);font-family:system-ui,sans-serif}
@@ -79,38 +94,56 @@ style.textContent = `
   #story.show{opacity:1}
   #story b{color:var(--gold)}
   #hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:13px;color:#ffffff88}
-  #stam{position:absolute;right:calc(26px + env(safe-area-inset-right));bottom:calc(176px + env(safe-area-inset-bottom));width:92px;height:8px;border-radius:4px;background:#ffffff22;overflow:hidden}
-  #stam i{display:block;height:100%;width:100%;background:var(--gold)}
-  body:not(.touch) #stam{left:50%;right:auto;transform:translateX(-50%);bottom:36px}
+  #meters{position:absolute;right:calc(26px + env(safe-area-inset-right));bottom:calc(282px + env(safe-area-inset-bottom));display:grid;gap:4px;width:92px}
+  body:not(.touch) #meters{left:50%;right:auto;transform:translateX(-50%);bottom:36px;width:120px}
+  .meter{height:8px;border-radius:4px;background:#ffffff22;overflow:hidden}
+  .meter i{display:block;height:100%;width:100%;background:var(--gold)}
+  #oilM i{background:#ff9a3d}
+  #powRow{position:absolute;left:50%;bottom:56px;transform:translateX(-50%);display:flex;gap:8px}
+  body.touch #powRow{display:none}
+  .pw{width:42px;height:42px;border-radius:12px;background:#0b0918cc;border:1px solid #ffffff33;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;overflow:hidden}
+  .pw i{position:absolute;left:0;right:0;bottom:0;background:#ffffff33}
+  .pw small{position:absolute;bottom:1px;right:3px;font-size:9px;color:#fff9}
   #arrow{position:absolute;width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:22px solid var(--pink);transform-origin:50% 60%;filter:drop-shadow(0 0 6px #000)}
   #flash{position:fixed;inset:0;background:#9fd8ff;opacity:0;pointer-events:none;z-index:9;transition:opacity .5s}
   #flash.on{opacity:.4;transition:none}
   #frost{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;transition:opacity .3s;background:radial-gradient(circle at 50% 50%,#0000 35%,#a8e4ff66 75%,#d8f3ffaa 100%)}
   #frost.on{opacity:1}
+  #sightFx{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;transition:opacity .25s;background:radial-gradient(circle at 50% 50%,#0000 40%,#7a3aff55 85%,#3a0a8aaa 100%)}
+  #sightFx.on{opacity:1}
   #touch{position:fixed;inset:0;z-index:8}
   #joyBase{position:absolute;width:120px;height:120px;border-radius:50%;background:#ffffff1c;border:3px solid #ffffff55;left:calc(30px + env(safe-area-inset-left));bottom:calc(40px + env(safe-area-inset-bottom))}
   #joyKnob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:#ffffffaa}
-  #runBtn{position:absolute;right:calc(24px + env(safe-area-inset-right));bottom:calc(52px + env(safe-area-inset-bottom));width:100px;height:100px;border-radius:50%;background:#ffc46b44;border:3px solid #ffc46bcc;font-size:17px;font-weight:900;color:#fff;padding:0}
-  #runBtn.on{background:#ffc46b99}
+  .tb{position:absolute;border-radius:50%;font-weight:900;color:#fff;padding:0;display:flex;align-items:center;justify-content:center}
+  #runBtn{right:calc(24px + env(safe-area-inset-right));bottom:calc(52px + env(safe-area-inset-bottom));width:96px;height:96px;background:#ffc46b44;border:3px solid #ffc46bcc;font-size:16px}
+  #dashBtn{right:calc(38px + env(safe-area-inset-right));bottom:calc(162px + env(safe-area-inset-bottom));width:72px;height:72px;background:#5ad1ff44;border:3px solid #5ad1ffcc;font-size:26px}
+  #powBtn{right:calc(132px + env(safe-area-inset-right));bottom:calc(60px + env(safe-area-inset-bottom));width:72px;height:72px;background:#fff3a044;border:3px solid #fff3a0cc;font-size:26px}
+  .tb.on{filter:brightness(1.6)}
+  .tb.cd{opacity:.45}
   #btnExit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:11;padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}`;
 document.head.appendChild(style);
+const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
-<canvas id="c"></canvas><div id="flash"></div><div id="frost"></div>
+<canvas id="c"></canvas><div id="flash"></div><div id="frost"></div><div id="sightFx"></div>
 <div id="hud" hidden>
-  <div id="hudTop"><div class="pill" id="roomName"></div><div class="pill" id="timer">0:00</div></div>
+  <div id="hudTop"><div class="pill" id="roomName"></div><div class="pill" id="timer">0:00</div><div class="pill" id="hintBtn" hidden>💡 Hint</div></div>
   <div id="objective"></div>
   <div id="barBox" hidden><div id="barWrap"><i id="barFill"></i></div><div id="barLbl"></div></div>
   <div id="panel" hidden></div>
   <div id="toast"></div><div id="story"></div>
-  <div id="stam"><i></i></div><div id="arrow" hidden></div>
-  <div id="hint">WASD / arrows to move · hold Shift to run</div>
+  <div id="meters"><div class="meter" id="stamM"><i></i></div><div class="meter" id="oilM" hidden><i></i></div></div>
+  <div id="powRow"></div>
+  <div id="arrow" hidden></div>
+  <div id="hint"></div>
 </div>
 <button id="btnExit" hidden>Leave</button>
-<div id="touch" hidden><div id="joyBase"><div id="joyKnob"></div></div><button id="runBtn">RUN</button></div>
+<div id="touch" hidden><div id="joyBase"><div id="joyKnob"></div></div>
+  <button class="tb" id="runBtn">RUN</button><button class="tb" id="dashBtn" hidden>⚡</button><button class="tb" id="powBtn" hidden>☀</button></div>
 <div id="menu" class="screen"><div class="card">
   <div class="lvl">LEVEL ${LEVEL}</div>
   <h1>${esc(CFG.title)}</h1>
   <p class="sub">${CFG.tagline}</p>
+  ${feat}
   <label>Your name<input id="name" maxlength="12" autocomplete="off" placeholder="Name"></label>
   <div class="two"><label>Level<select id="levelSel"></select></label><label>Start at<select id="startRoom"></select></label></div>
   <button id="btnHost" class="big">Create game</button>
@@ -123,11 +156,17 @@ document.body.innerHTML = `
   <button id="btnStart" class="big" disabled>Enter</button><button id="btnLeave" class="link">Leave</button>
 </div></div>
 <div id="won" class="screen" hidden><div class="card">
-  <h2 id="wonTitle">You escaped! 🌙</h2><p class="sub" id="wonSub"></p><div class="rows" id="wonRows"></div>
+  <h2 id="wonTitle">You escaped! 🌙</h2><div class="stars" id="wonStars"></div><p class="sub" id="wonSub"></p><div class="rows" id="wonRows"></div>
   <button id="btnNext" class="big" hidden>Next level →</button>
   <button id="btnAgain" class="big">Play again</button><button id="btnMenu" class="link">Back to menu</button>
 </div></div>`;
 if (isTouch) document.body.classList.add('touch');
+{
+  const keysTxt = ['WASD move', 'Shift run'];
+  if (has('dash')) keysTxt.push('Space ⚡'); if (has('flash')) keysTxt.push('F ☀' + (has('sight') ? ' (hold: sight)' : ''));
+  if (has('ping')) keysTxt.push('click: ping'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('H hint');
+  $('hint').textContent = keysTxt.join(' · ');
+}
 
 /* ===================== audio ===================== */
 let actx = null, droneGain = null, whisperGain = null;
@@ -156,6 +195,13 @@ function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0)
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.05);
 }
+function noise(dur = .3, vol = .12, freq = 800, delay = 0){
+  if (!actx) return;
+  const t = actx.currentTime + delay, len = Math.floor(actx.sampleRate * dur), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const n = actx.createBufferSource(); n.buffer = buf; const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+  const g = actx.createGain(); g.gain.value = vol; n.connect(f).connect(g).connect(actx.destination); n.start(t);
+}
 const sfx = {
   door(){ beep(70, .9, 'sawtooth', .07, -30); beep(110, .6, 'triangle', .06, -50, .1); },
   click(){ beep(300, .06, 'square', .05); },
@@ -176,6 +222,17 @@ const sfx = {
   tick(){ beep(1800, .03, 'square', .04); },
   whoosh(){ beep(300, .4, 'sawtooth', .04, 400); },
   gong(f = 110){ beep(f, 1.6, 'sine', .14); beep(f * 2.01, 1.2, 'sine', .05); },
+  dash(){ noise(.18, .1, 2500); beep(400, .15, 'sine', .05, 500); },
+  flash(){ beep(1800, .35, 'sine', .08, -900); noise(.25, .06, 4000); },
+  ping(){ beep(1320, .1, 'sine', .1); beep(1760, .18, 'sine', .08, 0, .08); },
+  throw(){ noise(.15, .06, 1800); },
+  splash(){ noise(.4, .12, 900); },
+  boom(){ noise(.8, .25, 400); beep(60, .6, 'sawtooth', .12, -30); },
+  swap(){ beep(500, .3, 'sine', .1, 500); beep(1000, .3, 'sine', .1, -500, .05); },
+  hook(){ beep(900, .25, 'square', .05, -500); },
+  rewind(){ [900, 700, 500, 350].forEach((f, i) => beep(f, .08, 'sine', .08, 0, i * .05)); },
+  bolt(){ beep(2200, .2, 'square', .05, -1800); },
+  blast(){ noise(1, .3, 300); beep(200, 1, 'sine', .15, -150); },
 };
 
 /* ===================== renderer / scene ===================== */
@@ -188,7 +245,8 @@ scene.fog = new THREE.Fog(BG, 20, 42);
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 300);
 function resize(){ renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
-scene.add(new THREE.HemisphereLight(CFG.sky || 0x6a6fa8, 0x15121f, CFG.ambient || 0.8));
+const AMB = CFG.ambient || 0.8;
+const hemi = new THREE.HemisphereLight(CFG.sky || 0x6a6fa8, 0x15121f, AMB); scene.add(hemi);
 const moon = new THREE.DirectionalLight(0x9aa8ff, 0.45); moon.position.set(-10, 30, 10); scene.add(moon);
 const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .9, metalness: 0, ...o });
 const glow = (c, i = 1) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i, roughness: .6 });
@@ -202,6 +260,10 @@ function symTex(color, sym, fg = '#15101f'){
     c.fillStyle = typeof color === 'number' ? '#' + color.toString(16).padStart(6, '0') : color; c.fillRect(0, 0, w, h);
     c.fillStyle = fg; c.font = 'bold 76px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(sym, 64, 70);
   });
+}
+function sector(len, half, color, opacity = .18){
+  const m = new THREE.Mesh(new THREE.CircleGeometry(len, 20, -Math.PI / 2 - half, half * 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.y = .05; return m;
 }
 
 /* ===================== map helpers ===================== */
@@ -299,17 +361,17 @@ function makeChar(color, ghostly = false){
     out.light = new THREE.PointLight(0xffb36b, 6, 15, 1); out.light.position.set(0, 2.2, 0); group.add(out.light);
     out.ice = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 1.1), new THREE.MeshStandardMaterial({ color: 0xbfeaff, transparent: true, opacity: .45, roughness: .1, emissive: 0x4fb6ff, emissiveIntensity: .35 }));
     out.ice.position.y = .8; out.ice.visible = false; group.add(out.ice);
-    out.hold = new THREE.Group(); out.hold.position.set(0, 1.9, 0); group.add(out.hold);     // things carried overhead
+    out.hold = new THREE.Group(); out.hold.position.set(0, 1.9, 0); group.add(out.hold);
     out.label = nameSprite(); out.label.position.y = 2.25; group.add(out.label);
   }
   scene.add(group);
   return out;
 }
-function animChar(c, dt, moving, running){
+function animChar(c, dt, moving, running, oil = 1){
   c.t += dt * (moving ? (running ? 16 : 11) : 2.5);
   const bob = moving ? Math.abs(Math.sin(c.t)) * .15 : Math.sin(c.t) * .025;
   c.rig.position.y = bob; c.rig.rotation.z = moving ? Math.sin(c.t) * .07 : 0;
-  if (c.light) c.light.intensity = 6 + Math.sin(performance.now() * .013) * .4 + Math.sin(performance.now() * .031) * .3;
+  if (c.light){ const k = has('oil') ? .3 + .7 * oil : 1; c.light.intensity = (6 + Math.sin(performance.now() * .013) * .4 + Math.sin(performance.now() * .031) * .3) * k; c.light.distance = 15 * (has('oil') ? .45 + .55 * oil : 1); }
 }
 
 /* ===================== ghosts ===================== */
@@ -318,12 +380,26 @@ const ghostMat = new THREE.MeshStandardMaterial({ color: 0xeaf2ff, emissive: 0x9
 function ghostMesh(look, tint){
   const gm = tint ? new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: .5, transparent: true, opacity: .85, roughness: .5, side: THREE.DoubleSide }) : ghostMat;
   const grp = new THREE.Group();
-  if (look === 'wisp'){
+  const eye = new THREE.MeshBasicMaterial({ color: 0x0b0710 });
+  if (look === 'wisp' || look === 'small'){
     const b = new THREE.Mesh(new THREE.SphereGeometry(.45, 16, 12), gm); b.position.y = .9; b.scale.set(1.2, .9, 1.5); grp.add(b);
     const h = new THREE.Mesh(new THREE.SphereGeometry(.28, 12, 10), gm); h.position.set(0, 1.35, .55); grp.add(h);
     const tail = new THREE.Mesh(new THREE.ConeGeometry(.2, .8, 8), gm); tail.position.set(0, 1, -.75); tail.rotation.x = -1.2; grp.add(tail);
-    const eye = new THREE.MeshBasicMaterial({ color: 0x0b0710 });
     for (const s of [-1, 1]){ const e = new THREE.Mesh(new THREE.SphereGeometry(.06, 8, 6), eye); e.position.set(s * .12, 1.42, .78); grp.add(e); }
+    if (look === 'small') grp.scale.setScalar(.6);
+    return grp;
+  }
+  if (look === 'blob'){
+    const b = new THREE.Mesh(new THREE.SphereGeometry(.7, 16, 12), gm); b.position.y = .6; b.scale.set(1, .7, 1); grp.add(b);
+    for (const s of [-1, 1]){ const e = new THREE.Mesh(new THREE.SphereGeometry(.09, 8, 6), eye); e.position.set(s * .25, .8, .6); grp.add(e); }
+    return grp;
+  }
+  if (look === 'knight' || look === 'statue'){
+    const solid = mat(tint || 0x6a6a7a, { metalness: look === 'knight' ? .7 : .1, roughness: .4 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(.9, 1.4, .6), solid); body.position.y = 1; grp.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(.55, .55, .55), solid); head.position.y = 2; grp.add(head);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(.4, .08, .05), glow(0xff3a3a, 2)); visor.position.set(0, 2.02, .29); grp.add(visor);
+    for (const s of [-1, 1]){ const leg = new THREE.Mesh(new THREE.BoxGeometry(.3, .5, .3), solid); leg.position.set(s * .22, .25, 0); grp.add(leg); }
     return grp;
   }
   const head = new THREE.Mesh(new THREE.SphereGeometry(.55, 18, 14), gm); head.position.y = 1.55; grp.add(head);
@@ -332,11 +408,13 @@ function ghostMesh(look, tint){
   for (let i = 0; i < pos.count; i++){ if (pos.getY(i) < -.5){ const a = Math.atan2(pos.getZ(i), pos.getX(i)); pos.setY(i, pos.getY(i) + Math.sin(a * 6) * .12); } }
   skirtGeo.computeVertexNormals();
   const skirt = new THREE.Mesh(skirtGeo, gm); skirt.position.y = .95; grp.add(skirt);
-  const eye = new THREE.MeshBasicMaterial({ color: 0x0b0710 });
   for (const s of [-1, 1]){ const e = new THREE.Mesh(new THREE.SphereGeometry(.1, 10, 8), eye); e.scale.set(1, 1.5, .5); e.position.set(s * .2, 1.62, .5); grp.add(e); }
   const mouth = new THREE.Mesh(new THREE.SphereGeometry(.11, 10, 8), eye); mouth.scale.set(1, 1.3, .4); mouth.position.set(0, 1.32, .52); grp.add(mouth);
   for (const s of [-1, 1]){ const arm = new THREE.Mesh(new THREE.CapsuleGeometry(.12, .4, 4, 8), gm); arm.position.set(s * .62, 1.15, .2); arm.rotation.set(-.9, 0, s * .4); grp.add(arm); }
-  if (look === 'big') grp.scale.setScalar(1.6);
+  if (look === 'hat'){ const hm = mat(0x1a1a24); const brim = new THREE.Mesh(new THREE.CylinderGeometry(.6, .6, .06, 16), hm); brim.position.y = 2; grp.add(brim); const top = new THREE.Mesh(new THREE.CylinderGeometry(.38, .38, .45, 16), hm); top.position.y = 2.25; grp.add(top); }
+  if (look === 'hood'){ const hood = new THREE.Mesh(new THREE.ConeGeometry(.62, .9, 16), gm); hood.position.y = 2.1; grp.add(hood); }
+  if (look === 'crown'){ const cm = glow(0xffd84d, .8); for (let i = 0; i < 6; i++){ const sp = new THREE.Mesh(new THREE.ConeGeometry(.1, .35, 4), cm); const a = i / 6 * Math.PI * 2; sp.position.set(Math.cos(a) * .4, 2.15, Math.sin(a) * .4); grp.add(sp); } }
+  if (look === 'big' || look === 'crown') grp.scale.setScalar(1.6);
   return grp;
 }
 
@@ -350,15 +428,17 @@ const myIdx = () => role === 'guest' ? 1 : 0;
 const names = () => myIdx() === 0 ? [myName || 'You', remoteName] : [remoteName, myName || 'You'];
 const SOLO = () => role === 'solo';
 const ECHO = 5;
-const S = { doors: {}, plateOn: {}, frozen: [0, 0], freezes: 0, elapsed: 0, startRoom: 0, rs: [] };
+const S = { doors: {}, plateOn: {}, frozen: [0, 0], freezes: 0, elapsed: 0, startRoom: 0, rs: [], broken: {}, decoys: [], bolts: [], sb: null, fx: [] };
 const hostMem = {};
-const me = { pos: new THREE.Vector3(0, 0, 6), ry: Math.PI, moving: false, running: false, stamina: 2.5, slide: null, inp: [0, 0, 0] };
-const other = { target: new THREE.Vector3(0, 0, 6), ry: 0, moving: false, running: false, seen: false, inp: [0, 0, 0] };
+const me = { pos: new THREE.Vector3(0, 0, 6), ry: Math.PI, moving: false, running: false, stamina: 2.5, slide: null, inp: [0, 0, 0], dash: null, grap: null, dashCD: 0, powCD: 0, sight: 0, sightE: 1, oil: 1, hist: [], rewCD: 0, decoyCD: 0 };
+const other = { target: new THREE.Vector3(0, 0, 6), ry: 0, moving: false, running: false, seen: false, inp: [0, 0, 0], dashing: 0, sight: 0, oil: 1 };
 let curP = [];
 const edges = {}, held = {};
+const PINGS = [];
 
 /* ===================== rooms ===================== */
 const ROOMS = [];
+const HOOKS = [], SPECTRAL = [], LOWS = [], CRACKED = [];
 let zCursor = 10;
 CFG.rooms.forEach((def, i) => {
   const depth = def.depth || 22;
@@ -392,12 +472,20 @@ CFG.rooms.forEach((def, i) => {
   R.st = () => S.rs[i];
   R.ghost = gdef => {
     const g = { ...gdef, room: i };
-    g.b = [gdef.b[0], gdef.b[1], R.Z(gdef.b[3]), R.Z(gdef.b[2])];
+    g.b = gdef.b ? [gdef.b[0], gdef.b[1], R.Z(gdef.b[3]), R.Z(gdef.b[2])] : [-9.4, 9.4, R.Z(21.4), R.Z(.6)];
     g.home = [gdef.home[0], R.Z(gdef.home[1])];
     g.mesh = ghostMesh(gdef.look || 'normal', gdef.tint); scene.add(g.mesh);
-    g.x = g.tx = g.home[0]; g.z = g.tz = g.home[1]; g.y = 0; g.ry = 0; g.rest = 1.5; g.ret = false; g.wx = null; g.wt = 0; g.w = 0; g.mem = {};
+    if (gdef.cone){ g.coneMesh = sector(gdef.cone.len, gdef.cone.ang, gdef.cone.color || 0xfff1a0, .16); g.mesh.add(g.coneMesh); }
+    if (gdef.beam){ const b = new THREE.Mesh(new THREE.BoxGeometry(.25, .12, gdef.beam.len), new THREE.MeshBasicMaterial({ color: gdef.beam.color || 0xbfeaff, transparent: true, opacity: .6 })); b.position.set(0, 1, gdef.beam.len / 2); g.mesh.add(b); g.beamMesh = b; }
+    if (gdef.scale) g.mesh.scale.setScalar(gdef.scale);
+    g.x = g.tx = g.home[0]; g.z = g.tz = g.home[1]; g.y = 0; g.ry = gdef.ry || 0; g.rest = 1.5; g.ret = false; g.wx = null; g.wt = 0; g.w = 0; g.mem = {}; g.stun = 0;
     GHOSTS.push(g); return g;
   };
+  R.hook = (x, lz) => { const h = { x, z: R.Z(lz), room: i }; HOOKS.push(h); return h; };
+  R.spectral = (x1, lz1, x2, lz2) => { const r = R.rect(x1, lz1, x2, lz2); SPECTRAL.push(r); return r; };
+  R.low = (x1, lz1, x2, lz2) => { const r = R.rect(x1, lz1, x2, lz2); LOWS.push(r); return r; };
+  R.cracked = (n, x1, lz1, x2, lz2) => { const c = { id: R.id(n), rect: R.rect(x1, lz1, x2, lz2), room: i }; CRACKED.push(c); return c; };
+  R.broken = n => !!S.broken[R.id(n)];
   const sp = def.spawn || [[-1.5, 1.6], [1.5, 1.6]];
   R.spawnW = sp.map(([x, lz]) => [x, R.Z(lz)]);
   ROOMS.push(R);
@@ -405,7 +493,7 @@ CFG.rooms.forEach((def, i) => {
 const OUT_Z = zCursor, WIN_Z = OUT_Z - 4;
 const roomAt = z => ROOMS.findIndex(R => z <= R.zS && z > R.zN);
 
-/* ----- shell: outer walls, room separators, exits, floors, garden ----- */
+/* ----- shell ----- */
 vwall(-10.5, 10.5, OUT_Z - .5); vwall(10.5, 10.5, OUT_Z - .5); hwall(10, -11, 11);
 ROOMS.forEach((R, i) => {
   const [dx1, dx2] = R.def.exitX || [-1.5, 1.5];
@@ -424,39 +512,106 @@ floor(-25, OUT_Z - 40, 25, OUT_Z, mat(0x1d3322), .002);
 }
 
 /* ===================== engine API for rooms ===================== */
-const reflCache = {};
 let lockMove = false;
 let _api = null;
 function EAPI(){
   if (_api) return _api;
   _api = {
-    THREE, scene, mat, glow, canvasTex, tiledTex, symTex, sfx, beep, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
-    makeChar, nameSprite, flameMat, WALL_H,
+    THREE, scene, mat, glow, canvasTex, tiledTex, symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
+    makeChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE, GMULT,
     get P(){ return curP; },
     get elapsed(){ return S.elapsed; },
     get phase(){ return phase; },
+    get sight(){ return me.sight > 0; },
+    get S(){ return S; },
     solo: SOLO, names, myIdx,
     me, other,
     ev, toast, flash,
-    freeze(idx, secs = 5, msg = ''){ if (S.frozen[idx] > 0) return; S.frozen[idx] = secs; S.freezes++; ev('freeze', msg, idx); },
+    freeze(idx, secs = FREEZE, msg = ''){ if (S.frozen[idx] > 0) return; S.frozen[idx] = secs; S.freezes++; ev('freeze', msg, idx); },
     isFrozen: idx => S.frozen[idx] > 0,
     teleport(idx, x, z){
-      if (idx === myIdx()){ me.pos.set(x, 0, z); me.slide = null; }
+      if (idx === myIdx()){ me.pos.set(x, 0, z); me.slide = null; me.dash = null; me.grap = null; }
       else { other.target.set(x, 0, z); send({ t: 'tp', x, z }); }
     },
-    respawnLocal(x, z, msg){ me.pos.set(x, 0, z); me.slide = null; if (msg){ toast(msg); } },
+    respawnLocal(x, z, msg){ me.pos.set(x, 0, z); me.slide = null; me.dash = null; me.grap = null; if (msg){ toast(msg); } },
     lock(){ lockMove = true; },
     playerPos(idx){ return idx === myIdx() ? me.pos : (otherChar.group.visible ? otherChar.group.position : null); },
     partnerPresent: () => role !== 'solo' && other.seen,
     rooms: ROOMS,
     roomAt,
+    carrying,
+    resetRoom,
+    dashing: idx => idx === myIdx() ? !!(me.dash || me.grap) : !!other.dashing,
+    segDist,
   };
   return _api;
 }
 const E = EAPI();
+function segDist(px, pz, x1, z1, x2, z2){
+  const dx = x2 - x1, dz = z2 - z1, l2 = dx * dx + dz * dz || 1e-6;
+  const t = clamp(((px - x1) * dx + (pz - z1) * dz) / l2, 0, 1);
+  return Math.hypot(px - (x1 + dx * t), pz - (z1 + dz * t));
+}
 
+// reusable enemy behaviors for rooms: each returns a think() for R.ghost({ think })
+const AI = {
+  // walk a loop of local [x,lz] points; optional lantern cone that freezes anyone inside it
+  patrol(pts, sp, opt = {}){
+    return (g, dt, st, R, E2, P) => {
+      const m = g.mem; if (m.i === undefined){ m.i = 0; m.wait = 0; }
+      if (m.wait > 0) m.wait -= dt;
+      else { const [px, pl] = pts[m.i]; if (stepToward(g, px, R.Z(pl), sp * GMULT, dt) < .08){ m.i = (m.i + 1) % pts.length; m.wait = opt.wait || 0; } }
+      if (m.wait > 0 && opt.look){ const [nx, nl] = pts[m.i]; g.ry = Math.atan2(nx - g.x, R.Z(nl) - g.z); }
+      const T = targetsOf(g, P).filter(p => !p.dashing && R.inside(p.pos));
+      if (opt.cone){ for (const p of T){ if (inCone(g, p.pos, opt.cone.len, opt.cone.ang) && !losBlocked(g.x, g.z, p.pos.x, p.pos.z)){ E2.freeze(p.idx, FREEZE, `${n2()[p.idx]} was spotted by ${g.label || 'a ghost'}!`); } } }
+      ghostTouch(g, T, n2());
+      return true;
+    };
+  },
+  // sits in a hole; lunges at anyone who comes within reach, then slides back
+  lunger(reach = 4, speed = 11, cool = 1.4){
+    return (g, dt, st, R, E2, P) => {
+      const m = g.mem; m.cd = (m.cd || 0) - dt;
+      if (m.st === 'out'){ if (stepToward(g, m.tx, m.tz, speed, dt) < .1) m.st = 'back'; ghostTouch(g, targetsOf(g, P), n2(), 1.1); return true; }
+      if (m.st === 'back'){ if (stepToward(g, g.home[0], g.home[1], speed * .5, dt) < .1){ m.st = null; m.cd = cool; } return true; }
+      if (m.cd > 0) return true;
+      const T = targetsOf(g, P).filter(p => Math.hypot(p.pos.x - g.home[0], p.pos.z - g.home[1]) < reach);
+      if (T.length){ const p = T[0], dx = p.pos.x - g.home[0], dz = p.pos.z - g.home[1], d = Math.hypot(dx, dz) || 1; m.tx = g.home[0] + dx / d * Math.min(reach, d + .6); m.tz = g.home[1] + dz / d * Math.min(reach, d + .6); m.st = 'out'; ev('whoosh'); }
+      return true;
+    };
+  },
+  // stays put and sweeps a freezing gaze beam back and forth
+  sweeper(len, from, to, period){
+    return (g, dt, st, R, E2, P) => {
+      g.mem.t = (g.mem.t || 0) + dt;
+      const f = (Math.sin(g.mem.t / period * Math.PI * 2) + 1) / 2; g.ry = from + (to - from) * f;
+      const ex = g.x + Math.sin(g.ry) * len, ez = g.z + Math.cos(g.ry) * len;
+      for (const p of targetsOf(g, P)) if (!p.dashing && segDist(p.pos.x, p.pos.z, g.x, g.z, ex, ez) < .6) E2.freeze(p.idx, FREEZE, `${n2()[p.idx]} was caught in ${g.label || 'the gaze'}!`);
+      return true;
+    };
+  },
+};
+function n2(){ return names(); }
+function inCone(g, pos, len, ang){ const dx = pos.x - g.x, dz = pos.z - g.z, d = Math.hypot(dx, dz); if (d > len || d < .01) return d < .01; return (dx * Math.sin(g.ry) + dz * Math.cos(g.ry)) / d > Math.cos(ang); }
+function losBlocked(x1, z1, x2, z2){
+  const rs = colliders(-1, { phasing: false, vaulting: true });
+  for (let i = 1; i < 10; i++){ const x = x1 + (x2 - x1) * i / 10, z = z1 + (z2 - z1) * i / 10; if (rs.some(r => x > r.x1 && x < r.x2 && z > r.z1 && z < r.z2)) return true; }
+  return false;
+}
+Object.assign(E, { stepToward, ghostTouch, inBounds, colliders, resolve, AI, inCone, losBlocked, targetsOf, overPit,
+  staticRects: () => colliders(-1, { vaulting: true }) });
 ROOMS.forEach(R => floor(-10, R.zN, 10, R.zS, R.def.floor ? R.def.floor(E) : mat(0x3a3040), .002));
 ROOMS.forEach(R => R.def.build && R.def.build(R, E));
+
+// visuals for engine-level map pieces registered by rooms
+const spectralMat = new THREE.MeshStandardMaterial({ color: 0x9a6bff, emissive: 0x6a3aff, emissiveIntensity: .6, transparent: true, opacity: .35 });
+for (const r of SPECTRAL){ const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, WALL_H, r.z2 - r.z1), spectralMat); m.position.set((r.x1 + r.x2) / 2, WALL_H / 2, (r.z1 + r.z2) / 2); scene.add(m); }
+const lowMat = mat(CFG.lowColor || 0x6a5a4a);
+for (const r of LOWS){ const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, .7, r.z2 - r.z1), lowMat); m.position.set((r.x1 + r.x2) / 2, .35, (r.z1 + r.z2) / 2); scene.add(m); }
+const crackTex = canvasTex(128, 128, (x, w, h) => { x.fillStyle = '#5a4a40'; x.fillRect(0, 0, w, h); x.strokeStyle = '#1a1210'; x.lineWidth = 4; for (let i = 0; i < 6; i++){ x.beginPath(); x.moveTo(w / 2, h / 2); x.lineTo(Math.random() * w, Math.random() * h); x.stroke(); } });
+for (const c of CRACKED){ const r = c.rect; c.mesh = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, WALL_H, r.z2 - r.z1), mat(0xffffff, { map: crackTex })); c.mesh.position.set((r.x1 + r.x2) / 2, WALL_H / 2, (r.z1 + r.z2) / 2); scene.add(c.mesh); }
+const hookMat = mat(0xd4af37, { metalness: .8, roughness: .3, emissive: 0x6a5010, emissiveIntensity: .5 });
+for (const h of HOOKS){ const ring = new THREE.Mesh(new THREE.TorusGeometry(.45, .08, 8, 20), hookMat); ring.position.set(h.x, 2.6, h.z); scene.add(ring); h.mesh = ring; const post = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 2.2, 6), hookMat); post.position.set(h.x, 1.1, h.z); scene.add(post); }
 
 /* ===================== chars ===================== */
 const meChar = makeChar(COLORS[0]);
@@ -470,42 +625,70 @@ function applyColors(){
 }
 
 /* ===================== world reset / chapter select ===================== */
+function initRoomState(R){ R.local = {}; const st = R.def.init ? R.def.init(R, E) : {}; return st; }
 function resetWorld(){
   for (const id of DOOR_IDS) S.doors[id] = 0;
   for (const id of PLATE_IDS){ S.plateOn[id] = 0; hostMem[id] = 0; }
-  S.frozen = [0, 0]; S.freezes = 0; S.elapsed = 0; S.startRoom = 0;
-  S.rs = ROOMS.map(R => { R.local = {}; return R.def.init ? R.def.init(R, E) : {}; });
-  for (const g of GHOSTS){ g.x = g.tx = g.home[0]; g.z = g.tz = g.home[1]; g.y = 0; g.rest = 1.5; g.ret = false; g.wx = null; g.w = 0; g.mem = {}; }
-  me.slide = null;
+  S.frozen = [0, 0]; S.freezes = 0; S.elapsed = 0; S.startRoom = 0; S.broken = {}; S.decoys = []; S.bolts = []; S.sb = null;
+  S.rs = ROOMS.map(R => initRoomState(R));
+  for (const g of GHOSTS) ghostHome(g);
+  me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = [];
 }
+function ghostHome(g){ g.x = g.tx = g.home[0]; g.z = g.tz = g.home[1]; g.y = 0; g.rest = 1.5; g.ret = false; g.wx = null; g.w = 0; g.mem = {}; g.stun = 0; }
 function solveUpTo(r){
   S.startRoom = r;
   for (let i = 0; i < r; i++){ const R = ROOMS[i]; if (R.def.solve) R.def.solve(S.rs[i], R, E); R.open('exit'); }
+}
+function resetRoom(i, msg){
+  const R = ROOMS[i]; if (!R) return;
+  S.rs[i] = initRoomState(R);
+  for (const id of DOOR_IDS) if (id.startsWith(i + ':') || id === 'X' + i) S.doors[id] = 0;
+  for (const c of CRACKED) if (c.room === i) delete S.broken[c.id];
+  for (const g of GHOSTS) if (g.room === i) ghostHome(g);
+  S.frozen = [0, 0];
+  for (const p of curP) if (R.inside(p.pos)){ const sp = R.spawnW[p.idx]; E.teleport(p.idx, sp[0], sp[1]); }
+  ev('boo', msg || 'You were both frozen — the room resets!');
 }
 resetWorld();
 
 /* ===================== input ===================== */
 const keys = {};
+const btn = { dash: false, pow: false, dashT: 0, powT: 0, dashUsed: false, powUsed: false, lastPowTap: -9 };
+function pressDash(){ if (!has('dash') || btn.dash) return; btn.dash = true; btn.dashT = 0; btn.dashUsed = false; }
+function releaseDash(){ if (!btn.dash) return; btn.dash = false; if (!btn.dashUsed) actDash(false); }
+function pressPow(){ if (!has('flash') || btn.pow) return; btn.pow = true; btn.powT = 0; btn.powUsed = false; }
+function releasePow(){ if (!btn.pow) return; btn.pow = false; if (!btn.powUsed) actPow(); me.sight = 0; }
 addEventListener('keydown', e => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+  if (e.repeat){ if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault(); return; }
   keys[e.code] = true;
+  if (e.code === 'Space' || e.code === 'KeyE') pressDash();
+  if (e.code === 'KeyF') pressPow();
+  if (e.code === 'KeyQ' && has('ping') && phase === 'play') doPing(me.pos.x, me.pos.z);
+  if (e.code === 'KeyR' && has('rewind')) doRewind();
+  if (e.code === 'KeyH') showHint();
   if (e.code && (e.code.startsWith('Arrow') || e.code === 'Space')) e.preventDefault();
 });
-addEventListener('keyup', e => { keys[e.code] = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Space' || e.code === 'KeyE') releaseDash();
+  if (e.code === 'KeyF') releasePow();
+});
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; btn.dash = btn.pow = false; me.sight = 0; });
 const joy = { x: 0, y: 0, id: null, ox: 0, oy: 0 };
 let runTouch = false;
+const taps = {};
 {
-  const layer = $('touch'), base = $('joyBase'), knob = $('joyKnob'), runBtn = $('runBtn'), R = 52;
+  const layer = $('touch'), base = $('joyBase'), knob = $('joyKnob'), runBtn = $('runBtn'), dashBtn = $('dashBtn'), powBtn = $('powBtn'), R = 52;
   const reset = () => { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; base.style.left = ''; base.style.top = ''; base.style.bottom = ''; };
   layer.addEventListener('touchstart', e => {
     e.preventDefault();
     for (const t of e.changedTouches){
-      if (t.target === runBtn) continue;
-      if (joy.id === null && t.clientX < innerWidth * .62){
+      if (t.target === runBtn || t.target === dashBtn || t.target === powBtn) continue;
+      if (joy.id === null && t.clientX < innerWidth * .5){
         joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY;
         base.style.left = (t.clientX - 60) + 'px'; base.style.top = (t.clientY - 60) + 'px'; base.style.bottom = 'auto';
-      }
+      } else taps[t.identifier] = { x: t.clientX, y: t.clientY, t: performance.now() };
     }
   }, { passive: false });
   layer.addEventListener('touchmove', e => {
@@ -517,13 +700,23 @@ let runTouch = false;
       knob.style.transform = `translate(${dx}px,${dy}px)`; joy.x = dx / R; joy.y = dy / R;
     }
   }, { passive: false });
-  const end = e => { for (const t of e.changedTouches) if (t.identifier === joy.id) reset(); };
+  const end = e => {
+    for (const t of e.changedTouches){
+      if (t.identifier === joy.id) reset();
+      const tp = taps[t.identifier]; delete taps[t.identifier];
+      if (tp && performance.now() - tp.t < 350 && Math.hypot(t.clientX - tp.x, t.clientY - tp.y) < 16) screenPing(t.clientX, t.clientY);
+    }
+  };
   layer.addEventListener('touchend', end); layer.addEventListener('touchcancel', end);
-  const runOn = e => { e.preventDefault(); e.stopPropagation(); runTouch = true; runBtn.classList.add('on'); };
-  const runOff = e => { e.preventDefault(); e.stopPropagation(); runTouch = false; runBtn.classList.remove('on'); };
-  runBtn.addEventListener('touchstart', runOn, { passive: false });
-  runBtn.addEventListener('touchend', runOff, { passive: false });
-  runBtn.addEventListener('touchcancel', runOff, { passive: false });
+  const hold = (el, on, off) => {
+    el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('on'); on(); }, { passive: false });
+    const up = e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('on'); off(); };
+    el.addEventListener('touchend', up, { passive: false }); el.addEventListener('touchcancel', up, { passive: false });
+  };
+  hold(runBtn, () => { runTouch = true; }, () => { runTouch = false; });
+  hold(dashBtn, pressDash, releaseDash);
+  hold(powBtn, pressPow, releasePow);
+  $('c').addEventListener('mousedown', e => { if (!isTouch) screenPing(e.clientX, e.clientY); });
   document.addEventListener('gesturestart', e => e.preventDefault());
 }
 function rawInput(){
@@ -536,11 +729,78 @@ function rawInput(){
   return [x, z, (runTouch || keys.ShiftLeft || keys.ShiftRight) ? 1 : 0];
 }
 
+/* ===================== powers (local side) ===================== */
+function facing(){ return [Math.sin(me.ry), Math.cos(me.ry)]; }
+function actDash(isHold){
+  if (phase !== 'play' || myFrozen()) return;
+  const c = carrying(myIdx());
+  if (c && (has('throw') || c.R.def.allowThrow)){ sendAb({ k: 'throw', ry: me.ry }); sfx.throw(); return; }
+  if (has('decoy') && isHold){
+    if (me.decoyCD > 0){ toast('Decoy not ready yet.'); return; }
+    me.decoyCD = 15; sendAb({ k: 'decoy', x: me.pos.x, z: me.pos.z }); sfx.place(); return;
+  }
+  if (has('grapple')){
+    const [fx, fz] = facing(); let best = null, bd = 9.5;
+    for (const h of HOOKS){ const dx = h.x - me.pos.x, dz = h.z - me.pos.z, d = Math.hypot(dx, dz); if (d < 1.2 || d > bd) continue; if ((dx * fx + dz * fz) / d < .7) continue; bd = d; best = h; }
+    if (best){ me.grap = { sx: me.pos.x, sz: me.pos.z, tx: best.x, tz: best.z, t: 0, d: .18 + bd * .035 }; sfx.hook(); return; }
+  }
+  if (me.dashCD > 0) return;
+  let [mx, mz] = me.inp; if (Math.hypot(mx, mz) < .2){ [mx, mz] = facing(); } const l = Math.hypot(mx, mz) || 1;
+  me.dash = { dx: mx / l, dz: mz / l, t: .2 }; me.dashCD = 1.1; me.ry = Math.atan2(mx, mz); sfx.dash();
+}
+function actPow(){
+  if (phase !== 'play' || myFrozen()) return;
+  const now = performance.now() / 1000;
+  if (has('rewind') && now - btn.lastPowTap < .32){ btn.lastPowTap = -9; doRewind(); return; }
+  btn.lastPowTap = now;
+  sendAb({ k: 'pow', x: me.pos.x, z: me.pos.z });                      // used for bridge / blast sync
+  if (me.powCD > 0) return;
+  if (has('bolt') && me.moving){ me.powCD = 3; sendAb({ k: 'bolt', x: me.pos.x, z: me.pos.z, ry: me.ry }); sfx.bolt(); return; }
+  me.powCD = 5; if (has('oil')) me.oil = Math.max(0, me.oil - .08);
+  sendAb({ k: 'flash', x: me.pos.x, z: me.pos.z }); flashFx(me.pos.x, me.pos.z, myIdx());
+}
+function doRewind(){
+  if (!has('rewind') || phase !== 'play' || myFrozen()) return;
+  if (me.rewCD > 0){ toast('Rewind recharging…'); return; }
+  const target = me.hist.find(h => h[0] >= S.elapsed - 3.05) || me.hist[0];
+  if (!target) return;
+  if (roomAt(target[1] === undefined ? me.pos.z : target[2]) !== roomAt(me.pos.z)) { toast('Can\'t rewind into another room.'); return; }
+  me.pos.set(target[1], 0, target[2]); me.slide = null; me.dash = null; me.grap = null; me.rewCD = 10; sfx.rewind(); flash();
+}
+function screenPing(sx, sy){
+  if (!has('ping') || phase !== 'play') return;
+  const v = new THREE.Vector3((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1, .5);
+  if (!v.unproject) return;
+  v.unproject(camera); const o = camera.position, dx = v.x - o.x, dy = v.y - o.y, dz = v.z - o.z;
+  if (dy >= -1e-4) return;
+  const t = -o.y / dy, x = o.x + dx * t, z = o.z + dz * t;
+  if (has('swap') && otherChar.group.visible && Math.hypot(x - other.target.x, z - other.target.z) < 1.3){ sendAb({ k: 'swap' }); doPing(other.target.x, other.target.z, true); toast('Swap request sent — your partner taps YOU to accept.'); return; }
+  doPing(x, z);
+}
+function doPing(x, z, swap = false){ addPing(x, z, myIdx(), swap); send({ t: 'ping', x: r2(x), z: r2(z), w: myIdx(), sw: swap ? 1 : 0 }); sfx.ping(); }
+const pingGeo = new THREE.RingGeometry(.6, .85, 28);
+function addPing(x, z, who, swap){
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(pingGeo, new THREE.MeshBasicMaterial({ color: swap ? 0xffffff : COLORS[who], transparent: true, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = .08; g.add(ring);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, 5, 6), new THREE.MeshBasicMaterial({ color: COLORS[who], transparent: true, opacity: .6 })); beam.position.y = 2.5; g.add(beam);
+  g.position.set(x, 0, z); scene.add(g); PINGS.push({ g, t: 4, ring });
+}
+function sendAb(a){ if (role === 'guest') send({ t: 'ab', ...a }); else hostAbility(myIdx(), a); }
+const fxLights = [];
+function flashFx(x, z, who){
+  const l = new THREE.PointLight(0xfff6c0, 30, 12, 1.2); l.position.set(x, 2, z); scene.add(l);
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff6c0, transparent: true, opacity: .45, depthWrite: false })); s.position.set(x, 1, z); scene.add(s);
+  fxLights.push({ l, s, t: .45 }); sfx.flash();
+}
+
 /* ===================== movement & collision ===================== */
-const PR = .4, WALK = 4.8, RUN = 7.4, STAM = 2.5, SLIDE = 10;
-function colliders(idx){
+const PR = .4, WALK = 4.8, RUN = 7.4, STAM = 2.5, SLIDE = 10, DASHV = 22;
+function colliders(idx, opts = {}){
   const list = RECTS.slice();
   for (const id of DOOR_IDS) if (!S.doors[id]) list.push(DOORS[id].rect);
+  for (const c of CRACKED) if (!S.broken[c.id]) list.push(c.rect);
+  if (!opts.phasing) for (const r of SPECTRAL) list.push(r);
+  if (!opts.vaulting) for (const r of LOWS) list.push(r);
   ROOMS.forEach((R, i) => { if (R.def.colliders) for (const r of R.def.colliders(S.rs[i], R, E, idx)) list.push(r); });
   return list;
 }
@@ -568,14 +828,30 @@ function updateMe(dt){
   me.inp = inp;
   if (R && R.def.swap && partnerInRoom(R)) inp = other.inp || [0, 0, 0];
   if (lockMove){ me.moving = false; me.running = false; return; }
+  // grapple zip: fly straight to the hook, ignoring pits
+  if (me.grap){
+    const g = me.grap; g.t += dt; const f = Math.min(1, g.t / g.d);
+    me.pos.x = g.sx + (g.tx - g.sx) * f; me.pos.z = g.sz + (g.tz - g.sz) * f; me.ry = Math.atan2(g.tx - g.sx, g.tz - g.sz); me.moving = true;
+    if (f >= 1){ me.grap = null; const p = me.pos.clone(); resolve(p, colliders(myIdx())); me.pos.copy(p); }
+    return;
+  }
   let [mx, mz, run] = myFrozen() ? [0, 0, 0] : inp;
+  if (myFrozen()){ me.dash = null; }
   const mod = (R && R.def.speed) ? (R.def.speed(st, R, E, myIdx()) || {}) : {};
   me.moving = Math.hypot(mx, mz) > .1;
   me.running = me.moving && run && !mod.noRun && me.stamina > 0;
   if (me.running) me.stamina = Math.max(0, me.stamina - dt);
   else me.stamina = Math.min(STAM, me.stamina + dt * (me.moving ? .45 : .8));
   let sp = (me.running ? RUN : WALK) * (mod.mult || 1);
-  const rects = colliders(myIdx());
+  const rects = colliders(myIdx(), { phasing: has('phase') && me.running, vaulting: has('vault') && !!me.dash });
+  // ---- dash
+  if (me.dash){
+    const d = me.dash; d.t -= dt;
+    me.pos.x += d.dx * DASHV * dt; me.pos.z += d.dz * DASHV * dt;
+    resolve(me.pos, rects); me.moving = true;
+    if (d.t <= 0) me.dash = null;
+    return afterMove(R, st);
+  }
   // ---- ice: slide until something stops you (your partner counts!)
   const ice = R && R.def.ice;
   if (ice && R.inside(me.pos) && me.pos.x > ice.x1 && me.pos.x < ice.x2 && me.pos.z < R.Z(ice.lz1) && me.pos.z > R.Z(ice.lz2)){
@@ -587,7 +863,7 @@ function updateMe(dt){
     if (!me.slide && me.moving){
       const dir = Math.abs(mx) > Math.abs(mz) ? [Math.sign(mx), 0] : [0, Math.sign(mz)];
       const probe = me.pos.clone(); probe.x += dir[0] * .3; probe.z += dir[1] * .3; resolve(probe, rects.concat(extra));
-      if (Math.hypot(probe.x - me.pos.x, probe.z - me.pos.z) > .2){          // only start a slide if you can actually move that way
+      if (Math.hypot(probe.x - me.pos.x, probe.z - me.pos.z) > .2){
         me.slide = dir;
         if (dir[0]) me.pos.z = rowZ(clamp(rowOf(me.pos.z), 0, ice.rows - 1)); else me.pos.x = cx(clamp(colOf(me.pos.x), 0, 9));
       }
@@ -597,25 +873,35 @@ function updateMe(dt){
       me.pos.x += me.slide[0] * step; me.pos.z += me.slide[1] * step;
       resolve(me.pos, rects.concat(extra));
       const moved = Math.hypot(me.pos.x - px, me.pos.z - pz);
-      if (moved < step * .5) me.slide = null;               // stopped against something — stay right there
+      if (moved < step * .5) me.slide = null;
       if (me.slide) me.ry = Math.atan2(me.slide[0], me.slide[1]);
       me.moving = !!me.slide;
       return afterMove(R, st);
     }
-    me.moving = false; return afterMove(R, st);             // on ice you only ever move by sliding
+    me.moving = false; return afterMove(R, st);
   } else me.slide = null;
   if (me.moving){ let d = Math.atan2(mx, mz) - me.ry; d = Math.atan2(Math.sin(d), Math.cos(d)); me.ry += d * damp(16, dt); }
-  me.pos.x += mx * sp * dt; me.pos.z += mz * sp * dt;
+  let vx = mx * sp, vz = mz * sp;
+  if (R && R.def.push){ const f = R.def.push(st, R, E, me.pos, myIdx()); if (f){ vx += f[0]; vz += f[1]; } }
+  me.pos.x += vx * dt; me.pos.z += vz * dt;
   resolve(me.pos, rects);
   afterMove(R, st);
 }
 let fallCD = 0;
-function afterMove(R, st){
-  // pits: fall in and you're sent back to the room's start
-  if (!R || !R.def.pits || phase !== 'play' || fallCD > 0) return;
+function overPit(R, st, pos){
+  if (!R || !R.def.pits) return false;
   const pits = R.def.pits(st, R, E), bridges = R.def.bridges ? R.def.bridges(st, R, E) : [];
-  const inR = (b, m) => me.pos.x > b.x1 + m && me.pos.x < b.x2 - m && me.pos.z > b.z1 + m && me.pos.z < b.z2 - m;
-  if (pits.some(b => inR(b, .15)) && !bridges.some(b => inR(b, -.25))){
+  const inR = (b, m) => pos.x > b.x1 + m && pos.x < b.x2 - m && pos.z > b.z1 + m && pos.z < b.z2 - m;
+  const inAt = (x, z) => pits.some(b => x >= b.x1 && x <= b.x2 && z >= b.z1 && z <= b.z2);
+  // over water only if a small ring around you is all water (so seams between pit tiles aren't safe, but edges are forgiving)
+  if (![[0, 0], [.15, 0], [-.15, 0], [0, .15], [0, -.15]].every(([dx, dz]) => inAt(pos.x + dx, pos.z + dz))) return false;
+  if (bridges.some(b => inR(b, -.25))) return false;
+  if (S.sb && segDist(pos.x, pos.z, S.sb.x1, S.sb.z1, S.sb.x2, S.sb.z2) < 1) return false;
+  return true;
+}
+function afterMove(R, st){
+  if (!R || phase !== 'play' || fallCD > 0 || me.dash || me.grap) return;
+  if (overPit(R, st, me.pos)){
     fallCD = .8;
     const sp = R.spawnW[myIdx()];
     me.pos.set(sp[0], 0, sp[1]); me.slide = null;
@@ -626,16 +912,115 @@ function afterMove(R, st){
   }
 }
 
+/* ===================== items (carry / throw / catch) ===================== */
+function carrying(idx){
+  for (let i = 0; i < ROOMS.length; i++){ const st = S.rs[i]; if (!st || !st.items) continue; const it = st.items.find(t => t.s === 1 && t.w === idx); if (it) return { R: ROOMS[i], st, it }; }
+  return null;
+}
+function hostItems(dt, P){
+  ROOMS.forEach((R, ri) => {
+    const st = S.rs[ri]; if (!st || !st.items) return;
+    for (const it of st.items){
+      if (it.s === 1){
+        const p = P.find(q => q.idx === it.w);
+        if (!p || !R.inside(p.pos) && !R.def.carryOut){ it.s = 0; it.w = -1; if (p){ it.x = clamp(p.pos.x, -9.5, 9.5); it.lz = clamp(R.lz(p.pos.z), .7, 21.3); } continue; }
+        it.x = r2(p.pos.x); it.lz = r2(R.lz(p.pos.z));
+        if (S.frozen[p.idx] > 0 && !it.keepFrozen){ it.s = 0; it.w = -1; }
+        else if (R.def.carryTick) R.def.carryTick(st, R, E, it, p);
+      } else if (it.s === 2){
+        it.ft += dt; const f = Math.min(1, it.ft / it.fd);
+        it.x = r2(it.sx + (it.tx - it.sx) * f); it.lz = r2(it.slz + (it.tlz - it.slz) * f); it.y = r2(1.4 + Math.sin(Math.PI * f) * 1.8 - f * 1.1);
+        const wz = R.Z(it.lz);
+        if (f > .2){
+          const c = P.find(q => q.idx !== it.by && S.frozen[q.idx] <= 0 && !carrying(q.idx) && Math.hypot(q.pos.x - it.x, q.pos.z - wz) < 1.1);
+          if (c && !it.nocatch){ it.s = 1; it.w = c.idx; it.y = 0; ev('pick', `${names()[c.idx]} caught it!`); if (R.def.onCatch) R.def.onCatch(st, R, E, it, c.idx); continue; }
+          const g = GHOSTS.find(g => g.room === ri && g.y < 5 && !g.harmlessHit && Math.hypot(g.x - it.x, g.z - wz) < 1);
+          if (g){ if (!(R.def.onHitGhost && R.def.onHitGhost(st, R, E, it, g) === false)) { g.stun = Math.max(g.stun, it.k === 'bomb' ? 0 : 2.5); } it.ft = it.fd; }
+        }
+        if (it.ft >= it.fd){ it.s = 0; it.y = 0; ev('thud'); if (it.k === 'bomb') it.fuse = 1.3; if (R.def.onLand) R.def.onLand(st, R, E, it); }
+      } else if (it.s === 0){
+        if (it.fuse > 0){ it.fuse -= dt; if (it.fuse <= 0){ it.s = 3; explode(R, ri, it.x, R.Z(it.lz)); if (R.def.onBomb) R.def.onBomb(st, R, E, it); } continue; }
+        if (it.nopick) continue;
+        for (const p of P){
+          if (S.frozen[p.idx] > 0 || carrying(p.idx) || E.dashing(p.idx)) continue;
+          if (it.pickCD && it.pickCD > S.elapsed) continue;
+          if (Math.hypot(p.pos.x - it.x, R.lz(p.pos.z) - it.lz) < .95){
+            if (R.def.onPick && R.def.onPick(st, R, E, it, p.idx) === false) continue;
+            if (it.k === 'oil'){ it.s = 3; ev('oil', '', p.idx); break; }
+            it.s = 1; it.w = p.idx; it.fuse = 0; ev('pick'); break;
+          }
+        }
+      }
+    }
+  });
+}
+function throwItem(idx, ry){
+  const c = carrying(idx); if (!c) return;
+  const { R, st, it } = c, fx = Math.sin(ry), fz = Math.cos(ry);
+  const range = R.def.throwRange || 7;
+  it.s = 2; it.by = idx; it.ft = 0; it.fd = .55; it.sx = it.x; it.slz = it.lz;
+  it.tx = r2(clamp(it.x + fx * range, -9.5, 9.5)); it.tlz = r2(clamp(it.lz - fz * range, .6, 21.4));
+  it.w = -1; it.pickCD = S.elapsed + .6;
+  if (R.def.onThrow) R.def.onThrow(st, R, E, it, idx);
+}
+function explode(R, ri, x, z){
+  ev('boom', '', 0, x, z);
+  for (const c of CRACKED) if (!S.broken[c.id]){ const r = c.rect, cx = clamp(x, r.x1, r.x2), cz = clamp(z, r.z1, r.z2); if (Math.hypot(x - cx, z - cz) < 3) { S.broken[c.id] = 1; } }
+  for (const g of GHOSTS) if (g.room === ri && Math.hypot(g.x - x, g.z - z) < 4.5 && !g.bombImmune) g.stun = Math.max(g.stun, 4);
+  for (const p of curP) if (Math.hypot(p.pos.x - x, p.pos.z - z) < 2.2) E.freeze(p.idx, 3, `${names()[p.idx]} got caught in the blast!`);
+}
+
+/* ===================== host: powers ===================== */
+const lastPow = [{ t: -9 }, { t: -9 }], swapReq = [-9, -9];
+function hostAbility(idx, a){
+  const P = curP, p = P.find(q => q.idx === idx);
+  const ri = p ? roomAt(p.pos.z) : -1, R = ROOMS[ri], st = S.rs[ri];
+  switch (a.k){
+    case 'throw': throwItem(idx, a.ry); break;
+    case 'flash':
+      if (idx !== myIdx()) ev('flashfx', '', idx, a.x, a.z);
+      for (const g of GHOSTS) if (g.y < 5 && !g.flashImmune && Math.hypot(g.x - a.x, g.z - a.z) < 5.5) g.stun = Math.max(g.stun, g.flashStun || 3.5);
+      if (R && R.def.onFlash) R.def.onFlash(st, R, E, idx, a.x, a.z);
+      break;
+    case 'bolt': S.bolts.push({ x: a.x, z: a.z, vx: Math.sin(a.ry) * 16, vz: Math.cos(a.ry) * 16, t: .9, by: idx }); if (idx !== myIdx()) ev('bolt'); break;
+    case 'decoy': S.decoys.push({ x: r2(a.x), z: r2(a.z), t: 6 }); ev('place', `${names()[idx]} dropped a decoy lantern!`); break;
+    case 'swap': {
+      swapReq[idx] = S.elapsed;
+      if (P.length === 2 && Math.abs(swapReq[0] - swapReq[1]) < 3){
+        swapReq[0] = swapReq[1] = -9;
+        const a0 = P[0].pos.clone(), a1 = P[1].pos.clone();
+        E.teleport(P[0].idx, a1.x, a1.z); E.teleport(P[1].idx, a0.x, a0.z); ev('swap', 'Soul swap!');
+      }
+      break; }
+    case 'pow': {
+      lastPow[idx] = { t: S.elapsed, x: a.x, z: a.z };
+      const o = lastPow[1 - idx];
+      if (P.length === 2 && S.elapsed - o.t < .6){
+        const d = Math.hypot(o.x - a.x, o.z - a.z);
+        lastPow[0] = { t: -9 }; lastPow[1] = { t: -9 };
+        if (has('blast') && d < 3.2){
+          ev('blast', 'SOUL BLAST!', 0, (o.x + a.x) / 2, (o.z + a.z) / 2);
+          for (const g of GHOSTS) if (g.y < 5 && Math.hypot(g.x - a.x, g.z - a.z) < 9) g.stun = Math.max(g.stun, 8);
+          ROOMS.forEach((Rr, i) => { if (Rr.def.onBlast && Rr.inside(new THREE.Vector3(a.x, 0, a.z))) Rr.def.onBlast(S.rs[i], Rr, E, a.x, a.z); });
+        } else if (has('bridge') && d >= 2.5 && d <= 14){
+          S.sb = { x1: r2(o.x), z1: r2(o.z), x2: r2(a.x), z2: r2(a.z), t: 5 }; ev('chime', 'A spirit bridge shimmers between you!', 3);
+        }
+      }
+      break; }
+  }
+}
+
 /* ===================== host simulation ===================== */
 function playerList(){
   const host = role === 'guest' ? other : me;
   const L = [{ idx: 0, pos: role === 'guest' ? other.target : me.pos, ry: host.ry, moving: host.moving, inp: host === me ? me.inp : other.inp }];
   if (role === 'host' && conn && conn.open && other.seen) L.push({ idx: 1, pos: other.target, ry: other.ry, moving: other.moving, inp: other.inp });
   if (role === 'guest') L.push({ idx: 1, pos: me.pos, ry: me.ry, moving: me.moving, inp: me.inp });
-  for (const p of L) p.frozen = S.frozen[p.idx] > 0;
+  for (const p of L){ p.frozen = S.frozen[p.idx] > 0; p.dashing = E.dashing(p.idx); }
+  for (const p of L) p.hidden = has('shadow') && L.some(q => q !== p && !q.frozen && (() => { const dx = p.pos.x - q.pos.x, dz = p.pos.z - q.pos.z, d = Math.hypot(dx, dz); return d < 1.9 && d > .2 && (dx * Math.sin(q.ry) + dz * Math.cos(q.ry)) / d < -.45; })());
   return L;
 }
-function ev(k, m = '', a = 0){ const e = { t: 'ev', k, m, a }; playEv(e); send(e); }
+function ev(k, m = '', a = 0, x, z){ const e = { t: 'ev', k, m, a }; if (x !== undefined){ e.x = r2(x); e.z = r2(z); } playEv(e); send(e); }
 function playEv(e){
   switch (e.k){
     case 'door': sfx.door(); break;
@@ -656,7 +1041,14 @@ function playEv(e){
     case 'tick': sfx.tick(); break;
     case 'whoosh': sfx.whoosh(); break;
     case 'gong': sfx.gong(e.a || 110); break;
-    default: { const R = ROOMS.find(R => R.def.onEvent && R.def.onEvent(e, R, E)); }
+    case 'splash': sfx.splash(); break;
+    case 'swap': sfx.swap(); break;
+    case 'bolt': sfx.bolt(); break;
+    case 'flashfx': if (e.x !== undefined) flashFx(e.x, e.z, e.a); break;
+    case 'boom': sfx.boom(); if (e.x !== undefined) flashFx(e.x, e.z, 0); break;
+    case 'blast': sfx.blast(); if (e.x !== undefined) flashFx(e.x, e.z, 0); flash(); break;
+    case 'oil': if (e.a === myIdx()){ me.oil = 1; toast('Lantern refilled!'); } sfx.pick(); break;
+    default: { ROOMS.find(R => R.def.onEvent && R.def.onEvent(e, R, E)); }
   }
   if (e.m) toast(e.m);
 }
@@ -665,7 +1057,6 @@ function hostTick(dt){
   if (phase !== 'play') return;
   S.elapsed += dt;
   const P = curP = playerList();
-  // extra bodies (echoes etc.) per room
   const extra = ROOMS.map((R, i) => R.def.occupants ? R.def.occupants(S.rs[i], R, E) : []);
   for (const id of PLATE_IDS){
     const pl = PLATES[id];
@@ -675,7 +1066,19 @@ function hostTick(dt){
     if (occ) hostMem[id] = SOLO() ? ECHO : 0; else hostMem[id] = Math.max(0, hostMem[id] - dt);
     held[id] = occ || hostMem[id] > 0;
   }
+  hostItems(dt, P);
   ROOMS.forEach((R, i) => R.def.host && R.def.host(dt, S.rs[i], R, E));
+  // decoys, bolts, spirit bridge
+  for (const d of S.decoys) d.t -= dt;
+  S.decoys = S.decoys.filter(d => d.t > 0);
+  for (const b of S.bolts){
+    b.t -= dt; b.x += b.vx * dt; b.z += b.vz * dt;
+    const g = GHOSTS.find(g => g.y < 5 && Math.hypot(g.x - b.x, g.z - b.z) < 1);
+    if (g){ g.stun = Math.max(g.stun, 6); b.t = 0; ev('zap'); const R = ROOMS[g.room]; if (R.def.onBoltHit) R.def.onBoltHit(S.rs[g.room], R, E, g); }
+    if (colliders(-1).some(r => b.x > r.x1 && b.x < r.x2 && b.z > r.z1 && b.z < r.z2)) b.t = 0;
+  }
+  S.bolts = S.bolts.filter(b => b.t > 0);
+  if (S.sb){ S.sb.t -= dt; if (S.sb.t <= 0) S.sb = null; }
   const n = names();
   for (const g of GHOSTS) updateGhost(g, dt, P, n);
   for (const p of P){
@@ -685,28 +1088,37 @@ function hostTick(dt){
     if (rescuer){ S.frozen[p.idx] = 0; ev('thaw', `${n[rescuer.idx]} saved ${n[p.idx]}!`); }
     else if (S.frozen[p.idx] <= 0){ S.frozen[p.idx] = 0; ev('thaw'); }
   }
+  if (RESET_RULE && P.length === 2 && P.every(p => S.frozen[p.idx] > 0)){
+    const ri = roomAt(P[0].pos.z);
+    if (ri >= 0 && ri === roomAt(P[1].pos.z)) resetRoom(ri);
+    else S.frozen = [Math.min(S.frozen[0], 2), Math.min(S.frozen[1], 2)];
+  }
   if (P.every(p => p.pos.z < WIN_Z)) setPhase('won');
 }
-const inBounds = (g, pos, m = .6) => pos.x > g.b[0] - m && pos.x < g.b[1] + m && pos.z > g.b[2] - m && pos.z < g.b[3] + m;
+function inBounds(g, pos, m = .6){ return pos.x > g.b[0] - m && pos.x < g.b[1] + m && pos.z > g.b[2] - m && pos.z < g.b[3] + m; }
 function stepToward(g, tx, tz, sp, dt){
   const dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
   if (d < .05) return d;
   const s = Math.min(d, sp * dt); g.x += dx / d * s; g.z += dz / d * s; g.ry = Math.atan2(dx, dz);
   return d;
 }
+function targetsOf(g, P){ return P.filter(p => S.frozen[p.idx] <= 0 && !p.hidden && inBounds(g, p.pos)); }
+function decoyFor(g){ let best = null, bd = 10; for (const d of S.decoys){ if (!inBounds(g, { x: d.x, z: d.z })) continue; const dd = Math.hypot(d.x - g.x, d.z - g.z); if (dd < bd){ bd = dd; best = d; } } return best; }
 function updateGhost(g, dt, P, n){
   const st = S.rs[g.room], R = ROOMS[g.room];
   if (g.gone && g.gone(st, R, E)){ g.y = Math.min(g.y + dt * 2.5, 12); return; }
   g.y = 0; g.w = 0;
+  if (g.stun > 0){ g.stun -= dt; g.w = 1; return; }
+  if (!g.ignoreDecoy && !g.harmless){ const d = decoyFor(g); if (d){ stepToward(g, d.x, d.z, (g.sp || 2.5) * GMULT, dt); if (Math.hypot(d.x - g.x, d.z - g.z) < .7) d.t = 0; return; } }
   if (g.think && g.think(g, dt, st, R, E, P)) return;
   const active = P.some(p => inBounds(g, p.pos, 0));
   if (g.rest > 0){ g.rest -= dt; return; }
   if (g.ret){ if (stepToward(g, g.home[0], g.home[1], 6, dt) < .2){ g.ret = false; g.rest = 2.2; } return; }
   if (!active){ stepToward(g, g.home[0], g.home[1], 1.5, dt); return; }
-  const targets = P.filter(p => S.frozen[p.idx] <= 0 && inBounds(g, p.pos));
+  const targets = targetsOf(g, P);
   let best = null, bd = g.radius || 9;
   for (const p of targets){ const d = Math.hypot(p.pos.x - g.x, p.pos.z - g.z); if (d < bd){ bd = d; best = p; } }
-  if (best) stepToward(g, best.pos.x, best.pos.z, g.sp, dt);
+  if (best) stepToward(g, best.pos.x, best.pos.z, g.sp * GMULT, dt);
   else {
     g.wt -= dt;
     if (g.wx === null || g.wt <= 0 || Math.hypot(g.wx - g.x, g.wz - g.z) < .3){
@@ -717,20 +1129,20 @@ function updateGhost(g, dt, P, n){
   g.x = clamp(g.x, g.b[0], g.b[1]); g.z = clamp(g.z, g.b[2], g.b[3]);
   if (!g.harmless) ghostTouch(g, targets, n);
 }
-function ghostTouch(g, targets, n){
+function ghostTouch(g, targets, n, rad = .95){
   for (const p of targets){
-    if (Math.hypot(p.pos.x - g.x, p.pos.z - g.z) < .95){
-      g.ret = true;
+    if (p.dashing || p.frozen || p.hidden) continue;
+    if (Math.hypot(p.pos.x - g.x, p.pos.z - g.z) < (g.touch || rad)){
+      g.ret = !g.noReturn;
       const helper = role === 'solo' ? 'Wait it out…' : `${n[1 - p.idx]}, touch them to break the ice!`;
-      E.freeze(p.idx, 6, `${n[p.idx]} got frozen! ${helper}`);
+      E.freeze(p.idx, FREEZE, `${n[p.idx]} got frozen${g.label ? ' by ' + g.label : ''}! ${helper}`);
       if (g.onFreeze) g.onFreeze(g, p, S.rs[g.room], ROOMS[g.room], E);
       return true;
     }
   }
   return false;
 }
-E.stepToward = stepToward; E.ghostTouch = ghostTouch; E.inBounds = inBounds;
-E.colliders = colliders; E.resolve = resolve; E.staticRects = () => RECTS.concat(DOOR_IDS.filter(id => !S.doors[id]).map(id => DOORS[id].rect));
+
 
 /* ===================== networking ===================== */
 let peer = null, conn = null, code = '';
@@ -777,21 +1189,26 @@ function onData(m){
       break;
     case 'g':
       if (role !== 'host') break;
-      other.target.set(m.p[0], 0, m.p[1]); other.ry = m.p[2]; other.moving = !!m.p[3]; other.running = !!m.p[4]; other.inp = m.in || [0, 0, 0];
+      other.target.set(m.p[0], 0, m.p[1]); other.ry = m.p[2]; other.moving = !!m.p[3]; other.running = !!m.p[4]; other.dashing = m.p[5] || 0; other.sight = m.p[6] || 0; other.oil = m.p[7] ?? 1;
+      other.inp = m.in || [0, 0, 0];
       if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
       break;
+    case 'ab': if (role === 'host') hostAbility(1, m); break;
+    case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (m.sw) toast(`${remoteName} wants to SWAP — tap them to accept!`); break;
     case 'again': if (role === 'host' && phase === 'won') startGame(S.startRoom); break;
     case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
     case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
-    case 'tp': if (role === 'guest'){ me.pos.set(m.x, 0, m.z); me.slide = null; } break;
+    case 'tp': if (role === 'guest'){ me.pos.set(m.x, 0, m.z); me.slide = null; me.dash = null; me.grap = null; } break;
     case 'fell': if (role === 'host'){ const ri = roomAt(other.target.z), R = ROOMS[ri]; if (R && R.def.onFall) R.def.onFall(S.rs[ri], R, E, 1); } break;
     case 's':
       if (role !== 'guest') break;
       DOOR_IDS.forEach((id, i) => S.doors[id] = m.d[i] === '1' ? 1 : 0);
       PLATE_IDS.forEach((id, i) => S.plateOn[id] = m.pl[i] === '1' ? 1 : 0);
       S.frozen = m.fr; S.freezes = m.fz; S.elapsed = m.el; S.startRoom = m.sr; S.rs = m.rs;
+      S.broken = m.br || {}; S.decoys = m.dc || []; S.bolts = m.bo || []; S.sb = m.sb || null;
       m.gh.forEach((v, i) => { const g = GHOSTS[i]; g.tx = v[0]; g.tz = v[1]; g.y = v[2]; g.ry = v[3]; g.w = v[4]; });
-      other.target.set(m.hp[0], 0, m.hp[1]); other.ry = m.hp[2]; other.moving = !!m.hp[3]; other.running = !!m.hp[4]; other.inp = m.in || [0, 0, 0];
+      other.target.set(m.hp[0], 0, m.hp[1]); other.ry = m.hp[2]; other.moving = !!m.hp[3]; other.running = !!m.hp[4]; other.dashing = m.hp[5] || 0; other.sight = m.hp[6] || 0; other.oil = m.hp[7] ?? 1;
+      other.inp = m.in || [0, 0, 0];
       if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
       if (m.ph !== phase) setPhase(m.ph);
       break;
@@ -809,14 +1226,16 @@ function onDisconnect(){
   } else if (role === 'guest') toMenu('Lost connection to the host.');
 }
 function cleanupNet(){ try { conn && conn.close(); } catch {} try { peer && peer.destroy(); } catch {} conn = null; peer = null; }
+function myP(){ return [r2(me.pos.x), r2(me.pos.z), r2(me.ry), me.moving ? 1 : 0, me.running ? 1 : 0, (me.dash || me.grap) ? 1 : 0, me.sight > 0 ? 1 : 0, r2(me.oil)]; }
 function sendState(){
-  const p = [r2(me.pos.x), r2(me.pos.z), r2(me.ry), me.moving ? 1 : 0, me.running ? 1 : 0];
+  const p = myP();
   if (role === 'guest'){ send({ t: 'g', p, in: me.inp.map(r2) }); return; }
   send({
     t: 's', ph: phase === 'won' ? 'won' : phase === 'play' ? 'play' : 'lobby',
     d: DOOR_IDS.map(id => S.doors[id] ? '1' : '0').join(''),
     pl: PLATE_IDS.map(id => S.plateOn[id] ? '1' : '0').join(''),
     fr: S.frozen.map(r2), fz: S.freezes, el: r2(S.elapsed), sr: S.startRoom, rs: S.rs,
+    br: S.broken, dc: S.decoys, bo: S.bolts.map(b => ({ x: r2(b.x), z: r2(b.z) })), sb: S.sb,
     gh: GHOSTS.map(g => [r2(g.x), r2(g.z), r2(g.y), r2(g.ry), g.w]),
     hp: p, in: me.inp.map(r2)
   });
@@ -826,22 +1245,25 @@ function sendState(){
 const screens = ['menu', 'lobby', 'won'];
 function show(id){ screens.forEach(s => $(s).hidden = s !== id); }
 function status(t){ $('status').textContent = t; }
-let toastT = 0, storyT = 0;
+let toastT = 0, storyT = 0, roomTime = 0, lastRoom = -1, hintT = 0;
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); toastT = 3.2; }
-function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('frost').classList.remove('on'); }
+function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
 function chosenStart(){ return clamp(parseInt($('startRoom').value) || 0, 0, Math.min(reached, ROOMS.length - 1)); }
 function startGame(startRoom = 0){ resetWorld(); solveUpTo(startRoom); setPhase('play'); }
-function spawn(){ const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; }
+function spawn(){ fallCD = 0; const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
 function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
     if (role === 'guest' && prev !== 'play') for (const g of GHOSTS){ g.x = g.tx; g.z = g.tz; }
     show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('hint').hidden = isTouch;
+    $('dashBtn').hidden = !has('dash'); $('powBtn').hidden = !has('flash'); $('oilM').hidden = !has('oil');
     spawn(); meChar.group.visible = true; otherChar.group.visible = role !== 'solo';
     const partner = role === 'solo' ? 'You arrive' : `You and <b>${esc(remoteName)}</b> arrive`;
     const where = S.startRoom > 0 ? ` in <b>${ROOMS[S.startRoom].name}</b>` : '';
-    $('story').innerHTML = `${partner}${where} at <b>${esc(CFG.title)}</b>.<br><br>${CFG.story || ''}<br>Ghosts freeze anyone they touch — ${role === 'solo' ? 'the ice melts after a few seconds' : 'touch your frozen partner to break the ice'}.`;
-    $('story').classList.add('show'); storyT = 7;
+    const fl = CFG.feature ? `<br><br>New power: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b> — ${CFG.feature.how}` : '';
+    $('story').innerHTML = `${partner}${where} at <b>${esc(CFG.title)}</b>.<br><br>${CFG.story || ''}${fl}`;
+    $('story').classList.add('show'); storyT = 8;
+    roomTime = 0; lastRoom = -1;
     sfx.boo();
   }
   if (p === 'won'){
@@ -849,8 +1271,11 @@ function setPhase(p){
     const t = S.elapsed, full = S.startRoom === 0, bk = 'hm_best_L' + LEVEL;
     const best = parseFloat(store.get(bk, '0')) || 0, newBest = full && (!best || t < best);
     if (newBest) store.set(bk, String(t));
+    const stars = S.freezes <= 2 ? 3 : S.freezes <= 6 ? 2 : 1;
+    if (full && stars > (parseInt(store.get('hm_stars_L' + LEVEL, '0')) || 0)) store.set('hm_stars_L' + LEVEL, String(stars));
+    $('wonStars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
     $('wonTitle').textContent = CFG.winTitle || 'You escaped! 🌙';
-    $('wonSub').textContent = role === 'solo' ? 'You made it out alive.' : `${names()[0]} and ${names()[1]} made it out alive.`;
+    $('wonSub').textContent = (role === 'solo' ? 'You made it out alive.' : `${names()[0]} and ${names()[1]} made it out alive.`) + ' (★★★ = frozen 2 times or fewer)';
     $('wonRows').innerHTML =
       `<div class="row"><span>Escape time</span><span>${fmtTime(t)}${full ? '' : ' (from room ' + (S.startRoom + 1) + ')'}</span></div>` +
       `<div class="row"><span>Times frozen</span><span>${S.freezes}</span></div>` +
@@ -876,27 +1301,53 @@ function fillSelects(){
   for (let i = 0; i <= Math.min(reached, ROOMS.length - 1); i++){ const o = document.createElement('option'); o.value = i; o.textContent = `${i + 1}. ${ROOMS[i].name}`; sel.appendChild(o); }
   sel.value = '0';
   const ls = $('levelSel'); ls.innerHTML = '';
-  for (const l of LEVELS){ const o = document.createElement('option'); o.value = l.n; o.textContent = `${l.n}. ${l.name}`; ls.appendChild(o); }
+  for (const l of LEVELS){ const o = document.createElement('option'); o.value = l.n; const st = parseInt(store.get('hm_stars_L' + l.n, '0')) || 0; o.textContent = `${l.n}. ${l.name}${st ? ' ' + '★'.repeat(st) : ''}`; ls.appendChild(o); }
   ls.value = String(LEVEL);
+}
+function showHint(){
+  const ri = roomAt(me.pos.z), R = ROOMS[ri];
+  if (phase !== 'play' || !R || !R.def.hint) return;
+  hintT = 12;
+}
+$('hintBtn').addEventListener('click', showHint);
+$('hintBtn').addEventListener('touchstart', e => { e.preventDefault(); showHint(); }, { passive: false });
+function powIcons(){
+  const out = [];
+  const cd = (v, max) => `<i style="height:${clamp(v / max, 0, 1) * 100}%"></i>`;
+  if (has('dash')) out.push(`<div class="pw">⚡${cd(me.dashCD, 1.1)}<small>Spc</small></div>`);
+  if (has('flash')) out.push(`<div class="pw">☀${cd(me.powCD, 5)}<small>F</small></div>`);
+  if (has('decoy')) out.push(`<div class="pw">🏮${cd(me.decoyCD, 15)}<small>hold</small></div>`);
+  if (has('rewind')) out.push(`<div class="pw">⏪${cd(me.rewCD, 10)}<small>R</small></div>`);
+  return out.join('');
 }
 function updateHud(dt){
   const ri = roomAt(me.pos.z), R = ROOMS[ri], st = S.rs[ri];
+  if (ri !== lastRoom){ lastRoom = ri; roomTime = 0; hintT = 0; }
+  roomTime += dt; if (hintT > 0) hintT -= dt;
   $('roomName').textContent = R ? `${ri + 1}. ${R.name}` : 'Outside';
   $('timer').textContent = fmtTime(S.elapsed);
+  $('hintBtn').hidden = !(R && R.def.hint && roomTime > 40 && hintT <= 0);
   let obj = '';
+  const showingHint = R && R.def.hint && hintT > 0;
   if (myFrozen()) obj = `❄ You're frozen! ${SOLO() ? 'Wait for the ice to melt…' : `${esc(remoteName)} can touch you to break the ice.`}`;
+  else if (showingHint) obj = '💡 ' + R.def.hint;
   else if (R){
     const note = R.def.notes && R.def.notes.find(n => Math.hypot(me.pos.x - n[0], me.pos.z - R.Z(n[1])) < (n[3] || 1.8));
     obj = note ? `<i>${esc(note[2])}</i>` : (R.def.objective ? R.def.objective(st, R, E) : '');
   } else obj = SOLO() || curP.every(p => p.pos.z < WIN_Z) ? 'Free!' : `You're out! Wait for ${esc(remoteName)}…`;
   if ($('objective').innerHTML !== obj) $('objective').innerHTML = obj;
+  $('objective').classList.toggle('hint', !!showingHint);
   const pan = R && R.def.panel && phase === 'play' ? R.def.panel(st, R, E) : null;
   $('panel').hidden = !pan; if (pan && $('panel').innerHTML !== pan) $('panel').innerHTML = pan;
   const bar = R && R.def.bar && phase === 'play' ? R.def.bar(st, R, E) : null;
   $('barBox').hidden = !bar;
   if (bar){ $('barFill').style.width = (clamp(bar.frac, 0, 1) * 100) + '%'; $('barFill').style.background = bar.color || 'var(--gold)'; $('barLbl').textContent = bar.label || ''; }
-  $('stam').firstElementChild.style.width = (me.stamina / STAM * 100) + '%';
+  $('stamM').firstElementChild.style.width = (me.stamina / STAM * 100) + '%';
+  if (has('oil')) $('oilM').firstElementChild.style.width = (me.oil * 100) + '%';
+  const pi = powIcons(); if ($('powRow').innerHTML !== pi) $('powRow').innerHTML = pi;
+  $('dashBtn').classList.toggle('cd', me.dashCD > 0 && !carrying(myIdx())); $('powBtn').classList.toggle('cd', me.powCD > 0);
   $('frost').classList.toggle('on', myFrozen());
+  $('sightFx').classList.toggle('on', me.sight > 0);
   if (toastT > 0){ toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
   if (storyT > 0){ storyT -= dt; if (storyT <= 0) $('story').classList.remove('show'); }
   if (otherChar.group.visible && other.seen && phase === 'play'){
@@ -944,7 +1395,6 @@ $('btnNext').onclick = () => {
   if (role === 'guest'){ send({ t: 'next' }); $('btnNext').disabled = true; $('btnNext').textContent = 'Asking host…'; }
   else goNextLevel();
 };
-// arriving via a join link (?join=CODE) or a "next level" hop (?host=1)
 try {
   const q = new URLSearchParams(location.search), jc = q.get('join');
   if (jc){ $('code').value = jc.toUpperCase(); if (myName){ status('Joining ' + jc + '… tap Join if nothing happens.'); setTimeout(() => $('btnJoin').click(), 400); } else status('Type your name and tap Join.'); }
@@ -953,8 +1403,29 @@ try {
 } catch {}
 
 /* ===================== visuals ===================== */
+const itemMeshes = new Map();
+const decoyMeshes = [], boltMeshes = [];
+let sbMesh = null;
+function itemMesh(R, ri, k, idx){
+  const key = ri + ':' + idx;
+  let m = itemMeshes.get(key);
+  if (!m || m.userData.k !== k){
+    if (m) scene.remove(m);
+    m = (R.def.itemMesh && R.def.itemMesh(k, E)) || defaultItem(k);
+    m.userData.k = k; scene.add(m); itemMeshes.set(key, m);
+  }
+  return m;
+}
+function defaultItem(k){
+  const g = new THREE.Group();
+  if (k === 'bomb'){ const b = new THREE.Mesh(new THREE.SphereGeometry(.35, 14, 10), mat(0x1a1a1a, { roughness: .4 })); g.add(b); const f = new THREE.Mesh(new THREE.ConeGeometry(.08, .25, 6), flameMat); f.position.y = .42; g.add(f); return g; }
+  if (k === 'oil'){ const c = new THREE.Mesh(new THREE.CylinderGeometry(.22, .25, .5, 10), mat(0xc85a1a, { metalness: .5 })); g.add(c); return g; }
+  if (k === 'key'){ g.add(new THREE.Mesh(new THREE.TorusGeometry(.2, .06, 8, 14), glow(0xffd84d, .8))); const s = new THREE.Mesh(new THREE.BoxGeometry(.08, .5, .08), glow(0xffd84d, .8)); s.position.y = -.35; g.add(s); return g; }
+  g.add(new THREE.Mesh(new THREE.DodecahedronGeometry(.3, 0), mat(0x8a8a94))); return g;
+}
 function updateWorldVisuals(dt, t){
   for (const id of DOOR_IDS){ const m = DOORS[id].mesh; m.position.y += ((S.doors[id] ? -2.55 : 0) - m.position.y) * damp(5, dt); }
+  for (const c of CRACKED) c.mesh.visible = !S.broken[c.id];
   ROOMS.forEach((R, i) => R.def.visual && R.def.visual(dt, t, S.rs[i], R, E));
   for (const id of PLATE_IDS){
     const p = PLATES[id]; if (!p.mesh) continue;
@@ -964,17 +1435,52 @@ function updateWorldVisuals(dt, t){
     p.mat.emissiveIntensity += (ei - p.mat.emissiveIntensity) * damp(10, dt);
     p.force = undefined;
   }
+  // items
+  const seen = new Set();
+  ROOMS.forEach((R, ri) => {
+    const st = S.rs[ri]; if (!st || !st.items) return;
+    st.items.forEach((it, i) => {
+      const m = itemMesh(R, ri, it.k, i); seen.add(ri + ':' + i);
+      m.visible = it.s !== 3 && !it.hidden;
+      if (!m.visible) return;
+      if (it.s === 1){ const pp = E.playerPos(it.w); if (pp){ m.position.set(pp.x, 2.2, pp.z); } }
+      else m.position.set(it.x, it.s === 2 ? (it.y || 1) : (it.yRest ?? .4), R.Z(it.lz));
+      m.rotation.y += dt * (it.s === 0 ? .8 : 4);
+      if (it.k === 'bomb' && it.fuse > 0) m.scale.setScalar(1 + Math.sin(t * 30) * .12);
+    });
+  });
+  for (const [k, m] of itemMeshes) if (!seen.has(k)) m.visible = false;
+  // decoys / bolts / spirit bridge / pings / flash fx
+  while (decoyMeshes.length < S.decoys.length){ const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.BoxGeometry(.35, .5, .35), glow(0xffcf7a, 2))); const l = new THREE.PointLight(0xffb36b, 5, 8, 1.2); l.position.y = 1; g.add(l); scene.add(g); decoyMeshes.push(g); }
+  decoyMeshes.forEach((m, i) => { const d = S.decoys[i]; m.visible = !!d; if (d){ m.position.set(d.x, .3 + Math.sin(t * 6) * .05, d.z); } });
+  while (boltMeshes.length < S.bolts.length){ const b = new THREE.Mesh(new THREE.SphereGeometry(.25, 10, 8), glow(0x9fe8ff, 2.5)); scene.add(b); boltMeshes.push(b); }
+  boltMeshes.forEach((m, i) => { const b = S.bolts[i]; m.visible = !!b; if (b) m.position.set(b.x, 1.1, b.z); });
+  if (S.sb){
+    if (!sbMesh){ sbMesh = new THREE.Mesh(new THREE.BoxGeometry(1, .1, 1.6), new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: .7 })); scene.add(sbMesh); }
+    const b = S.sb, len = Math.hypot(b.x2 - b.x1, b.z2 - b.z1);
+    sbMesh.visible = true; sbMesh.scale.set(len, 1, 1); sbMesh.position.set((b.x1 + b.x2) / 2, .12, (b.z1 + b.z2) / 2); sbMesh.rotation.y = -Math.atan2(b.z2 - b.z1, b.x2 - b.x1);
+    sbMesh.material.opacity = .35 + Math.min(1, b.t) * .4;
+  } else if (sbMesh) sbMesh.visible = false;
+  for (let i = PINGS.length - 1; i >= 0; i--){ const p = PINGS[i]; p.t -= dt; const s = 1 + (4 - p.t) * .15; p.ring.scale.setScalar(s); p.g.children.forEach(c => c.material.opacity = Math.max(0, p.t / 4)); if (p.t <= 0){ scene.remove(p.g); PINGS.splice(i, 1); } }
+  for (let i = fxLights.length - 1; i >= 0; i--){ const f = fxLights[i]; f.t -= dt; f.l.intensity = Math.max(0, f.t / .45 * 30); f.s.scale.setScalar(1 + (.45 - f.t) * 12); f.s.material.opacity = Math.max(0, f.t / .45 * .45); if (f.t <= 0){ scene.remove(f.l); scene.remove(f.s); fxLights.splice(i, 1); } }
+  // ghosts
   let nearest = 99;
   for (const g of GHOSTS){
     if (role === 'guest'){ g.x += (g.tx - g.x) * damp(10, dt); g.z += (g.tz - g.z) * damp(10, dt); }
     const m = g.mesh, shake = g.w ? Math.sin(t * 60) * .04 : 0;
-    m.position.set(g.x + shake, g.y + .15 + Math.sin(t * 2.2 + g.home[0]) * .15, g.z);
-    let d = g.ry - m.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); m.rotation.y += d * damp(8, dt);
-    m.visible = g.y < 11;
+    m.position.set(g.x + shake, g.y + (g.flat ? 0 : .15 + Math.sin(t * 2.2 + g.home[0]) * .15), g.z);
+    let d = g.ry - m.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); m.rotation.y += d * damp(g.snap ? 30 : 8, dt);
+    const hidden = g.invisible && !(me.sight > 0) && !(g.revealed && g.revealed(S.rs[g.room]));
+    m.visible = g.y < 11 && !hidden;
     if (m.visible && !g.harmless) nearest = Math.min(nearest, Math.hypot(g.x - me.pos.x, g.z - me.pos.z));
+    else if (hidden) nearest = Math.min(nearest, Math.hypot(g.x - me.pos.x, g.z - me.pos.z) + 1);
   }
   if (whisperGain) whisperGain.gain.value = phase === 'play' ? clamp((7 - nearest) / 7, 0, 1) * .07 : 0;
   if (droneGain) droneGain.gain.value = phase === 'menu' ? .02 : .045;
+  // darkness: dim the world while you're in a dark room
+  const R = ROOMS[roomAt(me.pos.z)], dark = R && R.def.dark ? (typeof R.def.dark === 'function' ? R.def.dark(S.rs[R.i], R, E) : R.def.dark) : 0;
+  hemi.intensity += (AMB * (1 - dark * .9) - hemi.intensity) * damp(3, dt);
+  moon.intensity += (.45 * (1 - dark) - moon.intensity) * damp(3, dt);
 }
 function updateCharVisuals(c, frozenSec){
   const fr = frozenSec > 0;
@@ -983,11 +1489,15 @@ function updateCharVisuals(c, frozenSec){
 }
 
 /* ===================== main loop ===================== */
-let last = performance.now(), clockT = 0, netT = 0;
+let last = performance.now(), clockT = 0, netT = 0, histT = 0;
 const camPos = new THREE.Vector3(0, 16, 20), camLook = new THREE.Vector3();
 camera.position.copy(camPos);
 function tick(dt){
   clockT += dt; fallCD -= dt;
+  me.dashCD = Math.max(0, me.dashCD - dt); me.powCD = Math.max(0, me.powCD - dt); me.rewCD = Math.max(0, me.rewCD - dt); me.decoyCD = Math.max(0, me.decoyCD - dt);
+  if (btn.dash){ btn.dashT += dt; if (has('decoy') && !btn.dashUsed && btn.dashT > .65 && !carrying(myIdx())){ btn.dashUsed = true; actDash(true); } }
+  if (btn.pow){ btn.powT += dt; if (has('sight') && btn.powT > .3 && phase === 'play'){ btn.powUsed = true; if (me.sightE > 0){ me.sight = 1; me.sightE = Math.max(0, me.sightE - dt / 5); } else me.sight = 0; } }
+  else me.sightE = Math.min(1, me.sightE + dt / 6);
   if (role === 'host' || role === 'solo') hostTick(dt);
   else { curP = playerList(); if (role === 'guest' && phase === 'play') S.elapsed += dt; }
   const inGame = phase === 'play' || phase === 'won';
@@ -995,14 +1505,18 @@ function tick(dt){
   if (inGame){
     ROOMS.forEach((R, i) => R.def.local && R.def.local(dt, S.rs[i], R, E));
     updateMe(dt);
+    histT -= dt; if (histT <= 0){ histT = .05; me.hist.push([S.elapsed, me.pos.x, me.pos.z]); while (me.hist.length && me.hist[0][0] < S.elapsed - 4) me.hist.shift(); }
+    const R = ROOMS[roomAt(me.pos.z)];
+    if (has('oil') && R && R.def.dark && phase === 'play'){ me.oil = Math.max(0, me.oil - dt * (R.def.oilRate || 1 / 70)); }
     meChar.group.position.copy(me.pos); meChar.group.rotation.y = me.ry;
-    animChar(meChar, dt, me.moving, me.running);
+    animChar(meChar, dt, me.moving, me.running, me.oil);
+    meChar.rig.scale.setScalar(me.dash || me.grap ? .85 : 1);
     updateCharVisuals(meChar, S.frozen[myIdx()]);
     meChar.label.setText(myFrozen() ? `❄ ${Math.ceil(S.frozen[myIdx()])}` : (myName || 'You'), myFrozen() ? '#bfeaff' : CSSCOL[myIdx()]);
     if (otherChar.group.visible && other.seen){
       otherChar.group.position.lerp(other.target, damp(14, dt));
       let d = other.ry - otherChar.group.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); otherChar.group.rotation.y += d * damp(14, dt);
-      animChar(otherChar, dt, other.moving, other.running);
+      animChar(otherChar, dt, other.moving, other.running, other.oil);
       const of = S.frozen[1 - myIdx()];
       updateCharVisuals(otherChar, of);
       otherChar.label.setText(of > 0 ? `❄ ${remoteName} — touch to save!` : remoteName, of > 0 ? '#bfeaff' : CSSCOL[1 - myIdx()]);
@@ -1034,7 +1548,8 @@ requestAnimationFrame(loop);
 
 // handle for automated tests
 return {
-  S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt,
-  setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; }
+  S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS,
+  setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
+  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, btn, carrying
 };
 }

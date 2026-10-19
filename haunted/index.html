@@ -1489,7 +1489,7 @@ $('btnNext').onclick = () => {
 };
 {
   const ls = $('levelSel');
-  [[1, 'Hollow Manor'], [2, 'Grimwood Carnival'], [3, 'The Clocktower']].forEach(([n, t]) => { const o = document.createElement('option'); o.value = n; o.textContent = n + '. ' + t; ls.appendChild(o); });
+  [[1, 'Hollow Manor'], [2, 'Grimwood Carnival'], [3, 'The Clocktower'], [4, 'The Sunken Lighthouse']].forEach(([n, t]) => { const o = document.createElement('option'); o.value = n; o.textContent = n + '. ' + t; ls.appendChild(o); });
   ls.value = '1';
   ls.addEventListener('change', e => { const n = +e.target.value; if (n !== 1) location.href = levelUrl(n); });
   try {

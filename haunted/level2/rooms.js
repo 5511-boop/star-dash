@@ -135,6 +135,7 @@ const carousel = {
     for (const s of ['SW', 'NW']) if (R.edge(s) && st.queue < 3){ if (st.queue === 0 && st.wait <= 0) st.wait = .8; st.queue++; E.ev('whoosh', st.queue === 1 ? 'The carousel music starts… it\'s going to turn!' : ''); }
     if (st.wait > 0) st.wait -= dt;
     else if (st.queue > 0){ st.queue--; st.rot++; st.wait = E.solo() ? 2.6 : 1.5; E.ev('click'); }
+    if (!R.isOpen('exit') && E.P.length && E.P.every(p => R.inside(p.pos) && R.lz(p.pos.z) > 18.2)){ R.open('exit'); E.ev('door', 'Everyone is across — the door opens!'); }
   },
   local(dt, st, R, E){
     const L = R.local;
@@ -418,12 +419,12 @@ const scales = {
     }
     if (!vals){ vals = [3, 4, 5, 2, 6, 4]; extra = 0; }
     const order = E.shuffle(vals.slice());
-    return { items: order.map((v, i) => ({ v, s: 0, x: SPOTS[i][0], lz: SPOTS[i][1], w: -1, pan: '' })), carry: [-1, -1], panOrder: { L: [], R: [] }, done: 0, balT: 0 };
+    return { wts: order.map((v, i) => ({ v, s: 0, x: SPOTS[i][0], lz: SPOTS[i][1], w: -1, pan: '' })), carry: [-1, -1], panOrder: { L: [], R: [] }, done: 0, balT: 0 };
   },
   solve(st){ st.done = 1; },
   sums(st, R, E){
     const s = { L: 0, R: 0 };
-    st.items.forEach(it => { if (it.s === 2) s[it.pan] += it.v; });
+    st.wts.forEach(it => { if (it.s === 2) s[it.pan] += it.v; });
     for (const p of E.P) for (const k of ['L', 'R']) if (Math.hypot(p.pos.x - PANS[k][0], R.lz(p.pos.z) - PANS[k][1]) < 1.7) s[k] += 10;
     return s;
   },
@@ -434,31 +435,31 @@ const scales = {
       const lz = R.lz(p.pos.z), ci = st.carry[p.idx];
       if (ci >= 0){
         for (const k of ['L', 'R']) if (Math.hypot(p.pos.x - PANS[k][0], lz - PANS[k][1]) < 1.6){
-          const it = st.items[ci]; it.s = 2; it.pan = k; it.w = -1; st.carry[p.idx] = -1; st.panOrder[k].push(ci); E.ev('thud'); break;
+          const it = st.wts[ci]; it.s = 2; it.pan = k; it.w = -1; st.carry[p.idx] = -1; st.panOrder[k].push(ci); E.ev('thud'); break;
         }
       } else {
-        const i = st.items.findIndex(it => it.s === 0 && Math.hypot(p.pos.x - it.x, lz - it.lz) < 1.1);
-        if (i >= 0){ st.items[i].s = 1; st.items[i].w = p.idx; st.carry[p.idx] = i; E.ev('pick'); }
+        const i = st.wts.findIndex(it => it.s === 0 && Math.hypot(p.pos.x - it.x, lz - it.lz) < 1.1);
+        if (i >= 0){ st.wts[i].s = 1; st.wts[i].w = p.idx; st.carry[p.idx] = i; E.ev('pick'); }
       }
     }
     for (const k of ['L', 'R']) if (R.edge('U' + k)){
       const who = E.P.find(p => R.at('U' + k, p.pos));
-      if (who && st.carry[who.idx] < 0 && st.panOrder[k].length){ const i = st.panOrder[k].pop(); st.items[i].s = 1; st.items[i].w = who.idx; st.carry[who.idx] = i; E.ev('pick'); }
+      if (who && st.carry[who.idx] < 0 && st.panOrder[k].length){ const i = st.panOrder[k].pop(); st.wts[i].s = 1; st.wts[i].w = who.idx; st.carry[who.idx] = i; E.ev('pick'); }
     }
-    const s = this.sums(st, R, E), all = st.items.every(it => it.s === 2);
+    const s = this.sums(st, R, E), all = st.wts.every(it => it.s === 2);
     if (all && s.L === s.R){ st.balT += dt; if (st.balT > 1.5){ st.done = 1; R.open('exit'); E.ev('door', 'Perfect balance! The strongman salutes and the exit opens.'); } }
     else st.balT = 0;
   },
   visual(dt, t, st, R, E){
     const T = E.THREE;
-    while (this.items.length < st.items.length){
-      const v = st.items[this.items.length].v, g = new T.Group();
+    while (this.items.length < st.wts.length){
+      const v = st.wts[this.items.length].v, g = new T.Group();
       const body = new T.Mesh(new T.BoxGeometry(.9, .7, .9), E.mat(0xffffff, { map: this.numTex(v) })); g.add(body);
       const knob = new T.Mesh(new T.SphereGeometry(.2, 10, 8), E.mat(0x4a4a5a)); knob.position.y = .45; g.add(knob);
       E.scene.add(g); this.items.push(g);
     }
     const panCount = { L: 0, R: 0 };
-    st.items.forEach((it, i) => {
+    st.wts.forEach((it, i) => {
       const m = this.items[i];
       if (it.s === 1){ const pp = E.playerPos(it.w); if (pp) m.position.set(pp.x, 2.3, pp.z); }
       else if (it.s === 2){ const n = panCount[it.pan]++; const [x, lz] = PANS[it.pan]; m.position.set(x - .9 + (n % 3) * .9, .5 + Math.floor(n / 3) * .75, R.Z(lz - .4 + Math.floor(n / 3) * .1)); }
@@ -470,7 +471,7 @@ const scales = {
   objective(st, R, E){
     if (st.done) return 'Balanced! The exit is open.';
     const s = this.sums(st, R, E), ci = st.carry[E.myIdx()];
-    return `Carry ALL six weights onto the two pans so they balance (walk onto a pan to drop, ↑ plate to take one back). You each weigh 10 if you stand on a pan! <b>Left ${s.L} · Right ${s.R}</b>${ci >= 0 ? ` · carrying <b>${st.items[ci].v}</b>` : ''}`;
+    return `Carry ALL six weights onto the two pans so they balance (walk onto a pan to drop, ↑ plate to take one back). You each weigh 10 if you stand on a pan! <b>Left ${s.L} · Right ${s.R}</b>${ci >= 0 ? ` · carrying <b>${st.wts[ci].v}</b>` : ''}`;
   }
 };
 
@@ -546,12 +547,12 @@ const pen = {
   notes: [[-5, 2, '“The ghost ponies are shy. Lanterns scare them. Herd them home.”', 1.8]],
   build(R, E){
     const T = E.THREE, fence = E.mat(0xc8a26a);
-    R.block(-3.2, 15, -2.8, 20, 1.1, fence); R.block(2.8, 15, 3.2, 20, 1.1, fence); R.block(-3.2, 19.8, 3.2, 20.2, 1.1, fence);
-    R.block(-3.2, 14.8, -1.2, 15.2, 1.1, fence); R.block(1.2, 14.8, 3.2, 15.2, 1.1, fence);
+    R.block(-3.2, 15, -2.8, 20, 1.1, fence); R.block(2.8, 15, 3.2, 20, 1.1, fence); R.block(-3.2, 19.8, 3.2, 22, 1.1, fence);
+    R.block(-3.2, 14.8, -1.7, 15.2, 1.1, fence); R.block(1.7, 14.8, 3.2, 15.2, 1.1, fence);
     R.floor(-2.8, 15.2, 2.8, 19.8, E.mat(0x6a5a2a), .01);
-    this.gate = R.door('gate', -1.2, 14.85, 1.2, 15.15, 'gate');
+    this.gate = R.door('gate', -1.7, 14.85, 1.7, 15.15, 'gate');
     const think = k => (g, dt, st, R2, E2, P) => {
-      const speed = E2.solo() ? 2.3 : 3.3;
+      const speed = E2.solo() ? 2.3 : 3.0;
       const lzg = R2.lz(g.z);
       if (st.cap[k]){
         g.mem.t = (g.mem.t || 0) - dt;
@@ -563,7 +564,14 @@ const pen = {
       let fx = 0, fz = 0;
       for (const p of P){ if (!R2.inside(p.pos)) continue; const dx = g.x - p.pos.x, dz = g.z - p.pos.z, d = Math.hypot(dx, dz); if (d < 4.5 && d > .01){ fx += dx / d * (4.5 - d); fz += dz / d * (4.5 - d); } }
       const px = g.x, pz = g.z;
-      if (Math.hypot(fx, fz) > .05){ const l = Math.hypot(fx, fz); g.x += fx / l * speed * dt; g.z += fz / l * speed * dt; g.ry = Math.atan2(fx, fz); }
+      if (Math.hypot(fx, fz) > .05){
+        // walls push back too, so a cornered pony squirts out sideways instead of getting stuck
+        const lzw = R2.lz(g.z), wall = 2.2;
+        if (g.x < -9.4 + wall) fx += (-9.4 + wall - g.x) * 1.4; if (g.x > 9.4 - wall) fx -= (g.x - 9.4 + wall) * 1.4;
+        if (lzw < 1 + wall) fz -= (1 + wall - lzw) * 1.4; if (lzw > 21 - wall) fz += (lzw - 21 + wall) * 1.4;
+        if (Math.abs(fx) < .4 && Math.abs(fz) < .4){ fx += (g.x < 0 ? 1 : -1) * .8; }
+        // a pony pushed toward the pen mouth gets funnelled in
+        if (lzw > 11 && lzw < 15.4 && Math.abs(g.x) < 4 && fz < 0){ fx += -g.x * .9; fz -= .6; } const l = Math.hypot(fx, fz); g.x += fx / l * speed * dt; g.z += fz / l * speed * dt; g.ry = Math.atan2(fx, fz); }
       else {
         g.mem.t = (g.mem.t || 0) - dt;
         if (g.mem.t <= 0 || !g.mem.w){ g.mem.w = [-8 + Math.random() * 16, 3 + Math.random() * 16]; g.mem.t = 3; }
