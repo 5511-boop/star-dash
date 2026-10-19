@@ -109,7 +109,7 @@
     <h1>Hollow Manor</h1>
     <p class="sub">Two of you. Ten haunted rooms.<br>Escape together — and don't let the ghosts touch you.</p>
     <label>Your name<input id="name" maxlength="12" autocomplete="off" placeholder="Name"></label>
-    <label>Start at<select id="startRoom"></select></label>
+    <div style="display:flex;gap:8px"><label style="flex:1">Level<select id="levelSel"></select></label><label style="flex:1">Start at<select id="startRoom"></select></label></div>
     <button id="btnHost" class="big">Create game</button>
     <div class="join">
       <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
@@ -135,6 +135,7 @@
     <h2>You escaped! 🌙</h2>
     <p class="sub" id="wonSub">The doors slam shut behind you.</p>
     <div class="rows" id="wonRows"></div>
+    <button id="btnNext" class="big">Level 2 →</button>
     <button id="btnAgain" class="big">Play again</button>
     <button id="btnMenu" class="link">Back to menu</button>
   </div>
@@ -1239,9 +1240,10 @@ function onData(m){
   switch (m.t){
     case 'hi':
       remoteName = String(m.n || 'Partner').slice(0, 12); applyColors();
-      if (role === 'host'){ send({ t: 'welcome', n: myName }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
+      if (role === 'host'){ send({ t: 'welcome', n: myName, lv: 1 }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
       break;
     case 'welcome':
+      if (m.lv && m.lv !== 1){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(code); return; }
       remoteName = String(m.n || 'Partner').slice(0, 12); applyColors();
       $('roomCode').textContent = code; $('lobbyMsg').textContent = `Connected to ${remoteName}. Waiting for them to open the door…`;
       $('btnStart').disabled = true; $('btnStart').textContent = 'Waiting for host';
@@ -1255,6 +1257,8 @@ function onData(m){
     case 'again':
       if (role === 'host' && phase === 'won') startGame(S.startRoom);
       break;
+    case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
+    case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
     case 's':
       if (role !== 'guest') break;
       DOOR_IDS.forEach((id, i) => S.doors[id] = m.d[i] === '1' ? 1 : 0);
@@ -1335,6 +1339,7 @@ function setPhase(p){
       `<div class="row"><span>Times frozen</span><span>${S.freezes}</span></div>` +
       `<div class="row"><span>Best full run</span><span>${newBest ? fmtTime(t) + ' 🎉' : best ? fmtTime(best) : '—'}</span></div>`;
     $('btnAgain').disabled = false; $('btnAgain').textContent = 'Play again';
+    $('btnNext').disabled = false; $('btnNext').textContent = 'Level 2 →';
     show('won');
   }
 }
@@ -1469,6 +1474,30 @@ $('btnAgain').onclick = () => {
   if (role === 'guest'){ send({ t: 'again' }); $('btnAgain').disabled = true; $('btnAgain').textContent = 'Starting…'; }
   else startGame(S.startRoom);
 };
+function levelUrl(n){
+  const p = location.pathname, i = p.indexOf('/haunted/');
+  const base = i >= 0 ? p.slice(0, i + 9) : './';
+  return base + (n === 1 ? '' : 'level' + n + '/');
+}
+function goNextLevel(){
+  if (role === 'host'){ send({ t: 'nextlv', lv: 2, code }); setTimeout(() => { cleanupNet(); location.href = levelUrl(2) + '?host=1'; }, 400); }
+  else { cleanupNet(); location.href = levelUrl(2); }
+}
+$('btnNext').onclick = () => {
+  if (role === 'guest'){ send({ t: 'next' }); $('btnNext').disabled = true; $('btnNext').textContent = 'Asking host…'; }
+  else goNextLevel();
+};
+{
+  const ls = $('levelSel');
+  [[1, 'Hollow Manor'], [2, 'Grimwood Carnival'], [3, 'The Clocktower']].forEach(([n, t]) => { const o = document.createElement('option'); o.value = n; o.textContent = n + '. ' + t; ls.appendChild(o); });
+  ls.value = '1';
+  ls.addEventListener('change', e => { const n = +e.target.value; if (n !== 1) location.href = levelUrl(n); });
+  try {
+    const q = new URLSearchParams(location.search), jc = q.get('join');
+    if (jc){ $('code').value = jc.toUpperCase(); if (myName){ status('Joining ' + jc + '… tap Join if nothing happens.'); setTimeout(() => $('btnJoin').click(), 400); } else status('Type your name and tap Join.'); }
+    if (jc || q.get('host')) history.replaceState(null, '', location.pathname);
+  } catch {}
+}
 
 /* ===================== render-side updates ===================== */
 function plateGlow(id, t){
