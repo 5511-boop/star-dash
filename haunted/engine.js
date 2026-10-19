@@ -121,10 +121,12 @@ style.textContent = `
   .tb.on{filter:brightness(1.6)}
   .tb.cd{opacity:.45}
   #btnExit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:11;padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}
-  #btnRespawn{position:fixed;top:calc(10px + env(safe-area-inset-top));left:12px;z-index:11;padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}
-  #hudTop{padding:0 72px}
-  body.touch #btnRespawn .full{display:none}
-  body:not(.touch) #btnRespawn .short{display:none}`;
+  #leftBtns{position:fixed;top:calc(10px + env(safe-area-inset-top));left:12px;z-index:11;display:flex;gap:6px}
+  #leftBtns button{padding:6px 12px;font-size:13px;background:#0b0918cc;border:1px solid #ffffff22}
+  #leftBtns button[hidden]{display:none}
+  #hudTop{padding:0 92px}
+  body:not(.touch) #hudTop{padding:0 270px}
+  body.touch #leftBtns .full{display:none}`;
 document.head.appendChild(style);
 const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
@@ -140,7 +142,7 @@ document.body.innerHTML = `
   <div id="arrow" hidden></div>
   <div id="hint"></div>
 </div>
-<button id="btnExit" hidden>Leave</button><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺ <span class="full">Room start (T)</span><span class="short">Room</span></button>
+<button id="btnExit" hidden>Leave</button><div id="leftBtns"><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺<span class="full"> Room start (T)</span></button><button id="btnSkip" hidden title="Skip to the next level">⏭<span class="full"> Skip level</span></button></div>
 <div id="touch" hidden><div id="joyBase"><div id="joyKnob"></div></div>
   <button class="tb" id="runBtn">RUN</button><button class="tb" id="dashBtn" hidden>⚡</button><button class="tb" id="powBtn" hidden>☀</button></div>
 <div id="menu" class="screen"><div class="card">
@@ -1257,6 +1259,7 @@ function onData(m){
     case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (role === 'host') hostPing(m.w, m.x, m.z); if (m.sw) toast(`${remoteName} wants to SWAP — press G or tap them to accept!`); break;
     case 'again': if (role === 'host' && phase === 'won') startGame(S.startRoom); break;
     case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
+    case 'skip': if (role === 'host' && phase === 'play'){ toast('Your partner skipped the level!'); goNextLevel(); } break;
     case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
     case 'tp': if (role === 'guest'){ me.pos.set(m.x, 0, m.z); me.slide = null; me.dash = null; me.grap = null; } break;
     case 'fell': if (role === 'host'){ const ri = roomAt(other.target.z), R = ROOMS[ri]; if (R && R.def.onFall) R.def.onFall(S.rs[ri], R, E, 1); } break;
@@ -1307,7 +1310,7 @@ function show(id){ screens.forEach(s => $(s).hidden = s !== id); }
 function status(t){ $('status').textContent = t; }
 let toastT = 0, storyT = 0, roomTime = 0, lastRoom = -1, hintT = 0;
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); toastT = 3.2; }
-function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('btnRespawn').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
+function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('btnRespawn').hidden = true; $('btnSkip').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
 function chosenStart(){ return clamp(parseInt($('startRoom').value) || 0, 0, Math.min(reached, ROOMS.length - 1)); }
 function startGame(startRoom = 0){ resetWorld(); solveUpTo(startRoom); setPhase('play'); }
 function spawn(){ fallCD = 0; soloAnchor = null; S.soulFlip = 0; if (SOLO()) meChar.bodyMat.color.setHex(COLORS[0]); const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
@@ -1315,7 +1318,7 @@ function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
     if (role === 'guest' && prev !== 'play') for (const g of GHOSTS){ g.x = g.tx; g.z = g.tz; }
-    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('hint').hidden = isTouch;
+    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = !(LEVELS.some(l => l.n === LEVEL + 1)); $('hint').hidden = isTouch;
     $('dashBtn').hidden = !has('dash'); $('powBtn').hidden = !has('flash'); $('oilM').hidden = !has('oil');
     spawn(); meChar.group.visible = true; otherChar.group.visible = role !== 'solo';
     const partner = role === 'solo' ? 'You arrive' : `You and <b>${esc(remoteName)}</b> arrive`;
@@ -1449,6 +1452,14 @@ $('btnLeave').onclick = () => toMenu();
 $('btnMenu').onclick = () => toMenu();
 $('btnExit').onclick = () => toMenu();
 $('btnRespawn').onclick = e => { e.currentTarget.blur(); respawnRoom(); };
+$('btnSkip').onclick = e => { e.currentTarget.blur(); skipLevel(); };
+// skip straight to the next level (co-op: your partner comes along)
+function skipLevel(){
+  if (phase !== 'play') return;
+  if (!confirm(`Skip to Level ${LEVEL + 1}?` + (role === 'solo' ? '' : ' Your partner will come with you.'))) return;
+  if (role === 'guest'){ send({ t: 'skip' }); toast('Skipping…'); }
+  else goNextLevel();
+}
 // stuck? hop back to the start of the room you're in (not the level). Only you move — the room and your partner stay as they are.
 let respawnCD = 0;
 function respawnRoom(){
@@ -1636,6 +1647,6 @@ requestAnimationFrame(loop);
 return {
   S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS, requestSwap, getAnchor: () => soloAnchor,
   setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
-  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, respawnRoom, btn, carrying, doPing, hostPing
+  pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, respawnRoom, skipLevel, btn, carrying, doPing, hostPing
 };
 }
