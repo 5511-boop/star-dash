@@ -23,7 +23,7 @@ function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floo
 const LEVEL_NAMES = ['Hollow Manor', 'Grimwood Carnival', 'The Clocktower', 'The Sunken Lighthouse', 'The Frozen Monastery', "The Witch's Bog", 'The Ghost Train',
   'The Opera House', 'The Ruined Cathedral', 'The Mirror Palace', 'The Spectral Archive', 'The Toy Factory', 'The Coal Mine', 'The Sky Gardens', "The Pharaoh's Tomb",
   'The Wax Museum', 'The Abyssal Depths', 'The Volcano Forge', 'The Dream Realm', 'The Heart of Hollow Manor'];
-const BUILT = 4;                     // highest level that exists on the site
+const BUILT = 5;                     // highest level that exists on the site
 const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name }));
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
@@ -543,6 +543,7 @@ function EAPI(){
     resetRoom,
     dashing: idx => idx === myIdx() ? !!(me.dash || me.grap) : !!other.dashing,
     segDist,
+    ghostsOf: ri => GHOSTS.filter(g => g.room === ri),
   };
   return _api;
 }
@@ -1016,7 +1017,7 @@ function playerList(){
   const L = [{ idx: 0, pos: role === 'guest' ? other.target : me.pos, ry: host.ry, moving: host.moving, inp: host === me ? me.inp : other.inp }];
   if (role === 'host' && conn && conn.open && other.seen) L.push({ idx: 1, pos: other.target, ry: other.ry, moving: other.moving, inp: other.inp });
   if (role === 'guest') L.push({ idx: 1, pos: me.pos, ry: me.ry, moving: me.moving, inp: me.inp });
-  for (const p of L){ p.frozen = S.frozen[p.idx] > 0; p.dashing = E.dashing(p.idx); }
+  for (const p of L){ p.frozen = S.frozen[p.idx] > 0; p.dashing = E.dashing(p.idx); p.running = p.idx === myIdx() ? me.running : other.running; }
   for (const p of L) p.hidden = has('shadow') && L.some(q => q !== p && !q.frozen && (() => { const dx = p.pos.x - q.pos.x, dz = p.pos.z - q.pos.z, d = Math.hypot(dx, dz); return d < 1.9 && d > .2 && (dx * Math.sin(q.ry) + dz * Math.cos(q.ry)) / d < -.45; })());
   return L;
 }

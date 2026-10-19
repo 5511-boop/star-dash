@@ -543,6 +543,7 @@ const chairs = {
 const PEN = { x1: -2.4, x2: 2.4, lz1: 15.6, lz2: 19.4 };
 const pen = {
   name: 'Ghost Pony Pen',
+  exitX: [6, 9],
   floor: E => E.mat(0x24301e),
   notes: [[-5, 2, '“The ghost ponies are shy. Lanterns scare them. Herd them home.”', 1.8]],
   build(R, E){
