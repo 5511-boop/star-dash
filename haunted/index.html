@@ -347,14 +347,14 @@ floor(-10, -74, 10, -50, pbr('checker', 4, 4.8, { fallback: checkTex, roughness:
 floor(-10, -96, 10, -74, pbr('cellar', 5, 5.5, { fallback: stoneTex, roughness: .95, normal: 1.6 }), .005);                   // cellar
 floor(-10, -118, 10, -96, pbr('mirrorfloor', 5, 5.5, { fallback: marbleTex, roughness: .12, metalness: .1, normal: .6 }), .005); // hall of mirrors
 floor(-10, -140, 10, -118, pbr('storefloor', 7, 7.7, { fallback: woodTex, roughness: .8, normal: 1.2 }), .005);               // storeroom
-floor(-10, -162, 10, -140, pbr('carpet', 4, 4.4, { color: 0x5a1622, roughness: 1, normal: .6 }), .005);                        // music room
-{ const sm = pbr('stars', 4, 4.4, { fallback: starTex, roughness: .4, normal: .5 });                                            // observatory
-  sm.emissive = new THREE.Color(0xfff2d0); sm.emissiveIntensity = 0; loadInto(sm, 'emissiveMap', 'stars_e.jpg', 4, 4.4, true);
+floor(-10, -162, 10, -140, pbr('carpet', 3, 3.3, { color: 0x5a1622, roughness: 1, normal: .6 }), .005);                        // music room
+{ const sm = pbr('stars', 2, 2.2, { fallback: starTex, roughness: .4, normal: .5 });                                            // observatory
+  sm.emissive = new THREE.Color(0xfff2d0); sm.emissiveIntensity = 0; loadInto(sm, 'emissiveMap', 'stars_e.jpg', 2, 2.2, true);
   TL.load('tex/stars_e.jpg', () => { sm.emissiveIntensity = .9; });
   floor(-10, -184, 10, -162, sm, .005); }
 floor(-10, -206, 10, -184, pbr('crypt', 5, 5.5, { fallback: stoneTex, color: 0x9a9aa8, roughness: .95, normal: 1.5 }), .005);   // crypt
 floor(-25, -250, 25, -206, pbr('grass', 8, 7.3, { color: 0x1d3322, roughness: 1, normal: 1 }), .005);                        // outside
-floor(-4, 0, 4, 8, pbr('carpet', 1.6, 1.6, { color: 0x6e1f2e, tint: 0xd8b8c0, roughness: 1, normal: .6 }), .01);             // foyer rug
+floor(-4, 0, 4, 8, pbr('rug', 1, 1, { color: 0x6e1f2e, roughness: 1, normal: .6 }), .01);                                     // foyer rug
 
 /* ===================== walls ===================== */
 vwall(-10.5, 10.5, -206.5); vwall(10.5, 10.5, -206.5); hwall(10, -11, 11);
