@@ -749,42 +749,133 @@ function nameSprite(){
   };
   return sp;
 }
+// Player characters: little explorers in a coloured coat with a scarf, boots, backpack and a lantern.
+// Player 1 (blue) wears a wide-brim adventurer hat; player 2 (pink) wears a knit beanie with a pom-pom and braids.
+// setStyle(idx) switches outfits, because which colour you are depends on who hosts.
+const SKIN = 0xf1c7a1, BOOT = 0x3b2414, PANTS = 0x2b2638, LEATHER = 0x6b4426;
+const ACCENT = [0xf2b84b, 0x7fe0d0];          // scarf / hat band colour per player
+const HAIR = [0x4a2e1c, 0x2a1a12];
 function makeChar(color, ghostly = false){
   const group = new THREE.Group(), rig = new THREE.Group(); group.add(rig);
-  const bodyMat = mat(color, { roughness: .5, transparent: ghostly, opacity: ghostly ? .4 : 1 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(.4, .5, 6, 14), bodyMat); body.position.y = .68; rig.add(body);
-  const eyeW = mat(0xffffff, { roughness: .3, transparent: ghostly, opacity: ghostly ? .5 : 1 }), eyeB = mat(0x111111);
+  const M = (c, o = {}) => mat(c, { roughness: .7, transparent: ghostly, opacity: ghostly ? .4 : 1, depthWrite: !ghostly, ...o });
+  const bodyMat = M(color, { roughness: .6 });                 // the coat; tinted blue when frozen
+  const skinMat = M(SKIN, { roughness: .55 }), bootMat = M(BOOT, { roughness: .5 }), pantsMat = M(PANTS), leatherMat = M(LEATHER, { roughness: .6 });
+  const accentMat = M(ACCENT[0]), hairMat = M(HAIR[0], { roughness: .8 }), hatMat = M(0x5a3b24, { roughness: .8 });
+  const add = (parent, geo, m, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); parent.add(o); return o; };
+
+  // legs + boots (pivot at the hip so they can swing)
+  const legs = [-1, 1].map(s => {
+    const hip = new THREE.Group(); hip.position.set(s * .12, .4, 0); rig.add(hip);
+    add(hip, new THREE.CylinderGeometry(.075, .07, .3, 10), pantsMat, 0, -.15, 0);
+    const boot = add(hip, new THREE.BoxGeometry(.15, .13, .24), bootMat, 0, -.33, .035);
+    add(hip, new THREE.CylinderGeometry(.085, .085, .05, 10), bootMat, 0, -.25, 0);   // boot cuff
+    boot.geometry.translate(0, 0, 0);
+    return hip;
+  });
+  // coat
+  add(rig, new THREE.CylinderGeometry(.24, .34, .5, 18), bodyMat, 0, .62, 0);
+  add(rig, new THREE.SphereGeometry(.245, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat, 0, .86, 0);   // rounded shoulders
+  add(rig, new THREE.TorusGeometry(.3, .028, 6, 24), leatherMat, 0, .5, 0, Math.PI / 2);                // belt
+  add(rig, new THREE.BoxGeometry(.07, .06, .03), M(0xd4af37, { metalness: .7, roughness: .3 }), 0, .5, .3); // buckle
+  for (const y of [.62, .74]) add(rig, new THREE.SphereGeometry(.025, 8, 6), M(0xd4af37, { metalness: .7, roughness: .3 }), 0, y, .285); // coat buttons
+  // backpack
+  add(rig, new THREE.BoxGeometry(.32, .34, .14), leatherMat, 0, .7, -.27);
+  add(rig, new THREE.BoxGeometry(.3, .1, .16), M(0x553420), 0, .84, -.27);
+  add(rig, new THREE.CylinderGeometry(.06, .06, .3, 10), M(0x8a7a5a), 0, .9, -.3, 0, 0, Math.PI / 2);   // bedroll
+  // scarf + trailing tail
+  add(rig, new THREE.TorusGeometry(.17, .055, 8, 20), accentMat, 0, .96, 0, Math.PI / 2);
+  const scarfTail = new THREE.Group(); scarfTail.position.set(.1, .95, -.14); rig.add(scarfTail);
+  add(scarfTail, new THREE.BoxGeometry(.09, .26, .03), accentMat, 0, -.13, 0);
+  // head
+  const head = new THREE.Group(); head.position.y = 1.2; rig.add(head);
+  add(head, new THREE.SphereGeometry(.27, 22, 16), skinMat, 0, 0, 0);
+  const eyeW = M(0x15101c, { roughness: .2 }), shine = M(0xffffff, { roughness: .1 });
   for (const s of [-1, 1]){
-    const e = new THREE.Mesh(new THREE.SphereGeometry(.11, 12, 10), eyeW); e.position.set(s * .15, .98, .33); rig.add(e);
-    const p = new THREE.Mesh(new THREE.SphereGeometry(.06, 10, 8), eyeB); p.position.set(s * .15, .98, .42); rig.add(p);
-    const f = new THREE.Mesh(new THREE.SphereGeometry(.14, 10, 8), bodyMat); f.scale.set(1, .6, 1.3); f.position.set(s * .2, .08, .05); rig.add(f);
+    const e = add(head, new THREE.SphereGeometry(.05, 12, 10), eyeW, s * .1, .01, .235); e.scale.set(1, 1.25, .6);
+    add(head, new THREE.SphereGeometry(.016, 8, 6), shine, s * .1 + .015, .035, .262);
+    const ch = add(head, new THREE.SphereGeometry(.04, 10, 8), M(0xff9a9a, { roughness: .9, transparent: true, opacity: ghostly ? .2 : .55 }), s * .17, -.07, .2); ch.scale.set(1, .6, .4);
   }
-  const out = { group, rig, body, bodyMat, t: 0 };
+  add(head, new THREE.SphereGeometry(.03, 8, 6), M(0xe8a888), 0, -.04, .265);                               // nose
+  const mouth = add(head, new THREE.TorusGeometry(.04, .009, 6, 12, Math.PI), M(0x7a2a2a), 0, -.1, .245, 0, 0, Math.PI);
+  // hair cap (back of head)
+  const hairCap = add(head, new THREE.SphereGeometry(.285, 20, 12, 0, Math.PI * 2, 0, Math.PI * .55), hairMat, 0, .01, -.02, -.35, 0, 0);
+
+  // style A: wide-brim adventurer hat
+  const hatA = new THREE.Group(); hatA.position.y = .2; head.add(hatA);
+  add(hatA, new THREE.CylinderGeometry(.36, .38, .03, 28), hatMat, 0, 0, 0);
+  add(hatA, new THREE.CylinderGeometry(.2, .25, .2, 22), hatMat, 0, .1, 0);
+  add(hatA, new THREE.CylinderGeometry(.252, .252, .05, 22), accentMat, 0, .03, 0);
+  add(hatA, new THREE.ConeGeometry(.05, .16, 6), M(0xc0392b), .2, .1, -.05, 0, 0, -.5);                 // feather
+  hatA.rotation.x = -.22;
+  // style B: knit beanie + pom-pom + braids
+  const hatB = new THREE.Group(); head.add(hatB);
+  add(hatB, new THREE.SphereGeometry(.29, 20, 12, 0, Math.PI * 2, 0, Math.PI * .5), bodyMat, 0, .03, 0);
+  add(hatB, new THREE.CylinderGeometry(.295, .295, .08, 22), accentMat, 0, .05, 0);
+  add(hatB, new THREE.SphereGeometry(.08, 12, 10), accentMat, 0, .33, 0);
+  for (const s of [-1, 1]){
+    const br = new THREE.Group(); br.position.set(s * .24, -.08, -.04); hatB.add(br);
+    for (let k = 0; k < 3; k++) add(br, new THREE.SphereGeometry(.055 - k * .007, 10, 8), hairMat, 0, -k * .085, 0);
+    add(br, new THREE.SphereGeometry(.03, 8, 6), accentMat, 0, -.25, 0);
+  }
+
+  // arms (pivot at the shoulder)
+  const arms = [-1, 1].map(s => {
+    const sh = new THREE.Group(); sh.position.set(s * .3, .86, 0); rig.add(sh);
+    add(sh, new THREE.CapsuleGeometry(.065, .24, 4, 10), bodyMat, 0, -.16, 0);
+    add(sh, new THREE.SphereGeometry(.07, 10, 8), skinMat, 0, -.34, 0);
+    sh.rotation.z = s * .18;
+    return sh;
+  });
+
+  const out = { group, rig, body: null, bodyMat, t: 0, legs, arms, head, scarfTail, hatA, hatB, accentMat, hairMat };
+  out.setStyle = idx => {
+    hatA.visible = idx === 0; hatB.visible = idx === 1;
+    accentMat.color.setHex(ACCENT[idx]); hairMat.color.setHex(HAIR[idx]);
+    hairCap.scale.set(1, idx === 1 ? 1.05 : 1, 1);
+  };
+  out.setStyle(color === COLORS[1] ? 1 : 0);
+
   if (!ghostly){
-    const lant = new THREE.Group(); lant.position.set(.45, .7, .25); rig.add(lant);
-    lant.add(new THREE.Mesh(new THREE.BoxGeometry(.2, .26, .2), glow(0xffcf7a, 1.6)));
-    const lh = new THREE.Mesh(new THREE.TorusGeometry(.1, .02, 6, 12, Math.PI), mat(0x222222)); lh.position.y = .16; lant.add(lh);
+    // lantern in the right hand
+    const lant = new THREE.Group(); lant.position.set(0, -.5, .06); arms[1].add(lant);
+    const brass = mat(0x8a7442, { metalness: .7, roughness: .35 });
+    add(lant, new THREE.TorusGeometry(.06, .012, 6, 12, Math.PI), brass, 0, .17, 0);
+    add(lant, new THREE.CylinderGeometry(.07, .09, .03, 8), brass, 0, .11, 0);
+    add(lant, new THREE.CylinderGeometry(.06, .06, .16, 8), glow(0xffcf7a, 2.2), 0, .02, 0);
+    add(lant, new THREE.CylinderGeometry(.09, .09, .03, 8), brass, 0, -.07, 0);
+    for (let k = 0; k < 4; k++){ const a = k * Math.PI / 2 + Math.PI / 4; add(lant, new THREE.BoxGeometry(.012, .16, .012), brass, Math.cos(a) * .065, .02, Math.sin(a) * .065); }
     out.light = new THREE.PointLight(0xffb36b, 11, 16, 1); out.light.position.set(.35, 1.9, .25); group.add(out.light);
     if (HI){ out.light.castShadow = true; out.light.shadow.mapSize.set(1024, 1024); out.light.shadow.camera.near = .2; out.light.shadow.camera.far = 16; out.light.shadow.bias = -.004; out.light.shadow.radius = 3; }
-    out.ice = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 1.1), new THREE.MeshStandardMaterial({ color: 0xbfeaff, transparent: true, opacity: .45, roughness: .1, emissive: 0x4fb6ff, emissiveIntensity: .35 }));
-    out.ice.position.y = .8; out.ice.visible = false; group.add(out.ice);
+    out.ice = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.75, 1.1), new THREE.MeshStandardMaterial({ color: 0xbfeaff, transparent: true, opacity: .45, roughness: .1, emissive: 0x4fb6ff, emissiveIntensity: .35 }));
+    out.ice.position.y = .87; out.ice.visible = false; group.add(out.ice);
+    // carried candle in the left hand (ballroom)
     const cc = new THREE.Group();
-    const cs = new THREE.Mesh(new THREE.CylinderGeometry(.08, .09, .42, 10), mat(0xf2ead8)); cs.position.y = .21; cc.add(cs);
-    const cf = new THREE.Mesh(new THREE.ConeGeometry(.07, .2, 8), flameMat); cf.position.y = .52; cc.add(cf);
-    cc.position.set(-.45, .55, .2); cc.visible = false; rig.add(cc); out.candle = cc;
+    const cs = new THREE.Mesh(new THREE.CylinderGeometry(.06, .07, .32, 10), mat(0xf2ead8)); cs.position.y = .16; cc.add(cs);
+    const cf = new THREE.Mesh(new THREE.ConeGeometry(.06, .17, 8), flameMat); cf.position.y = .41; cc.add(cf);
+    cc.position.set(0, -.42, .08); cc.visible = false; arms[0].add(cc); out.candle = cc;
     // gaze cone (shown in the crypt)
     const cone = new THREE.Mesh(new THREE.CircleGeometry(13, 24, -Math.PI / 2 - .87, 1.74),
       new THREE.MeshBasicMaterial({ color: 0xfff1c0, transparent: true, opacity: .055, depthWrite: false }));
     cone.rotation.x = -Math.PI / 2; cone.position.y = .04; cone.visible = false; group.add(cone); out.cone = cone;
-    out.label = nameSprite(); out.label.position.y = 2.0; group.add(out.label);
+    out.label = nameSprite(); out.label.position.y = 2.15; group.add(out.label);
   }
   scene.add(group);
   return out;
 }
 function animChar(c, dt, moving, running){
-  c.t += dt * (moving ? (running ? 16 : 11) : 2.5);
-  const bob = moving ? Math.abs(Math.sin(c.t)) * .15 : Math.sin(c.t) * .025;
-  c.rig.position.y = bob; c.rig.rotation.z = moving ? Math.sin(c.t) * .07 : 0;
+  c.t += dt * (moving ? (running ? 15 : 10) : 2.2);
+  const s = Math.sin(c.t), sw = moving ? (running ? .85 : .6) : 0;
+  c.rig.position.y = moving ? Math.abs(Math.cos(c.t)) * (running ? .08 : .05) : Math.sin(c.t) * .012;
+  c.rig.rotation.x = moving ? (running ? .14 : .06) : 0;            // lean into the run
+  c.rig.rotation.z = moving ? s * .035 : 0;
+  c.legs[0].rotation.x = s * sw; c.legs[1].rotation.x = -s * sw;
+  const carry = c.candle && c.candle.visible;
+  c.arms[0].rotation.x = carry ? -.9 : -s * sw * .9;
+  c.arms[1].rotation.x = moving ? s * sw * .5 - .15 : Math.sin(c.t * .5) * .04 - .1;   // lantern arm swings less
+  c.head.rotation.y = moving ? 0 : Math.sin(c.t * .35) * .18;        // idle look-around
+  c.head.rotation.z = moving ? s * .04 : 0;
+  c.scarfTail.rotation.x = moving ? -.5 - Math.abs(s) * (running ? .7 : .35) : -.08 + Math.sin(c.t * .8) * .05;
+  c.scarfTail.rotation.z = s * .15;
   if (c.light) c.light.intensity = 11 + Math.sin(performance.now() * .013) * .5 + Math.sin(performance.now() * .031) * .35;
 }
 
@@ -965,6 +1056,7 @@ const arrowEl = $('arrow');
 function applyColors(){
   const mi = myIdx();
   meChar.bodyMat.color.setHex(COLORS[mi]); otherChar.bodyMat.color.setHex(COLORS[1 - mi]);
+  meChar.setStyle(mi); otherChar.setStyle(1 - mi);
   arrowEl.style.borderBottomColor = CSSCOL[1 - mi];
 }
 
@@ -1743,7 +1835,7 @@ function updateWorldVisuals(dt, t){
   for (let i = 0; i < 2; i++){
     const p = plist.find(q => q.idx === i), rc = reflChars[i], rf = p ? reflectionOf(p.pos) : null;
     rc.group.visible = !!rf && !S.latch6;
-    if (rf){ rc.group.position.set(rf.x, 0, rf.z); rc.group.rotation.y = -p.ry; rc.bodyMat.color.setHex(COLORS[i]); animChar(rc, dt, p.moving, false); }
+    if (rf){ rc.group.position.set(rf.x, 0, rf.z); rc.group.rotation.y = -p.ry; rc.bodyMat.color.setHex(COLORS[i]); rc.setStyle(i); animChar(rc, dt, p.moving, false); }
   }
   // crates
   for (let i = 0; i < 3; i++){
