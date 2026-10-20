@@ -224,7 +224,7 @@ const sfx = {
 const HI = !/[?&]lo\b/.test(location.search);
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.7;
 if (HI){ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
@@ -243,7 +243,7 @@ function resize(){
   if (composer){ composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight); }
 }
 addEventListener('resize', resize); resize();
-scene.add(new THREE.HemisphereLight(0x7a7fb8, 0x1a1424, 0.62));
+scene.add(new THREE.HemisphereLight(0x8a8fc8, 0x241a30, 0.9));
 const moon = new THREE.DirectionalLight(0x9aa8ff, 0.4); moon.position.set(-10, 30, 10); scene.add(moon);
 
 const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .9, metalness: 0, ...o });
@@ -294,7 +294,7 @@ const WALL_H = 2.4;
 const RECTS = [];
 const wallMat = pbr('wallpaper', 1, 1, { color: 0x3a2b4d, tile: 2.4, roughness: .9, normal: .8 });
 wallMat.userData.fullHeight = true;
-const trimMat = pbr('trim', 1, 1, { color: 0x5c4670, tile: 1.5, roughness: .55 });
+const trimMat = pbr('trim', 1, 1, { color: 0x5c4670, tint: 0xd0a8f0, tile: 1.5, roughness: .55 });
 function block(x1, z1, x2, z2, h, m, collide = true){
   const geo = new THREE.BoxGeometry(x2 - x1, h, z2 - z1);
   if (m.userData && m.userData.tile) boxUV(geo, x2 - x1, h, z2 - z1, m.userData.tile, !!m.userData.fullHeight);
@@ -763,7 +763,7 @@ function makeChar(color, ghostly = false){
     const lant = new THREE.Group(); lant.position.set(.45, .7, .25); rig.add(lant);
     lant.add(new THREE.Mesh(new THREE.BoxGeometry(.2, .26, .2), glow(0xffcf7a, 1.6)));
     const lh = new THREE.Mesh(new THREE.TorusGeometry(.1, .02, 6, 12, Math.PI), mat(0x222222)); lh.position.y = .16; lant.add(lh);
-    out.light = new THREE.PointLight(0xffb36b, 7, 16, 1); out.light.position.set(.35, 1.9, .25); group.add(out.light);
+    out.light = new THREE.PointLight(0xffb36b, 11, 16, 1); out.light.position.set(.35, 1.9, .25); group.add(out.light);
     if (HI){ out.light.castShadow = true; out.light.shadow.mapSize.set(1024, 1024); out.light.shadow.camera.near = .2; out.light.shadow.camera.far = 16; out.light.shadow.bias = -.004; out.light.shadow.radius = 3; }
     out.ice = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 1.1), new THREE.MeshStandardMaterial({ color: 0xbfeaff, transparent: true, opacity: .45, roughness: .1, emissive: 0x4fb6ff, emissiveIntensity: .35 }));
     out.ice.position.y = .8; out.ice.visible = false; group.add(out.ice);
@@ -784,7 +784,7 @@ function animChar(c, dt, moving, running){
   c.t += dt * (moving ? (running ? 16 : 11) : 2.5);
   const bob = moving ? Math.abs(Math.sin(c.t)) * .15 : Math.sin(c.t) * .025;
   c.rig.position.y = bob; c.rig.rotation.z = moving ? Math.sin(c.t) * .07 : 0;
-  if (c.light) c.light.intensity = 7 + Math.sin(performance.now() * .013) * .5 + Math.sin(performance.now() * .031) * .35;
+  if (c.light) c.light.intensity = 11 + Math.sin(performance.now() * .013) * .5 + Math.sin(performance.now() * .031) * .35;
 }
 
 /* ===================== ghosts ===================== */
