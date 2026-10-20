@@ -294,7 +294,7 @@ const WALL_H = 2.4;
 const RECTS = [];
 const wallMat = pbr('wallpaper', 1, 1, { color: 0x3a2b4d, tile: 2.4, roughness: .9, normal: .8 });
 wallMat.userData.fullHeight = true;
-const trimMat = pbr('trim', 1, 1, { color: 0x5c4670, tint: 0xd0a8f0, tile: 1.5, roughness: .55 });
+const trimMat = mat(0x6e5288, { roughness: .45, metalness: .15 });   // painted crown moulding on wall tops
 function block(x1, z1, x2, z2, h, m, collide = true){
   const geo = new THREE.BoxGeometry(x2 - x1, h, z2 - z1);
   if (m.userData && m.userData.tile) boxUV(geo, x2 - x1, h, z2 - z1, m.userData.tile, !!m.userData.fullHeight);
