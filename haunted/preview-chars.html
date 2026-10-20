@@ -371,6 +371,7 @@ hwall(-140, -11, -1.5); hwall(-140, 1.5, 11);                       // storeroom
 hwall(-162, -11, -1.5); hwall(-162, 1.5, 11);                       // music | observatory
 hwall(-184, -11, -1.5); hwall(-184, 1.5, 11);                       // observatory | crypt
 hwall(-206, -11, -2); hwall(-206, 2, 11);                           // crypt | outside
+if (/closeup/.test(location.search)) setTimeout(() => { otherChar.group.visible = true; other.seen = true; other.target.set(1.4, 0, 4.6); other.ry = Math.PI; }, 9000);
 const hedge = pbr('hedge', 1, 1, { color: 0x234a2a, tile: 1.2, roughness: 1, normal: 1.5 });
 block(-5, -226, -4, -206.5, 1.2, hedge); block(4, -226, 5, -206.5, 1.2, hedge); block(-5, -227, 5, -226, 1.2, hedge);
 
@@ -802,11 +803,11 @@ function makeChar(color, ghostly = false){
 
   // style A: wide-brim adventurer hat
   const hatA = new THREE.Group(); hatA.position.y = .2; head.add(hatA);
-  add(hatA, new THREE.CylinderGeometry(.42, .44, .03, 28), hatMat, 0, 0, 0);
+  add(hatA, new THREE.CylinderGeometry(.36, .38, .03, 28), hatMat, 0, 0, 0);
   add(hatA, new THREE.CylinderGeometry(.2, .25, .2, 22), hatMat, 0, .1, 0);
   add(hatA, new THREE.CylinderGeometry(.252, .252, .05, 22), accentMat, 0, .03, 0);
   add(hatA, new THREE.ConeGeometry(.05, .16, 6), M(0xc0392b), .2, .1, -.05, 0, 0, -.5);                 // feather
-  hatA.rotation.x = -.12;
+  hatA.rotation.x = -.22;
   // style B: knit beanie + pom-pom + braids
   const hatB = new THREE.Group(); head.add(hatB);
   add(hatB, new THREE.SphereGeometry(.29, 20, 12, 0, Math.PI * 2, 0, Math.PI * .5), bodyMat, 0, .03, 0);
@@ -1906,7 +1907,9 @@ function tick(dt){
   if (inGame){
     const k = camera.aspect < 1 ? 1.3 : 1;
     camLook.set(me.pos.x, .8, me.pos.z - 1.2);
-    camPos.set(me.pos.x, 14 * k, me.pos.z + 7.5 * k);
+    const cz = /closeup/.test(location.search) ? .22 : 1;
+    camLook.y = cz < 1 ? 1 : .8;
+    camPos.set(me.pos.x, 14 * k * cz, me.pos.z + 7.5 * k * cz * 1.6);
     camera.position.lerp(camPos, damp(5, dt)); camera.lookAt(camLook);
   } else {
     const a = clockT * .08;
