@@ -257,8 +257,9 @@ function canvasTex(w, h, draw){
 // Each material starts with its old hand-drawn canvas texture; the image version swaps in once it loads,
 // so the game still works if a file is missing.
 const TL = new THREE.TextureLoader();
+const TEX_VER = 2;   // bump when textures in tex/ change so browsers don't show old cached ones
 function loadInto(material, slot, file, rx, ry, srgb){
-  TL.load('tex/' + file, t => {
+  TL.load('tex/' + file + '?v=' + TEX_VER, t => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = MAX_ANISO;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     material[slot] = t; if (slot === 'map') material.color.setHex(material.userData.tint ?? 0xffffff);
@@ -294,7 +295,7 @@ const WALL_H = 2.4;
 const RECTS = [];
 const wallMat = pbr('wallpaper', 1, 1, { color: 0x3a2b4d, tile: 2.4, roughness: .9, normal: .8 });
 wallMat.userData.fullHeight = true;
-const trimMat = mat(0x6e5288, { roughness: .45, metalness: .15 });   // painted crown moulding on wall tops
+const trimMat = mat(0x2e1d14, { roughness: .5, metalness: .05 });    // dark wood moulding on wall tops
 function block(x1, z1, x2, z2, h, m, collide = true){
   const geo = new THREE.BoxGeometry(x2 - x1, h, z2 - z1);
   if (m.userData && m.userData.tile) boxUV(geo, x2 - x1, h, z2 - z1, m.userData.tile, !!m.userData.fullHeight);
@@ -350,7 +351,7 @@ floor(-10, -140, 10, -118, pbr('storefloor', 7, 7.7, { fallback: woodTex, roughn
 floor(-10, -162, 10, -140, pbr('carpet', 3, 3.3, { color: 0x5a1622, roughness: 1, normal: .6 }), .005);                        // music room
 { const sm = pbr('stars', 2, 2.2, { fallback: starTex, roughness: .4, normal: .5 });                                            // observatory
   sm.emissive = new THREE.Color(0xfff2d0); sm.emissiveIntensity = 0; loadInto(sm, 'emissiveMap', 'stars_e.jpg', 2, 2.2, true);
-  TL.load('tex/stars_e.jpg', () => { sm.emissiveIntensity = .9; });
+  TL.load('tex/stars_e.jpg?v=' + TEX_VER, () => { sm.emissiveIntensity = .9; });
   floor(-10, -184, 10, -162, sm, .005); }
 floor(-10, -206, 10, -184, pbr('crypt', 5, 5.5, { fallback: stoneTex, color: 0x9a9aa8, roughness: .95, normal: 1.5 }), .005);   // crypt
 floor(-25, -250, 25, -206, pbr('grass', 8, 7.3, { color: 0x1d3322, roughness: 1, normal: 1 }), .005);                        // outside
