@@ -102,7 +102,7 @@
   <div id="story"></div>
   <div id="stam"><i></i></div>
   <div id="arrow" hidden></div>
-  <div id="hint">WASD / arrows to move · hold Shift to run · T back to room start</div>
+  <div id="hint">WASD / arrows to move · hold Shift to run · right-drag to turn camera · scroll to zoom · C resets camera · T back to room start</div>
 </div>
 <button id="btnExit" hidden>Leave</button><div id="leftBtns"><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺<span class="full"> Room start (T)</span></button><button id="btnSkip" hidden title="Skip this room">⏭<span class="full"> Skip room</span></button></div>
 
@@ -1147,6 +1147,7 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   keys[e.code] = true;
   if (e.code === 'KeyT' && !e.repeat) respawnRoom();
+  if (e.code === 'KeyC' && !e.repeat) resetCam();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1183,6 +1184,26 @@ let runTouch = false;
   runBtn.addEventListener('touchend', runOff, { passive: false });
   runBtn.addEventListener('touchcancel', runOff, { passive: false });
   document.addEventListener('gesturestart', e => e.preventDefault());
+}
+/* ===================== camera controls ===================== */
+// Hold right mouse and drag: turn the camera around you (left/right) and tilt it (up/down).
+// Mouse wheel: zoom in and out. C: put the camera back to normal.
+const CAM = { yaw: 0, pitch: 0, zoom: 1, ty: 0, tp: 0, tz: 1, drag: false, lx: 0, ly: 0 };
+const BASE_PITCH = Math.atan2(14, 7.5), BASE_DIST = Math.hypot(14, 7.5);
+function resetCam(){ CAM.ty = Math.round(CAM.ty / (Math.PI * 2)) * Math.PI * 2; CAM.tp = 0; CAM.tz = 1; }
+{
+  const cv = $('c');
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => { if (e.button === 2){ CAM.drag = true; CAM.lx = e.clientX; CAM.ly = e.clientY; e.preventDefault(); } });
+  addEventListener('pointermove', e => {
+    if (!CAM.drag) return;
+    const dx = e.clientX - CAM.lx, dy = e.clientY - CAM.ly; CAM.lx = e.clientX; CAM.ly = e.clientY;
+    CAM.ty -= dx * .006;
+    CAM.tp = clamp(CAM.tp + dy * .004, .5 - BASE_PITCH, 1.45 - BASE_PITCH);
+  });
+  addEventListener('pointerup', e => { if (e.button === 2) CAM.drag = false; });
+  addEventListener('blur', () => { CAM.drag = false; });
+  cv.addEventListener('wheel', e => { e.preventDefault(); CAM.tz = clamp(CAM.tz * Math.exp(e.deltaY * .0012), .3, 1.8); }, { passive: false });
 }
 function moveInput(){
   let x = joy.x, z = joy.y;
@@ -1223,6 +1244,8 @@ function myFrozen(){ return S.frozen[myIdx()] > 0; }
 let zapCD = 0;
 function updateMe(dt){
   let [mx, mz] = phase === 'play' && !myFrozen() ? moveInput() : [0, 0];
+  // controls follow the camera: W always walks away from the camera, whichever way it's turned
+  { const c = Math.cos(CAM.yaw), sn = Math.sin(CAM.yaw); [mx, mz] = [mx * c + mz * sn, -mx * sn + mz * c]; }
   me.moving = Math.hypot(mx, mz) > .1;
   me.running = me.moving && runHeld() && me.stamina > 0;
   if (me.running) me.stamina = Math.max(0, me.stamina - dt);
@@ -1969,8 +1992,11 @@ function tick(dt){
 
   if (inGame){
     const k = camera.aspect < 1 ? 1.3 : 1;
-    camLook.set(me.pos.x, .8, me.pos.z - 1.2);
-    camPos.set(me.pos.x, 14 * k, me.pos.z + 7.5 * k);
+    const e = damp(14, dt); CAM.yaw += (CAM.ty - CAM.yaw) * e; CAM.pitch += (CAM.tp - CAM.pitch) * e; CAM.zoom += (CAM.tz - CAM.zoom) * e;
+    const P = BASE_PITCH + CAM.pitch, D = BASE_DIST * k * CAM.zoom, sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
+    const look = 1.2 * Math.min(1, CAM.zoom);   // aim a little ahead of you; less when zoomed right in
+    camLook.set(me.pos.x - sy * look, .8 + (1 - Math.min(1, CAM.zoom)) * .5, me.pos.z - cy * look);
+    camPos.set(me.pos.x + sy * Math.cos(P) * D, Math.sin(P) * D + .4, me.pos.z + cy * Math.cos(P) * D);
     camera.position.lerp(camPos, damp(5, dt)); camera.lookAt(camLook);
   } else {
     const a = clockT * .08;
