@@ -300,14 +300,51 @@ function sector(len, half, color, opacity = .18){
   m.rotation.x = -Math.PI / 2; m.position.y = .05; return m;
 }
 
+/* ===================== image textures (tex/levelN/) ===================== */
+// pbr('name', repeatX, repeatY, opts) makes a material that starts with its old look (opts.fallback canvas texture
+// or opts.color) and swaps in tex/levelN/name.jpg + name_n.jpg (normal map) once they load, so a missing file is harmless.
+// opts.tile = metres per texture repeat on boxes (walls, blocks); opts.fullHeight stretches V over the box height.
+const TL = new THREE.TextureLoader();
+const TEX_DIR = (LEVEL === 1 ? './tex/' : '../tex/') + 'level' + LEVEL + '/';
+const TEX_VER = CFG.texVer || 1;   // bump in the level file when its textures change so browsers don't show cached ones
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+function loadInto(m, slot, file, rx, ry, srgb){
+  TL.load(TEX_DIR + file + '?v=' + TEX_VER, t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = MAX_ANISO;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    m[slot] = t; if (slot === 'map') m.color.setHex(m.userData.tint ?? 0xffffff);
+    m.needsUpdate = true;
+  }, undefined, () => {});
+}
+function pbr(name, rx = 1, ry = 1, o = {}){
+  const m = new THREE.MeshStandardMaterial({ color: o.color ?? 0xffffff, roughness: o.roughness ?? .85, metalness: o.metalness ?? 0, map: o.fallback || null });
+  m.userData.tint = o.tint ?? 0xffffff; if (o.tile) m.userData.tile = o.tile; if (o.fullHeight) m.userData.fullHeight = true;
+  if (o.emissive !== undefined){ m.emissive = new THREE.Color(o.emissive); m.emissiveIntensity = o.emissiveIntensity ?? .3; }
+  loadInto(m, 'map', name + '.jpg', rx, ry, true);
+  if (o.normal !== 0){ loadInto(m, 'normalMap', name + '_n.jpg', rx, ry, false); m.normalScale = new THREE.Vector2(o.normal ?? 1, o.normal ?? 1); }
+  return m;
+}
+// rescale a box's UVs so its texture repeats every `tile` metres instead of stretching once per face
+function boxUV(geo, sx, sy, sz, tile, fullHeight){
+  const uv = geo.attributes.uv, dims = [[sz, sy], [sz, sy], [sx, sz], [sx, sz], [sx, sy], [sx, sy]];
+  for (let f = 0; f < 6; f++){
+    const [w, h] = dims[f], side = f !== 2 && f !== 3;
+    for (let k = 0; k < 4; k++){ const i = f * 4 + k; uv.setXY(i, uv.getX(i) * w / tile, (side && fullHeight) ? uv.getY(i) : uv.getY(i) * h / tile); }
+  }
+  uv.needsUpdate = true;
+}
+
 /* ===================== map helpers ===================== */
 const WALL_H = 2.4;
 const RECTS = [];
-const wallMat = CFG.wallTex ? mat(0xffffff, { map: canvasTex(128, 128, CFG.wallTex) }) : mat(CFG.wallColor || 0x3a2b4d);
-const trimMat = mat(CFG.trimColor || 0x5c4670);
+const wallMat = CFG.wallImg ? pbr(CFG.wallImg, 1, 1, { fallback: CFG.wallTex ? canvasTex(128, 128, CFG.wallTex) : null, color: CFG.wallTex ? 0xffffff : (CFG.wallColor || 0x3a2b4d), tile: 2.4, fullHeight: true, roughness: .9 })
+  : CFG.wallTex ? mat(0xffffff, { map: canvasTex(128, 128, CFG.wallTex) }) : mat(CFG.wallColor || 0x3a2b4d);
+const trimMat = CFG.trimImg ? pbr(CFG.trimImg, 1, 1, { color: CFG.trimColor || 0x5c4670, tile: 1, roughness: .45, metalness: .5 }) : mat(CFG.trimColor || 0x5c4670);
 function block(x1, z1, x2, z2, h, m, collide = true){
   if (x1 > x2) [x1, x2] = [x2, x1]; if (z1 > z2) [z1, z2] = [z2, z1];
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1, h, z2 - z1), m);
+  const geo = new THREE.BoxGeometry(x2 - x1, h, z2 - z1);
+  if (m.userData && m.userData.tile) boxUV(geo, x2 - x1, h, z2 - z1, m.userData.tile, !!m.userData.fullHeight);
+  const mesh = new THREE.Mesh(geo, m);
   mesh.position.set((x1 + x2) / 2, h / 2, (z1 + z2) / 2); scene.add(mesh);
   if (collide) RECTS.push({ x1, x2, z1, z2 });
   return mesh;
@@ -315,7 +352,8 @@ function block(x1, z1, x2, z2, h, m, collide = true){
 function wallBox(x1, z1, x2, z2, h = WALL_H){
   if (x1 > x2) [x1, x2] = [x2, x1]; if (z1 > z2) [z1, z2] = [z2, z1];
   block(x1, z1, x2, z2, h, wallMat);
-  const t = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1 + .08, .14, z2 - z1 + .08), trimMat);
+  const tg = new THREE.BoxGeometry(x2 - x1 + .08, .14, z2 - z1 + .08); if (trimMat.userData.tile) boxUV(tg, x2 - x1 + .08, .14, z2 - z1 + .08, 1);
+  const t = new THREE.Mesh(tg, trimMat);
   t.position.set((x1 + x2) / 2, h, (z1 + z2) / 2); scene.add(t);
 }
 const hwall = (z, x1, x2) => wallBox(x1, z - .5, x2, z + .5);
@@ -610,7 +648,7 @@ let _api = null;
 function EAPI(){
   if (_api) return _api;
   _api = {
-    THREE, scene, mat, glow, canvasTex, tiledTex, symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
+    THREE, scene, mat, glow, canvasTex, tiledTex, pbr, boxUV, symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
     makeChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE, GMULT,
     get P(){ return curP; },
     get elapsed(){ return S.elapsed; },

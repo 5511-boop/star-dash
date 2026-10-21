@@ -1,0 +1,16 @@
+Grimwood Carnival (Level 2) texture pack.
+Each texture: name.jpg (colour, sRGB) + name_n.jpg (tangent-space normal, OpenGL / three.js convention), 1024x1024, seamless.
+Baked in Blender from src/level2_recipes.py (framework: src/texbake.py).
+
+Realistic bases from Poly Haven (CC0, https://polyhaven.com):
+  booth_wood, sign_board  - wood_peeling_paint_weathered (Dimitrios Savva, Rob Tuytel)
+  carousel_floor          - dark_wooden_planks (Amal Kumar)
+  rink_floor              - wood_floor_worn (Dimitrios Savva)
+  stage_planks            - old_wood_floor (Guillaume Monsergent)
+  paint_floor             - damaged_concrete_floor (Rob Tuytel)
+  sawdust_floor           - dirt_floor (eye-candy.xyz)
+  pen_ground              - brown_mud_02 (Rob Tuytel)
+  fence_wood              - weathered_planks (Dario Barresi, Dimitrios Savva)
+  fabric weave normals    - fabric_pattern_05 (Rob Tuytel)
+Procedural (made in Blender): wall_stripes, awning, tent_floor, ticket_floor, carousel_disc,
+  curtain, disco_floor, circus_rug, tarnished_gold.

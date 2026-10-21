@@ -35,10 +35,10 @@ function bulbs(E, R, lz){
 /* =============================================================== */
 const ticketBooth = {
   name: 'The Ticket Booth',
-  floor: E => E.mat(0xffffff, { map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#3a1f2e'; x.fillRect(0, 0, w, h); x.fillStyle = '#4a2a3a'; x.fillRect(0, 0, w / 2, h / 2); x.fillRect(w / 2, h / 2, w / 2, h / 2); }, 10, 11) }),
+  floor: E => E.pbr('ticket_floor', 5, 5.5, { fallback: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#3a1f2e'; x.fillRect(0, 0, w, h); x.fillStyle = '#4a2a3a'; x.fillRect(0, 0, w / 2, h / 2); x.fillRect(w / 2, h / 2, w / 2, h / 2); }, 10, 11), roughness: .6 }),
   notes: [[0, 7.5, '“Admit two. Each window knows only half the price.”']],
   build(R, E){
-    const T = E.THREE, wood = E.mat(0xc23b3b), roof = E.mat(0xffffff, { map: E.canvasTex(64, 16, stripes('#ffffff', '#d23a3a', 6)) });
+    const T = E.THREE, wood = E.pbr('booth_wood', 1, 1, { color: 0xc23b3b, tile: 2 }), roof = E.pbr('awning', 2, 1, { fallback: E.canvasTex(64, 16, stripes('#ffffff', '#d23a3a', 6)) });
     for (const s of [-1, 1]){
       R.block(s * 9.3, 5.6, s * 5.2, 8.2, 2.1, wood);
       const r = new T.Mesh(new T.BoxGeometry(4.6, .25, 3.2), roof); R.place(r, s * 7.25, 6.9, 2.3);
@@ -100,7 +100,7 @@ const DISC_RECTS = [
 function rotRect([x1, x2, n1, n2], k){ for (let i = 0; i < (k % 4 + 4) % 4; i++){ [x1, x2, n1, n2] = [n1, n2, -x2, -x1]; } return [x1, x2, n1, n2]; }
 const carousel = {
   name: 'The Carousel',
-  floor: E => E.mat(0x2c2238),
+  floor: E => E.pbr('carousel_floor', 5, 5.5, { color: 0x2c2238 }),
   notes: [[-6, 1.6, '“The carousel only turns when someone pulls the brass lever.”', 1.6]],
   build(R, E){
     const T = E.THREE;
@@ -108,10 +108,10 @@ const carousel = {
     R.plate('SW', -8.5, 2, 0xffc46b, 1.6, '⟳');
     R.plate('NW', 8.5, 20, 0xffc46b, 1.6, '⟳');
     const g = new T.Group(); this.disc = g;
-    const top = new T.Mesh(new T.CylinderGeometry(6.9, 6.9, .1, 40), E.mat(0xffffff, { map: E.canvasTex(256, 256, (x, w, h) => {
+    const top = new T.Mesh(new T.CylinderGeometry(6.9, 6.9, .1, 40), E.pbr('carousel_disc', 1, 1, { normal: .6, fallback: E.canvasTex(256, 256, (x, w, h) => {
       for (let i = 0; i < 16; i++){ x.fillStyle = i % 2 ? '#d23a3a' : '#f3e4c4'; x.beginPath(); x.moveTo(w / 2, h / 2); x.arc(w / 2, h / 2, w / 2, i / 16 * Math.PI * 2, (i + 1) / 16 * Math.PI * 2); x.fill(); }
     }) })); top.position.y = .05; g.add(top);
-    const rail = E.mat(0xd4af37, { metalness: .7, roughness: .3 });
+    const rail = E.pbr('tarnished_gold', 1, 2, { color: 0xd4af37, metalness: .7, roughness: .35 });
     for (const [x1, x2, n1, n2] of DISC_RECTS){
       const b = new T.Mesh(new T.BoxGeometry(x2 - x1, x1 === -.6 ? 3 : 1.4, n2 - n1), x1 === -.6 ? rail : E.mat(0x7a2a5a));
       b.position.set((x1 + x2) / 2, x1 === -.6 ? 1.5 : .7, -(n1 + n2) / 2); g.add(b);
@@ -171,7 +171,7 @@ const carousel = {
 const ICE_BARRELS = [[6, 3], [8, 5], [7, 6], [1, 6], [3, 2], [5, 0], [9, 7], [0, 3]];
 const rink = {
   name: 'The Roller Rink',
-  floor: E => E.mat(0x2a2440),
+  floor: E => E.pbr('rink_floor', 5, 5.5, { color: 0x2a2440, roughness: .5 }),
   ice: { x1: -10, x2: 10, lz1: 3, lz2: 19, rows: 8, blockers(st, R, E){
     const out = [];
     const cell = (c, r) => R.rect(-9 + 2 * c - .9, 4 + 2 * r - .9, -9 + 2 * c + .9, 4 + 2 * r + .9);
@@ -223,12 +223,12 @@ const LANE_L = [[2, 0], [2, 1], [1, 1], [1, 2], [1, 3], [2, 3], [3, 3], [3, 4], 
 const LANE_R = [[7, 0], [7, 1], [8, 1], [8, 2], [8, 3], [7, 3], [6, 3], [6, 4], [6, 5], [7, 5], [7, 6]];
 const puppet = {
   name: 'The Puppet Show',
-  floor: E => E.mat(0x2a1a14),
+  floor: E => E.pbr('stage_planks', 5, 5.5, { color: 0x2a1a14, tint: 0x8a7a70 }),
   swap: true,
   notes: [[0, 2.4, '“On this stage, every puppet pulls the other\'s strings.”', 1.6]],
   build(R, E){
     const T = E.THREE, safe = new Set(LANE_L.concat(LANE_R).map(([c, r]) => c + ',' + r));
-    const plank = E.mat(0xffffff, { map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#9a6a3a'; x.fillRect(0, 0, w, h); x.fillStyle = '#7a4f28'; for (let i = 0; i < 4; i++) x.fillRect(0, i * 16 + 15, w, 2); }, 1, 1) });
+    const plank = E.pbr('stage_planks', .5, .5, { fallback: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#9a6a3a'; x.fillRect(0, 0, w, h); x.fillStyle = '#7a4f28'; for (let i = 0; i < 4; i++) x.fillRect(0, i * 16 + 15, w, 2); }, 1, 1) });
     const pitM = new T.MeshBasicMaterial({ color: 0x050308 });
     this.pitList = [];
     for (let c = 0; c < 10; c++) for (let r = 0; r < 7; r++){
@@ -238,7 +238,7 @@ const puppet = {
     }
     R.plate('GL', -5, 20, 0xff8ab0, 1.8, '♥');
     R.plate('GR', 5, 20, 0x8ab0ff, 1.8, '♥');
-    const curtain = E.mat(0x8a1a2a);
+    const curtain = E.pbr('curtain', 1, 1, { color: 0x8a1a2a, tile: 2.6, fullHeight: true, roughness: 1 });
     R.block(-10, 21.2, -6.5, 21.5, 2.6, curtain, false); R.block(6.5, 21.2, 10, 21.5, 2.6, curtain, false);
   },
   init(){ return { done: 0 }; },
@@ -266,7 +266,7 @@ const POOLS = [
 const CURTAINS = [ [-8, 7, -5, 1], [5, 7, 8, 4], [-8, 15, -5, 3], [5, 15, 8, 6] ];     // x1, lz, x2, color needed
 const paint = {
   name: 'Paint Splash',
-  floor: E => E.mat(0x2a2a30),
+  floor: E => E.pbr('paint_floor', 5, 5.5, { color: 0x2a2a30 }),
   notes: [[0, 1.6, '“Red and blue make purple. Blue and yellow make green. The fountain washes you clean.”', 1.7]],
   build(R, E){
     const T = E.THREE;
@@ -331,7 +331,7 @@ function discoTile(R, pos){
 }
 const disco = {
   name: 'Ghost Disco',
-  floor: E => E.mat(0x110a1c),
+  floor: E => E.pbr('disco_floor', 5, 5.5, { color: 0x110a1c, roughness: .35 }),
   notes: [[-6, 1.8, '“Find your color before the beat drops!”', 1.6]],
   build(R, E){
     const T = E.THREE;
@@ -395,10 +395,10 @@ const SPOTS = [[-8, 3.5], [-5, 6.5], [-8.5, 9.5], [8, 3.5], [5, 6.5], [8.5, 9.5]
 const PANS = { L: [-5, 15], R: [5, 15] };
 const scales = {
   name: 'Strongman Scales',
-  floor: E => E.mat(0x2a201a),
+  floor: E => E.pbr('sawdust_floor', 5, 5.5, { color: 0x2a201a, tint: 0xb8a898 }),
   notes: [[0, 4, '“Balance the scales. And remember — each of YOU weighs 10.”', 1.8]],
   build(R, E){
-    const T = E.THREE, brass = E.mat(0xd4af37, { metalness: .7, roughness: .3 });
+    const T = E.THREE, brass = E.pbr('tarnished_gold', 1, 1, { color: 0xd4af37, metalness: .7, roughness: .35 });
     for (const k of ['L', 'R']){
       const [x, lz] = PANS[k];
       const pan = new T.Mesh(new T.CylinderGeometry(1.7, 1.7, .15, 28), brass); R.place(pan, x, lz, .08);
@@ -479,7 +479,7 @@ const scales = {
 const MELODY = [523, 659, 784, 659, 587, 698, 880, 698, 523, 659, 784, 1047, 988, 784, 659, 587];
 const chairs = {
   name: 'Musical Chairs',
-  floor: E => E.mat(0xffffff, { map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#2a1830'; x.fillRect(0, 0, w, h); x.fillStyle = '#3a2040'; x.beginPath(); x.arc(32, 32, 20, 0, Math.PI * 2); x.fill(); }, 8, 9) }),
+  floor: E => E.pbr('circus_rug', 4, 4.4, { fallback: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#2a1830'; x.fillRect(0, 0, w, h); x.fillStyle = '#3a2040'; x.beginPath(); x.arc(32, 32, 20, 0, Math.PI * 2); x.fill(); }, 8, 9), roughness: 1, normal: .6 }),
   notes: [[0, 2.5, '“When the music stops, sit down. Five rounds. Don\'t be left standing.”', 1.7]],
   build(R, E){
     const T = E.THREE;
@@ -544,13 +544,13 @@ const PEN = { x1: -2.4, x2: 2.4, lz1: 15.6, lz2: 19.4 };
 const pen = {
   name: 'Ghost Pony Pen',
   exitX: [6, 9],
-  floor: E => E.mat(0x24301e),
+  floor: E => E.pbr('pen_ground', 5, 5.5, { color: 0x24301e, tint: 0x9aa088 }),
   notes: [[-5, 2, '“The ghost ponies are shy. Lanterns scare them. Herd them home.”', 1.8]],
   build(R, E){
-    const T = E.THREE, fence = E.mat(0xc8a26a);
+    const T = E.THREE, fence = E.pbr('fence_wood', 1, 1, { color: 0xc8a26a, tile: 1.5 });
     R.block(-3.2, 15, -2.8, 20, 1.1, fence); R.block(2.8, 15, 3.2, 20, 1.1, fence); R.block(-3.2, 19.8, 3.2, 22, 1.1, fence);
     R.block(-3.2, 14.8, -1.7, 15.2, 1.1, fence); R.block(1.7, 14.8, 3.2, 15.2, 1.1, fence);
-    R.floor(-2.8, 15.2, 2.8, 19.8, E.mat(0x6a5a2a), .01);
+    R.floor(-2.8, 15.2, 2.8, 19.8, E.pbr('pen_ground', 1.4, 1.15, { color: 0x6a5a2a, tint: 0xd8c890 }), .01);
     this.gate = R.door('gate', -1.7, 14.85, 1.7, 15.15, 'gate');
     const think = k => (g, dt, st, R2, E2, P) => {
       const speed = E2.solo() ? 2.3 : 3.0;
@@ -604,7 +604,7 @@ const pen = {
 const PED = [-8, 3], ALTAR = [-8, 20], RESTS = [[8, 3], [-8, 9], [8, 15]], BURN = 4;
 const prize = {
   name: 'The Prize Tent',
-  floor: E => E.mat(0xffffff, { map: E.tiledTex(64, 64, stripes('#3a1a24', '#2a1018', 4), 6, 6) }),
+  floor: E => E.pbr('tent_floor', 4, 4.4, { fallback: E.tiledTex(64, 64, stripes('#3a1a24', '#2a1018', 4), 6, 6), roughness: 1 }),
   notes: [[0, 1.8, '“Whoever holds the idol too long gets burned. Pass it!”', 1.6]],
   build(R, E){
     const T = E.THREE;
@@ -675,6 +675,9 @@ export default {
   winTitle: 'You escaped the carnival! 🎡',
   accent: '#ff5a7a',
   wallTex: stripes('#7a1f2e', '#d8c8a8', 8),
+  wallImg: 'wall_stripes',     // tex/level2/ — Poly Haven + Blender-baked pack made by Claude Desktop
+  trimImg: 'tarnished_gold',
+  texVer: 1,
   trimColor: 0xd4af37,
   doorColor: 0x6a2a3a,
   sky: 0x8a6fa8,
