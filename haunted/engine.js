@@ -180,7 +180,7 @@ if (isTouch) document.body.classList.add('touch');
 {
   const keysTxt = ['WASD move', 'Shift run'];
   if (has('dash')) keysTxt.push('Space ⚡'); if (has('flash')) keysTxt.push('F ☀' + (has('sight') ? ' (hold: sight)' : ''));
-  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('T room start'); keysTxt.push('H hint');
+  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('T room start'); keysTxt.push('H hint'); if (!isTouch) keysTxt.push('right-drag turn camera · scroll zoom · C reset');
   $('hint').textContent = keysTxt.join(' · ');
 }
 
@@ -748,6 +748,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyG' && has('swap')) requestSwap();
   if (e.code === 'KeyH') showHint();
   if (e.code === 'KeyT') respawnRoom();
+  if (e.code === 'KeyC') resetCam();
   if (e.code && (e.code.startsWith('Arrow') || e.code === 'Space')) e.preventDefault();
 });
 addEventListener('keyup', e => {
@@ -797,8 +798,26 @@ const taps = {};
   hold(runBtn, () => { runTouch = true; }, () => { runTouch = false; });
   hold(dashBtn, pressDash, releaseDash);
   hold(powBtn, pressPow, releasePow);
-  $('c').addEventListener('mousedown', e => { if (!isTouch) screenPing(e.clientX, e.clientY); });
+  $('c').addEventListener('mousedown', e => { if (!isTouch && e.button === 0) screenPing(e.clientX, e.clientY); });
   document.addEventListener('gesturestart', e => e.preventDefault());
+}
+/* ===================== camera controls ===================== */
+// Hold right mouse and drag: turn the camera around you and tilt it. Mouse wheel: zoom. C: reset.
+const CAM = { yaw: 0, pitch: 0, zoom: 1, ty: 0, tp: 0, tz: 1, drag: false, lx: 0, ly: 0 };
+const BASE_PITCH = Math.atan2(14, 7.5), BASE_DIST = Math.hypot(14, 7.5);
+function resetCam(){ CAM.ty = Math.round(CAM.ty / (Math.PI * 2)) * Math.PI * 2; CAM.tp = 0; CAM.tz = 1; }
+{
+  const cv = $('c');
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => { if (e.button === 2){ CAM.drag = true; CAM.lx = e.clientX; CAM.ly = e.clientY; e.preventDefault(); } });
+  addEventListener('pointermove', e => {
+    if (!CAM.drag) return;
+    const dx = e.clientX - CAM.lx, dy = e.clientY - CAM.ly; CAM.lx = e.clientX; CAM.ly = e.clientY;
+    CAM.ty -= dx * .006; CAM.tp = clamp(CAM.tp + dy * .004, .5 - BASE_PITCH, 1.45 - BASE_PITCH);
+  });
+  addEventListener('pointerup', e => { if (e.button === 2) CAM.drag = false; });
+  addEventListener('blur', () => { CAM.drag = false; });
+  cv.addEventListener('wheel', e => { e.preventDefault(); CAM.tz = clamp(CAM.tz * Math.exp(e.deltaY * .0012), .3, 1.8); }, { passive: false });
 }
 function rawInput(){
   let x = joy.x, z = joy.y;
@@ -807,6 +826,8 @@ function rawInput(){
   if (keys.KeyA || keys.ArrowLeft) x -= 1;
   if (keys.KeyD || keys.ArrowRight) x += 1;
   const l = Math.hypot(x, z); if (l > 1){ x /= l; z /= l; }
+  // controls follow the camera: W always walks away from it (turned into world directions here, so swap rooms still work)
+  const c = Math.cos(CAM.yaw), sn = Math.sin(CAM.yaw); [x, z] = [x * c + z * sn, -x * sn + z * c];
   return [x, z, (runTouch || keys.ShiftLeft || keys.ShiftRight) ? 1 : 0];
 }
 
@@ -1708,8 +1729,11 @@ function tick(dt){
   updateWorldVisuals(dt, clockT);
   if (inGame){
     const k = camera.aspect < 1 ? 1.3 : 1;
-    camLook.set(me.pos.x, .8, me.pos.z - 1.2);
-    camPos.set(me.pos.x, 14 * k, me.pos.z + 7.5 * k);
+    const e = damp(14, dt); CAM.yaw += (CAM.ty - CAM.yaw) * e; CAM.pitch += (CAM.tp - CAM.pitch) * e; CAM.zoom += (CAM.tz - CAM.zoom) * e;
+    const P = BASE_PITCH + CAM.pitch, D = BASE_DIST * k * CAM.zoom, sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
+    const look = 1.2 * Math.min(1, CAM.zoom);
+    camLook.set(me.pos.x - sy * look, .8 + (1 - Math.min(1, CAM.zoom)) * .5, me.pos.z - cy * look);
+    camPos.set(me.pos.x + sy * Math.cos(P) * D, Math.sin(P) * D + .4, me.pos.z + cy * Math.cos(P) * D);
     camera.position.lerp(camPos, damp(5, dt)); camera.lookAt(camLook);
   } else {
     const a = clockT * .08;
