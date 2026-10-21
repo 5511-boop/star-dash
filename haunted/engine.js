@@ -131,6 +131,10 @@ document.head.appendChild(style);
 const SKIN_SETS = {
   2: [{ name: 'The Last Ringmaster', url: '../models/last_ringmaster.glb', scale: .85, swing: 1 }, { name: 'The Porcelain Acrobat', url: '../models/porcelain_acrobat.glb', scale: .92, swing: 1 }],
   3: [{ name: 'The Horologist', url: '../models/horologist.glb', scale: .9, swing: 1 }, { name: 'The Clockwork Ballerina', url: '../models/clockwork_ballerina.glb', scale: .95, swing: .8 }],
+  4: [{ name: 'The Drowned Keeper', url: '../models/drowned_keeper.glb', scale: .9, swing: 1 }, { name: 'The Tide Siren', url: '../models/tide_siren.glb', scale: .95, swing: .5 }],
+  5: [{ name: 'The Silent Abbot', url: '../models/silent_abbot.glb', scale: .9, swing: .55 }, { name: 'The Snow Wraith', url: '../models/snow_wraith.glb', scale: .88, swing: .4 }],
+  6: [{ name: 'The Bog Lantern Man', url: '../models/bog_lantern_man.glb', scale: .87, swing: 1 }, { name: 'The Hedge Witch', url: '../models/hedge_witch.glb', scale: .88, swing: .6 }],
+  7: [{ name: 'The Phantom Conductor', url: '../models/phantom_conductor.glb', scale: .9, swing: 1 }, { name: 'The Last Passenger', url: '../models/last_passenger.glb', scale: .98, swing: 1, flicker: true }],
 };
 const MODEL_VER = 1;   // bump when models/*.glb change so browsers don't show old cached ones
 const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
@@ -412,10 +416,11 @@ function makeChar(color, ghostly = false){
       if (o.name.startsWith('Spin_')) spins.push(o);
       if (!o.isMesh) return;
       o.material = o.material.clone(); o.material.envMap = r.env; o.material.envMapIntensity = .35;
+      if (SKINS[i].flicker){ o.material.transparent = true; o.material.depthWrite = true; }   // flickering skins stay transparent so the fades don't recompile shaders
       o.material.userData.op = o.material.opacity; o.material.userData.tr = o.material.transparent; mats.push(o.material);
     });
     const f = n => root.getObjectByName(n);
-    out.skins[i] = { root, mats, spins, swing: SKINS[i].swing, legs: [f('Pivot_LegA'), f('Pivot_LegB')], arms: [f('Pivot_ArmA'), f('Pivot_ArmB')], head: f('Pivot_Head'), tail: f('Pivot_Tail') };
+    out.skins[i] = { root, mats, spins, swing: SKINS[i].swing, flicker: !!SKINS[i].flicker, legs: [f('Pivot_LegA'), f('Pivot_LegB')], arms: [f('Pivot_ArmA'), f('Pivot_ArmB')], head: f('Pivot_Head'), tail: f('Pivot_Tail') };
     rig.add(root); out.setSkin(out.skinIdx);
   }));
   scene.add(group);
@@ -436,7 +441,8 @@ function animChar(c, dt, moving, running, oil = 1){
     if (sk.tail) sk.tail.rotation.x = moving ? .05 + Math.abs(s) * (running ? .32 : .15) : Math.sin(c.t * .8) * .03;
     const now = performance.now() / 1000;
     for (const o of sk.spins) o.rotation.y = o.name.includes('Hands') ? -Math.floor(now) * Math.PI / 30 : -now * .8;   // watch hands tick, gears and keys turn
-    const op = c.bodyMat.opacity;   // follow the blob material's fade (shadow hiding)
+    let op = c.bodyMat.opacity;   // follow the blob material's fade (shadow hiding)
+    if (sk.flicker){ const f = Math.sin(now * 2.3) + Math.sin(now * 5.7 + 1) + Math.sin(now * 13.1 + 2); op *= f > 2.2 ? .2 : f > 1.9 ? .55 : 1; }   // a faulty projector
     if (op !== sk.op){ sk.op = op; for (const m of sk.mats){ const tr = m.userData.tr || op < .999; if (tr !== m.transparent){ m.transparent = tr; m.needsUpdate = true; } m.opacity = m.userData.op * op; } }
   }
   if (c.light){ const k = has('oil') ? .3 + .7 * oil : 1; c.light.intensity = (6 + Math.sin(performance.now() * .013) * .4 + Math.sin(performance.now() * .031) * .3) * k; c.light.distance = 15 * (has('oil') ? .45 + .55 * oil : 1); }
