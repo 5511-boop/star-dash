@@ -128,6 +128,14 @@ style.textContent = `
   body:not(.touch) #hudTop{padding:0 270px}
   body.touch #leftBtns .full{display:none}`;
 document.head.appendChild(style);
+const SKIN_SETS = {
+  2: [{ name: 'The Last Ringmaster', url: '../models/last_ringmaster.glb', scale: .85, swing: 1 }, { name: 'The Porcelain Acrobat', url: '../models/porcelain_acrobat.glb', scale: .92, swing: 1 }],
+  3: [{ name: 'The Horologist', url: '../models/horologist.glb', scale: .9, swing: 1 }, { name: 'The Clockwork Ballerina', url: '../models/clockwork_ballerina.glb', scale: .95, swing: .8 }],
+};
+const MODEL_VER = 1;   // bump when models/*.glb change so browsers don't show old cached ones
+const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
+// Either player may wear either skin: 'auto' = host gets [0], guest gets [1]. Saved per browser, shared by all levels.
+const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
 const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
 <canvas id="c"></canvas><div id="flash"></div><div id="frost"></div><div id="sightFx"></div>
@@ -151,6 +159,7 @@ document.body.innerHTML = `
   <p class="sub">${CFG.tagline}</p>
   ${feat}
   <label>Your name<input id="name" maxlength="12" autocomplete="off" placeholder="Name"></label>
+  ${SKINS ? `<label>Character<select class="skinSel">${skinOpts()}</select></label>` : ''}
   <div class="two"><label>Level<select id="levelSel"></select></label><label>Start at<select id="startRoom"></select></label></div>
   <button id="btnHost" class="big">Create game</button>
   <div class="join"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="btnJoin">Join</button></div>
@@ -159,6 +168,7 @@ document.body.innerHTML = `
 </div></div>
 <div id="lobby" class="screen" hidden><div class="card">
   <h2>Room code</h2><div class="code" id="roomCode">····</div><p id="lobbyMsg">Connecting…</p>
+  ${SKINS ? `<label>Your character<select class="skinSel">${skinOpts()}</select></label>` : ''}
   <button id="btnStart" class="big" disabled>Enter</button><button id="btnLeave" class="link">Leave</button>
 </div></div>
 <div id="won" class="screen" hidden><div class="card">
@@ -351,6 +361,21 @@ function nameSprite(){
   return sp;
 }
 const flameMat = glow(0xffa53a, 2.2);
+/* ===================== 3D skins (models/*.glb, built in Blender) ===================== */
+// Each level's character pair: player 1 (host) wears [0] (cool-toned), player 2 wears [1] (warm-toned).
+// The models use Pivot_* nodes for the walk cycle and Spin_* nodes for things that turn (gears, watch hands, keys).
+// Needs an importmap for 'three/addons/' in the level page; without one, a failed load or ?noskin, the blob characters stay.
+let skinKitP = null;
+function skinKit(){   // GLTFLoader + a soft studio reflection so brass and silver read as metal
+  return skinKitP = skinKitP || Promise.all([import('three/addons/loaders/GLTFLoader.js'), import('three/addons/environments/RoomEnvironment.js')])
+    .then(([g, r]) => { const pm = new THREE.PMREMGenerator(renderer); const env = pm.fromScene(new r.RoomEnvironment(), .04).texture; pm.dispose(); return { loader: new g.GLTFLoader(), env }; })
+    .catch(e => { console.warn('3D skins unavailable', e); return null; });
+}
+const skinLoads = [];
+function loadSkin(i){
+  return skinLoads[i] = skinLoads[i] || skinKit().then(kit => kit && new Promise(res =>
+    kit.loader.load(SKINS[i].url + '?v=' + MODEL_VER, g => res({ scene: g.scene, env: kit.env }), undefined, e => { console.warn('skin failed', SKINS[i].url, e); res(null); })));
+}
 function makeChar(color, ghostly = false){
   const group = new THREE.Group(), rig = new THREE.Group(); group.add(rig);
   const bodyMat = mat(color, { roughness: .5, transparent: ghostly, opacity: ghostly ? .4 : 1 });
@@ -371,13 +396,49 @@ function makeChar(color, ghostly = false){
     out.hold = new THREE.Group(); out.hold.position.set(0, 1.9, 0); group.add(out.hold);
     out.label = nameSprite(); out.label.position.y = 2.25; group.add(out.label);
   }
+  // 3D skin: swaps out the blob body once its model has loaded
+  out.skins = [null, null]; out.skinIdx = color === COLORS[1] ? 1 : 0; out.skin = null;
+  out.setSkin = idx => {
+    out.skinIdx = idx; const sk = out.skins[idx] || null;
+    for (const s of out.skins) if (s) s.root.visible = s === sk;
+    for (const ch of rig.children) if (!ch.userData.skin) ch.visible = !sk;
+    out.skin = sk;
+  };
+  if (SKINS && !ghostly) [0, 1].forEach(i => loadSkin(i).then(r => {
+    if (!r) return;
+    const root = r.scene.clone(true); root.userData.skin = true; root.scale.setScalar(SKINS[i].scale);
+    const mats = [], spins = [];
+    root.traverse(o => {
+      if (o.name.startsWith('Spin_')) spins.push(o);
+      if (!o.isMesh) return;
+      o.material = o.material.clone(); o.material.envMap = r.env; o.material.envMapIntensity = .35;
+      o.material.userData.op = o.material.opacity; o.material.userData.tr = o.material.transparent; mats.push(o.material);
+    });
+    const f = n => root.getObjectByName(n);
+    out.skins[i] = { root, mats, spins, swing: SKINS[i].swing, legs: [f('Pivot_LegA'), f('Pivot_LegB')], arms: [f('Pivot_ArmA'), f('Pivot_ArmB')], head: f('Pivot_Head'), tail: f('Pivot_Tail') };
+    rig.add(root); out.setSkin(out.skinIdx);
+  }));
   scene.add(group);
   return out;
 }
 function animChar(c, dt, moving, running, oil = 1){
   c.t += dt * (moving ? (running ? 16 : 11) : 2.5);
-  const bob = moving ? Math.abs(Math.sin(c.t)) * .15 : Math.sin(c.t) * .025;
-  c.rig.position.y = bob; c.rig.rotation.z = moving ? Math.sin(c.t) * .07 : 0;
+  const sk = c.skin;
+  const bob = sk ? (moving ? Math.abs(Math.cos(c.t)) * (running ? .07 : .045) : Math.sin(c.t) * .01) : moving ? Math.abs(Math.sin(c.t)) * .15 : Math.sin(c.t) * .025;
+  c.rig.position.y = bob; c.rig.rotation.z = moving ? Math.sin(c.t) * (sk ? .035 : .07) : 0;
+  if (sk){   // limb swing on the model's Pivot_* nodes, same feel as Level 1
+    const s = Math.sin(c.t), sw = moving ? (running ? .85 : .6) : 0;
+    c.rig.rotation.x = moving ? (running ? .12 : .05) : 0;
+    sk.legs[0].rotation.x = s * sw * sk.swing; sk.legs[1].rotation.x = -s * sw * sk.swing;
+    sk.arms[0].rotation.x = -s * sw * .9;
+    sk.arms[1].rotation.x = moving ? s * sw * .5 - .15 : Math.sin(c.t * .5) * .04 - .1;
+    sk.head.rotation.y = moving ? 0 : Math.sin(c.t * .35) * .18; sk.head.rotation.z = moving ? s * .04 : 0;
+    if (sk.tail) sk.tail.rotation.x = moving ? .05 + Math.abs(s) * (running ? .32 : .15) : Math.sin(c.t * .8) * .03;
+    const now = performance.now() / 1000;
+    for (const o of sk.spins) o.rotation.y = o.name.includes('Hands') ? -Math.floor(now) * Math.PI / 30 : -now * .8;   // watch hands tick, gears and keys turn
+    const op = c.bodyMat.opacity;   // follow the blob material's fade (shadow hiding)
+    if (op !== sk.op){ sk.op = op; for (const m of sk.mats){ const tr = m.userData.tr || op < .999; if (tr !== m.transparent){ m.transparent = tr; m.needsUpdate = true; } m.opacity = m.userData.op * op; } }
+  }
   if (c.light){ const k = has('oil') ? .3 + .7 * oil : 1; c.light.intensity = (6 + Math.sin(performance.now() * .013) * .4 + Math.sin(performance.now() * .031) * .3) * k; c.light.distance = 15 * (has('oil') ? .45 + .55 * oil : 1); }
 }
 
@@ -429,6 +490,9 @@ function ghostMesh(look, tint){
 let role = null, phase = 'menu';
 let myName = store.get('hm_name', '');
 let remoteName = 'Partner';
+let skinPref = store.get('hm_skin', 'auto'), remoteSkin = null;
+const mySkin = () => skinPref === 'auto' ? myIdx() : (+skinPref ? 1 : 0);
+const otherSkin = () => remoteSkin === null ? 1 - myIdx() : remoteSkin;
 const reachKey = 'hm_reached_L' + LEVEL;
 let reached = parseInt(store.get(reachKey, '0')) || 0;
 const myIdx = () => role === 'guest' ? 1 : 0;
@@ -634,6 +698,7 @@ const arrowEl = $('arrow');
 function applyColors(){
   const mi = myIdx();
   meChar.bodyMat.color.setHex(COLORS[mi]); otherChar.bodyMat.color.setHex(COLORS[1 - mi]);
+  meChar.setSkin(mySkin()); otherChar.setSkin(otherSkin());
   arrowEl.style.borderBottomColor = CSSCOL[1 - mi];
 }
 
@@ -1231,7 +1296,7 @@ function joinGame(c){
   setTimeout(() => { if (role === 'guest' && phase === 'menu' && !(conn && conn.open)){ status('Could not connect. Try both on the same Wi-Fi.'); cleanupNet(); role = null; } }, 15000);
 }
 function wireConn(){
-  const onOpen = () => send({ t: 'hi', n: myName });
+  const onOpen = () => send({ t: 'hi', n: myName, sk: mySkin() });
   if (conn.open) onOpen(); else conn.on('open', onOpen);
   conn.on('data', onData); conn.on('close', onDisconnect); conn.on('error', onDisconnect);
 }
@@ -1239,16 +1304,17 @@ function onData(m){
   if (!m || typeof m !== 'object') return;
   switch (m.t){
     case 'hi':
-      remoteName = String(m.n || 'Partner').slice(0, 12); applyColors();
-      if (role === 'host'){ send({ t: 'welcome', n: myName, lv: LEVEL }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
+      remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
+      if (role === 'host'){ send({ t: 'welcome', n: myName, lv: LEVEL, sk: mySkin() }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
       break;
     case 'welcome':
       if (m.lv && m.lv !== LEVEL){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(code); return; }
-      remoteName = String(m.n || 'Partner').slice(0, 12); applyColors();
+      remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
       $('roomCode').textContent = code; $('lobbyMsg').textContent = `Connected to ${remoteName}. Waiting for them to start…`;
       $('btnStart').disabled = true; $('btnStart').textContent = 'Waiting for host';
       show('lobby'); phase = 'lobby';
       break;
+    case 'skin': if (m.sk === 0 || m.sk === 1){ remoteSkin = m.sk; applyColors(); } break;
     case 'g':
       if (role !== 'host') break;
       other.target.set(m.p[0], 0, m.p[1]); other.ry = m.p[2]; other.moving = !!m.p[3]; other.running = !!m.p[4]; other.dashing = m.p[5] || 0; other.sight = m.p[6] || 0; other.oil = m.p[7] ?? 1;
@@ -1431,6 +1497,14 @@ function updateHud(dt){
 $('name').value = myName;
 fillSelects();
 $('levelSel').addEventListener('change', e => { const n = +e.target.value; if (n !== LEVEL) location.href = levelUrl(n); });
+for (const el of document.querySelectorAll('.skinSel')){
+  el.value = skinPref;
+  el.addEventListener('change', e => {
+    skinPref = e.target.value; store.set('hm_skin', skinPref);
+    document.querySelectorAll('.skinSel').forEach(o => o.value = skinPref);
+    applyColors(); send({ t: 'skin', sk: mySkin() });
+  });
+}
 $('name').addEventListener('input', e => { myName = e.target.value.trim().slice(0, 12); store.set('hm_name', myName); });
 function needName(){
   myName = $('name').value.trim().slice(0, 12);

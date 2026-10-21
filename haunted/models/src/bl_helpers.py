@@ -41,7 +41,7 @@ def _smoothstep(a, b, x):
     t = max(0, min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t)
 
 def lathe(name, prof, m, segs=24, mod=None, sx=1.0, sy=1.0, arc=None, closed=False, flip=False,
-          xf=None, subsurf=0, smooth=True, capb=False, capt=False, center=None):
+          xf=None, subsurf=0, smooth=True, capb=False, capt=False, center=None, zmod=None):
     """prof: [(r,z[,cx,cy])]. mod(a,z)->radius mult. arc=(a0,a1) radians for an open sweep."""
     bm = bmesh.new()
     full = arc is None
@@ -57,21 +57,26 @@ def lathe(name, prof, m, segs=24, mod=None, sx=1.0, sy=1.0, arc=None, closed=Fal
             a = a0 + (a1 - a0) * (i / segs)
             k = mod(a, z) if mod else 1.0
             ys = p[4] if len(p) > 4 else 1.0
-            ring.append(bm.verts.new((cx + r * k * sx * math.cos(a), cy + r * k * sy * ys * math.sin(a), z)))
+            dz = zmod(a, z) if zmod else 0.0
+            ring.append(bm.verts.new((cx + r * k * sx * math.cos(a), cy + r * k * sy * ys * math.sin(a), z + dz)))
         rings.append(ring)
-    def link(r1, r2):
+    uvl = bm.loops.layers.uv.new('UVMap')
+    nr = max(len(rings) - 1, 1)
+    def link(r1, r2, v1, v2):
         for i in range(n if not full else segs):
             j = (i + 1) % n if full else i + 1
             if not full and i == n - 1: break
             vs = [r1[i], r1[j], r2[j], r2[i]]
+            uvs = {r1[i]: (i / segs, v1), r1[j]: ((i + 1) / segs, v1), r2[j]: ((i + 1) / segs, v2), r2[i]: (i / segs, v2)}
             uniq = []
             for v in vs:
                 if v not in uniq: uniq.append(v)
             if len(uniq) >= 3:
-                try: bm.faces.new(uniq)
-                except ValueError: pass
-    for j in range(len(rings) - 1): link(rings[j], rings[j + 1])
-    if closed: link(rings[-1], rings[0])
+                try: f = bm.faces.new(uniq)
+                except ValueError: continue
+                for l in f.loops: l[uvl].uv = uvs[l.vert]
+    for j in range(len(rings) - 1): link(rings[j], rings[j + 1], j / nr, (j + 1) / nr)
+    if closed: link(rings[-1], rings[0], 1.0, 1.0)
     if full and capb and prof[0][0] > 1e-6:
         try: bm.faces.new(rings[0][::-1])
         except ValueError: pass
@@ -163,7 +168,10 @@ def tube(name, pts, rad, m, res=4, closed=False, radfn=None):
 def empty(name, loc, parent=None):
     e = bpy.data.objects.new(name, None); e.empty_display_type = 'PLAIN_AXES'; e.empty_display_size = .05
     bpy.context.collection.objects.link(e); e.location = loc
-    if parent: e.parent = parent
+    if parent:
+        bpy.context.view_layer.update()
+        e.parent = parent
+        e.matrix_parent_inverse = parent.matrix_world.inverted()   # keep loc in world space
     bpy.context.view_layer.update()
     return e
 
@@ -237,3 +245,50 @@ def merge_by_material(root_name):
         bpy.ops.object.join()
         objs[0].name = '%s_%s' % (pn.replace('Pivot_', ''), mn)
     bpy.context.view_layer.update()
+
+def make_image(name, w, h, fn):
+    """fn(u, v) -> (r, g, b) in sRGB 0..1; packed so the glTF exporter embeds it."""
+    img = bpy.data.images.get(name)
+    if img: bpy.data.images.remove(img)
+    img = bpy.data.images.new(name, w, h, alpha=False)
+    px = [0.0] * (w * h * 4)
+    for y in range(h):
+        for x in range(w):
+            r, g, b = fn((x + .5) / w, (y + .5) / h)
+            k = (y * w + x) * 4
+            px[k] = r; px[k + 1] = g; px[k + 2] = b; px[k + 3] = 1.0
+    img.pixels = px
+    img.pack()
+    return img
+
+def mat_tex(name, img, rough=.6, metal=0., emit=None, es=0.):
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree; nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    b = nt.nodes.new('ShaderNodeBsdfPrincipled')
+    nt.links.new(b.outputs['BSDF'], out.inputs['Surface'])
+    t = nt.nodes.new('ShaderNodeTexImage'); t.image = img
+    nt.links.new(t.outputs['Color'], b.inputs['Base Color'])
+    b.inputs['Roughness'].default_value = rough
+    b.inputs['Metallic'].default_value = metal
+    if emit is not None:
+        b.inputs['Emission Color'].default_value = (emit[0], emit[1], emit[2], 1)
+        b.inputs['Emission Strength'].default_value = es
+    return m
+
+def holes(ob, freq=18.0, thresh=.62, seed=3, dark=.08):
+    """moth-eaten look: darken vertex colours where noise is high (call after attach)."""
+    me = ob.data; ca = me.color_attributes['Col']; mw = ob.matrix_world
+    for li, lp in enumerate(me.loops):
+        co = mw @ me.vertices[lp.vertex_index].co
+        n = noise.noise(co * freq + Vector((seed, 2, 5))) * .5 + .5
+        if n > thresh:
+            c = ca.data[li].color; ca.data[li].color = (c[0] * dark, c[1] * dark, c[2] * dark, 1)
+
+def spin(name, loc, rot, parent):
+    """an empty whose local Z is the spin axis; the game rotates any node named Spin_* (glTF local Y)."""
+    e = empty('Spin_' + name, loc, parent)
+    e.rotation_euler = rot
+    bpy.context.view_layer.update()
+    return e

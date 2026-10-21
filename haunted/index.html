@@ -758,7 +758,7 @@ function nameSprite(){
 // 3D skins: models/*.glb built in Blender (rigid Pivot_* nodes drive the walk cycle in animChar). The primitive
 // explorers below stay as the fallback if a model fails to load; add ?noskin to the URL to force them.
 const SKINS_ON = !/[?&]noskin/.test(location.search);
-const MODEL_VER = 2;   // bump when models/*.glb change so browsers don't show old cached ones
+const MODEL_VER = 3;   // bump when models/*.glb change so browsers don't show old cached ones
 const SKIN_DEF = [
   { url: 'models/night_warden.glb', scale: .92, swing: 1 },     // player 1, cool-toned: The Night Warden
   { url: 'models/lady_in_grey.glb', scale: .96, swing: .5 },    // player 2, warm-toned: The Lady in Grey (her skirt hides her legs)
