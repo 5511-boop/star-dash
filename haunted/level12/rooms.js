@@ -424,6 +424,20 @@ const toymaker = {
 
 export default {
   level: 12,
+  // texture pack in tex/level12/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'nursery_wall', trimImg: 'chipped_gold', texVer: 1,
+  texFloors: {
+    "The Wrapping Room": "wrap_checker",
+    "Jack-in-the-Box Alley": "jack_harlequin",
+    "The Conveyor Floor": "conveyor_rubber",
+    "The Alphabet Blocks": "block_floor",
+    "The Spinning Tops": "tops_rings",
+    "The Dollhouse": "dollhouse_parquet",
+    "The Ball Pit": "ballpit_mats",
+    "The Clockwork Parade": "parade_tin",
+    "The Mouse Maze": "mouse_boards",
+    "The Toymaker": "workshop_boards"
+  },
   title: 'The Toy Factory',
   tagline: 'The toys were never meant to be played with.<br>They were meant to play with YOU.',
   story: 'The machines still run. Tin soldiers march the aisles, the jack-in-the-boxes are wound tight, and somewhere the Toymaker is still at work.',

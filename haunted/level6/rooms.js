@@ -495,6 +495,20 @@ const witch = {
 
 export default {
   level: 6,
+  // texture pack in tex/level6/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'bog_hedge', trimImg: 'moss_wood', texVer: 1,
+  texFloors: {
+    "The Scarecrow Field": "stubble_field",
+    "The Two Banks": "bank_grass",
+    "The Bramble Maze": "bramble_mud",
+    "The Hand Swamp": "swamp_moss",
+    "The Drifting Isles": "isle_peat",
+    "The Pumpkin Patch": "pumpkin_furrows",
+    "The Crows' Roost": "stubble_field",
+    "The Witch's Cottage": "boardwalk",
+    "The Hag's Hollow": "bramble_mud",
+    "The Bog Witch's Lair": "swamp_moss"
+  },
   title: "The Witch's Bog",
   tagline: 'The witch never died. She just sank a little.<br>The bog remembers everything.',
   story: 'Fog curls over black water. Things move under the mud.',

@@ -488,6 +488,20 @@ const queen = {
 
 export default {
   level: 10,
+  // texture pack in tex/level10/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'palace_wall', trimImg: 'palace_gilt', texVer: 1,
+  texFloors: {
+    "The Gilded Foyer": "foyer_marble",
+    "The Reflecting Pool": "pool_tiles",
+    "The Prism Hall": "prism_glass",
+    "The Glass Maze": "maze_glass",
+    "The Vanity of Crowns": "crowns_parquet",
+    "The Shattering Floor": "shatter_mirror",
+    "The Looking-Glass Gallery": "rose_marble",
+    "The Haunted Mirrors": "haunted_marble",
+    "The Soul Exchange": "soul_marble",
+    "The Mirror Queen": "queen_star"
+  },
   title: 'The Mirror Palace',
   tagline: 'Every hall is a reflection of another.<br>Every reflection is watching you.',
   story: 'Gilded glass divides the palace. Blue souls pass blue glass, pink souls pass pink — and your reflections walk wherever you walk.',

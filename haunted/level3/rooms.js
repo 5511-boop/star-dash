@@ -611,6 +611,20 @@ const heart = {
 
 export default {
   level: 3,
+  // texture pack in tex/level3/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'clock_wall', trimImg: 'brass_trim', texVer: 1,
+  texFloors: {
+    "The Clock Face": "clock_wood",
+    "The Echo Chamber": "echo_slate",
+    "The Gear Works": "gear_plates",
+    "The Broken Bridge": "bridge_planks",
+    "The Memory Hall": "memory_marble",
+    "The Dowsing Garden": "garden_cobble",
+    "The Bell Tower": "belfry_boards",
+    "The Lamp Room": "lamp_grate",
+    "The Star Chart": "star_chart",
+    "The Clock Heart": "heart_brass"
+  },
   title: 'The Clocktower',
   tagline: 'Time stopped in this tower long ago.<br>Make it tick again.',
   story: 'The gears groan above you. Ten rooms climb to the clock\'s heart.',

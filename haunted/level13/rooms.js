@@ -369,6 +369,20 @@ const oldKnocker = {
 
 export default {
   level: 13,
+  // texture pack in tex/level13/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'coal_seam', trimImg: 'mine_timber', texVer: 1,
+  texFloors: {
+    "The Lamp House": "lamphouse_boards",
+    "The Knocking Tunnels": "tunnel_rock",
+    "The Ore Carts": "cart_ballast",
+    "The Crystal Cavern": "crystal_rock",
+    "The Echo Pit": "echo_wet",
+    "The Glow-worm Grotto": "glowworm_rock",
+    "The Knocker Warren": "warren_earth",
+    "The Lost Miner": "collapse_rubble",
+    "The Old Knocker": "knocker_stone",
+    "The Canary's Song": "canary_flags"
+  },
   title: 'The Coal Mine',
   tagline: 'Three hundred miners went down.<br>Their lanterns are still burning.',
   story: 'Every lantern down here burns oil, and the dark is very, very dark. Listen for the knocking — the Tommyknockers are drawn to light.',

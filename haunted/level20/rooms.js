@@ -313,6 +313,20 @@ const lord = {
 
 export default {
   level: 20,
+  // texture pack in tex/level20/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'manor_wall', trimImg: 'manor_gold', texVer: 1,
+  texFloors: {
+    "The Grand Return": "return_checker",
+    "The Heartbeat": "heartbeat_flesh",
+    "The Gallery of Trials": "trials_parquet",
+    "The Breathing Walls": "breathing_boards",
+    "The Haunted Banquet": "banquet_carpet",
+    "The Letters of HOLLOW": "letter_tiles",
+    "The Ghost Choir": "choir_flags",
+    "The Heart's Chambers": "heart_chamber",
+    "The Manor Lord": "lord_marble",
+    "The Lord's Sentinels": "study_oak"
+  },
   title: 'The Heart of Hollow Manor',
   tagline: 'Twenty floors down, at the very heart of the house,<br>something has been waiting for you since the beginning.',
   story: 'The walls breathe. The floor has a pulse. Every power you have found was the manor testing you — and now its Lord will see if you are strong enough to leave.',

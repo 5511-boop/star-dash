@@ -339,6 +339,20 @@ const leviathan = {
 
 export default {
   level: 17,
+  // texture pack in tex/level17/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'abyss_wall', trimImg: 'abyss_copper', texVer: 1,
+  texFloors: {
+    "The Diving Bell": "bell_plate",
+    "The Kelp Forest": "kelp_silt",
+    "The Anglerfish Lair": "angler_rock",
+    "The Jellyfish Bloom": "jelly_silt",
+    "The Sunken Galleon": "galleon_deck",
+    "The Searchlight": "search_silt",
+    "The Whirlpool": "whirl_silt",
+    "The Trench": "trench_rock",
+    "The Ink Cloud": "ink_silt",
+    "The Leviathan": "bone_seabed"
+  },
   title: 'The Abyssal Depths',
   tagline: 'Below the manor, below the sea,<br>the water is black and something is breathing.',
   story: 'A diving bell lowers you into the deep. Down here everything hunts by sight — so the trick is not to be seen.',

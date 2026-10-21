@@ -738,7 +738,13 @@ const spectralMat = new THREE.MeshStandardMaterial({ color: 0x9a6bff, emissive: 
 E.spectralMat = spectralMat;
 Object.assign(E, { stepToward, ghostTouch, inBounds, colliders, resolve, AI, inCone, losBlocked, targetsOf, overPit,
   staticRects: () => colliders(-1, { vaulting: true }) });
-ROOMS.forEach(R => floor(-10, R.zN, 10, R.zS, R.def.floor ? R.def.floor(E) : mat(0x3a3040), .002));
+// level files can name an image floor per room (texFloors: { 'Room Name': 'texture' }); the room's own floor stays as the fallback look
+ROOMS.forEach(R => {
+  let m = R.def.floor ? R.def.floor(E) : mat(0x3a3040);
+  const img = CFG.texFloors && CFG.texFloors[R.def.name];
+  if (img){ const d = Math.abs(R.zS - R.zN); m = pbr(img, 5, d / 4, { fallback: m.map || null, color: m.map ? 0xffffff : m.color.getHex(), roughness: m.roughness }); }
+  floor(-10, R.zN, 10, R.zS, m, .002);
+});
 ROOMS.forEach(R => R.def.build && R.def.build(R, E));
 
 // visuals for engine-level map pieces registered by rooms

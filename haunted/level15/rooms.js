@@ -302,6 +302,20 @@ const pharaoh = {
 
 export default {
   level: 15,
+  // texture pack in tex/level15/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'glyph_wall', trimImg: 'tomb_gold', texVer: 1,
+  texFloors: {
+    "The Antechamber": "ante_sandstone",
+    "The Scarab Nest": "scarab_sand",
+    "The Hall of Anubis": "anubis_basalt",
+    "The Canopic Shrine": "canopic_tiles",
+    "The Sand Chutes": "chute_sand",
+    "The Blade Corridor": "blade_stone",
+    "The Sphinx's Riddles": "sphinx_slabs",
+    "The Sarcophagus Hall": "granite_floor",
+    "The Star Shafts": "lapis_stars",
+    "The Pharaoh": "pharaoh_gold"
+  },
   title: 'The Pharaoh\'s Tomb',
   tagline: 'Sealed for four thousand years.<br>Something inside has been waiting.',
   story: 'The sand has buried the pyramid to its neck. Inside, the dead still walk their halls — and they do not fear the light.',

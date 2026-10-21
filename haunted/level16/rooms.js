@@ -291,6 +291,20 @@ const madame = {
 
 export default {
   level: 16,
+  // texture pack in tex/level16/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'museum_wall', trimImg: 'museum_gilt', texVer: 1,
+  texFloors: {
+    "The Velvet Ropes": "rope_carpet",
+    "The Figure Gallery": "gallery_carpet",
+    "The Melting Floor": "melting_wax",
+    "The Impostor": "impostor_marble",
+    "The Wax Chessboard": "wax_chess",
+    "The Wax Bath": "wax_bath",
+    "The Dark Gallery": "dark_carpet",
+    "The Fire Exit": "exit_tiles",
+    "The Twin Exhibits": "twin_marble",
+    "Madame Wax": "madame_marble"
+  },
   title: 'The Wax Museum',
   tagline: 'Every figure here was modelled on a real visitor.<br>None of them ever left.',
   story: 'Velvet ropes, glass cases, rows of waxen faces. The figures are perfectly still — as long as somebody is looking.',

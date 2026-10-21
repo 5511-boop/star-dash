@@ -403,6 +403,20 @@ const finale = {
 
 export default {
   level: 8,
+  // texture pack in tex/level8/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'opera_wall', trimImg: 'gilt', texVer: 1,
+  texFloors: {
+    "The Grand Lobby": "lobby_marble",
+    "Musical Statues": "statue_parquet",
+    "The Fly Gallery": "fly_catwalk",
+    "The Spotlight Booth": "spotlight_boards",
+    "The Orchestra Pit": "pit_floor",
+    "The Trapdoor Stage": "trapdoor_stage",
+    "The Masquerade": "masque_checker",
+    "The Chandelier Hall": "chandelier_carpet",
+    "The Organ Loft": "organ_carpet",
+    "The Final Act": "final_stage"
+  },
   title: 'The Opera House',
   tagline: 'Every night at midnight, the show goes on.<br>The audience never leaves its seats.',
   story: 'Red velvet, gold leaf, and a voice singing somewhere you can\'t see. <b>From now on, if you\'re BOTH frozen at the same time, the room resets.</b>',

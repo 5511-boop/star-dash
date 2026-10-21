@@ -464,6 +464,20 @@ const abbot = {
 
 export default {
   level: 5,
+  // texture pack in tex/level5/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'monastery_wall', trimImg: 'frost_silver', texVer: 1,
+  texFloors: {
+    "The Crevasse Field": "crevasse_snow",
+    "The Prayer Flags": "flag_stones",
+    "The Meditation Hall": "reed_mats",
+    "The Frozen Lake": "lake_snow",
+    "The Silent Library": "library_boards",
+    "The Hot Springs": "spring_stones",
+    "The Avalanche Run": "avalanche_snow",
+    "The Wraith Hunt": "wraith_slate",
+    "The Boiler Pipes": "boiler_plates",
+    "The Abbot's Sanctum": "glazed_tiles"
+  },
   title: 'The Frozen Monastery',
   tagline: 'High in the mountains, the monks still pray.<br>They have been praying for three hundred winters.',
   story: 'Snow blows through broken windows. Your lantern burns brighter here.',

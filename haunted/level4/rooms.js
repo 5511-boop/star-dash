@@ -382,6 +382,20 @@ tide.build = function(R, E){
 
 export default {
   level: 4,
+  // texture pack in tex/level4/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'sea_wall', trimImg: 'verdigris', texVer: 1,
+  texFloors: {
+    "The Pier": "pier_boards",
+    "Tide Pools": "tide_sand",
+    "The Rowboat": "rowboat_planks",
+    "The Listing Deck": "ship_deck",
+    "Eel Alley": "eel_rocks",
+    "The Bilge": "bilge_metal",
+    "The Flood Valves": "valve_plates",
+    "The Fog Banks": "fog_shingle",
+    "The Lamp Room": "lamp_tread",
+    "The Sailors' Watch": "jetty_boards"
+  },
   title: 'The Sunken Lighthouse',
   tagline: 'The lighthouse went dark the night the ship went down.<br>The crew never left.',
   story: 'Salt water drips from every beam. Climb the lighthouse and relight the great lamp.',

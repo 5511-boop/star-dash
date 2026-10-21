@@ -448,6 +448,20 @@ const conductor = {
 
 export default {
   level: 7,
+  // texture pack in tex/level7/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'carriage_panels', trimImg: 'train_brass', texVer: 1,
+  texFloors: {
+    "Platform 13": "platform_bricks",
+    "Ticket Inspection": "inspection_carpet",
+    "The Roof Run": "roof_tin",
+    "The Switching Yard": "yard_gravel",
+    "The Baggage Car": "baggage_boards",
+    "The Engine Room": "engine_tread",
+    "The Dining Car": "dining_parquet",
+    "The Mail Car": "mail_lino",
+    "The Coupling": "coupling_plate",
+    "The Conductor's Car": "ping_carpet"
+  },
   title: 'The Ghost Train',
   tagline: 'The midnight train has no stops.<br>Nobody who boards it ever gets off.',
   story: 'The whistle screams. The carriages rattle through the dark. Get to the front and stop this train.',

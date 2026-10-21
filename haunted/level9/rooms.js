@@ -371,6 +371,20 @@ const king = {
 
 export default {
   level: 9,
+  // texture pack in tex/level9/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'cathedral_wall', trimImg: 'wrought_iron', texVer: 1,
+  texFloors: {
+    "The Collapsed Nave": "nave_flags",
+    "The Gargoyle Gallery": "gallery_cobble",
+    "The Grapple Relay": "tomb_slabs",
+    "The Swinging Censers": "censer_mosaic",
+    "The Bat Belfry": "belfry_guano",
+    "The Holy Water Font": "font_wet",
+    "The Rotating Reliquary": "reliquary_marble",
+    "The Collapsing Aisle": "aisle_rubble",
+    "The Fallen Statues": "statue_dust",
+    "The Gargoyle King": "king_stone"
+  },
   title: 'The Ruined Cathedral',
   tagline: 'The bells stopped ringing a century ago.<br>The gargoyles never stopped watching.',
   story: 'Half the floor has fallen into the crypts below. Golden rings hang from the broken pillars.',

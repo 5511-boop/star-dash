@@ -335,6 +335,20 @@ const archivist = {
 
 export default {
   level: 11,
+  // texture pack in tex/level11/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'archive_wall', trimImg: 'archive_brass', texVer: 1,
+  texFloors: {
+    "The Reading Room": "reading_parquet",
+    "The Card Catalogue": "catalogue_tiles",
+    "The Lending Desk": "lending_boards",
+    "The Forged Shelves": "forged_carpet",
+    "The Sealed Booths": "sealed_cork",
+    "The Turning Pages": "pages_floor",
+    "The Restricted Section": "restricted_iron",
+    "The Ink Tide": "ink_floor",
+    "The Flickering Vault": "vault_steel",
+    "The Archivist": "archivist_rug"
+  },
   title: 'The Spectral Archive',
   tagline: 'Every book ever burned is still on these shelves.<br>So are their guardians.',
   story: 'Half the shelves are only ghosts of shelves. The Hollow Knights that guard them are empty armour — they cannot be frightened, and they never sleep.',

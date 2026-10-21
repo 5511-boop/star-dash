@@ -337,6 +337,20 @@ const queenRoom = {
 
 export default {
   level: 14,
+  // texture pack in tex/level14/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'garden_wall', trimImg: 'sky_gilt', texVer: 1,
+  texFloors: {
+    "The Cloud Steps": "cloud_steps",
+    "The Twin Terraces": "terrace_terracotta",
+    "The Windy Terrace": "lichen_flags",
+    "The Thorn Maze": "thorn_grass",
+    "The Kite Run": "kite_lawn",
+    "The Sundial Beds": "sundial_gravel",
+    "The Bramble Wall": "bramble_moss",
+    "The Storm Front": "storm_slate",
+    "The Hanging Gardens": "bridge_planks_pale",
+    "The Storm Queen": "queen_mosaic"
+  },
   title: 'The Sky Gardens',
   tagline: 'Above the manor, beyond the clouds,<br>a garden floats where nobody should be able to walk.',
   story: 'Islands of grass drift in an endless sky. Here, light is solid — if you shine it right. The wind spirits play rough, and the thorns are always growing.',

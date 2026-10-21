@@ -294,6 +294,20 @@ const king = {
 
 export default {
   level: 19,
+  // texture pack in tex/level19/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'dream_wall', trimImg: 'lavender_silver', texVer: 1,
+  texFloors: {
+    "The Waking Door": "waking_clouds",
+    "The Endless Hallway": "hallway_runner",
+    "The Twin Clocks": "clock_checker",
+    "The Nightmare Nursery": "nursery_moons",
+    "The Dream Heist": "heist_marble",
+    "The Penrose Stairs": "penrose_tiles",
+    "The Shadow Self": "shadow_ripple",
+    "The Hourglass": "hourglass_sand",
+    "The Sleepwalkers": "sleep_quilt",
+    "The Nightmare King": "king_obsidian"
+  },
   title: 'The Dream Realm',
   tagline: 'You fell asleep in the manor.<br>The manor did not let you wake up.',
   story: 'Floating halls, impossible stairs, clocks that disagree. Here time is soft — you can take back the last few seconds. But the nightmares are learning to follow.',

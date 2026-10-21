@@ -332,6 +332,20 @@ const titan = {
 
 export default {
   level: 18,
+  // texture pack in tex/level18/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  wallImg: 'forge_wall', trimImg: 'hot_iron', texVer: 1,
+  texFloors: {
+    "The Cracked Gate": "gate_basalt",
+    "The Hammer Hall": "hammer_iron",
+    "The Magma Channels": "channel_crust",
+    "The Elemental Furnace": "furnace_brick",
+    "The Powder Kegs": "keg_boards",
+    "The Crucible": "crucible_slag",
+    "The Obsidian Maze": "obsidian_floor",
+    "The Eruption": "eruption_floor",
+    "The Forge Titan": "titan_plates",
+    "The Smith's Workshop": "hearth_stone"
+  },
   title: 'The Volcano Forge',
   tagline: 'Deep inside the mountain the forges still burn,<br>and the smiths are made of fire.',
   story: 'Rivers of lava, roaring furnaces, hammers the size of carriages. The way through is sealed with stone — so bring something that goes BOOM.',
