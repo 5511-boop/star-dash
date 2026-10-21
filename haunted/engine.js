@@ -272,6 +272,8 @@ const sfx = {
 /* ===================== renderer / scene ===================== */
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+// levels with an image texture pack get filmic tone mapping so the darker, detailed textures still read
+if (CFG.texVer){ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = CFG.exposure || 1.7; }
 const scene = new THREE.Scene();
 const BG = CFG.bg || 0x05060c;
 scene.background = new THREE.Color(BG);
