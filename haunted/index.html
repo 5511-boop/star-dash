@@ -116,6 +116,7 @@
     <h1>Hollow Manor</h1>
     <p class="sub">Two of you. Ten haunted rooms.<br>Escape together — and don't let the ghosts touch you.</p>
     <label>Your name<input id="name" maxlength="12" autocomplete="off" placeholder="Name"></label>
+    <label>Character<select id="skinSel" class="skinSel"><option value="auto">Auto (host = Warden, guest = Lady)</option><option value="0">The Night Warden</option><option value="1">The Lady in Grey</option></select></label>
     <div style="display:flex;gap:8px"><label style="flex:1">Level<select id="levelSel"></select></label><label style="flex:1">Start at<select id="startRoom"></select></label></div>
     <button id="btnHost" class="big">Create game</button>
     <div class="join">
@@ -132,6 +133,7 @@
     <h2>Room code</h2>
     <div class="code" id="roomCode">····</div>
     <p id="lobbyMsg">Connecting…</p>
+    <label style="margin-top:4px">Your character<select id="skinSelLobby" class="skinSel"><option value="auto">Auto (host = Warden, guest = Lady)</option><option value="0">The Night Warden</option><option value="1">The Lady in Grey</option></select></label>
     <button id="btnStart" class="big" disabled>Enter the manor</button>
     <button id="btnLeave" class="link">Leave</button>
   </div>
@@ -1037,6 +1039,11 @@ let role = null;              // 'host' | 'guest' | 'solo' | null
 let phase = 'menu';           // menu | lobby | play | won
 let myName = store.get('hm_name', '');
 let remoteName = 'Partner';
+// Character skins: 'auto' gives the host the Night Warden and the guest the Lady in Grey; either player can pick either one.
+let skinPref = store.get('hm_skin', 'auto');
+let remoteSkin = null;   // what the partner picked (sent over the network); null until we hear from them
+const mySkin = () => skinPref === 'auto' ? myIdx() : (+skinPref ? 1 : 0);
+const otherSkin = () => remoteSkin === null ? 1 - myIdx() : remoteSkin;
 let reached = parseInt(store.get('hm_reached', '0')) || 0;
 const myIdx = () => role === 'guest' ? 1 : 0;
 const names = () => myIdx() === 0 ? [myName || 'You', remoteName] : [remoteName, myName || 'You'];
@@ -1104,7 +1111,7 @@ const arrowEl = $('arrow');
 function applyColors(){
   const mi = myIdx();
   meChar.bodyMat.color.setHex(COLORS[mi]); otherChar.bodyMat.color.setHex(COLORS[1 - mi]);
-  meChar.setStyle(mi); otherChar.setStyle(1 - mi);
+  meChar.setStyle(mySkin()); otherChar.setStyle(otherSkin());
   arrowEl.style.borderBottomColor = CSSCOL[1 - mi];
 }
 
@@ -1531,7 +1538,7 @@ function joinGame(c){
   setTimeout(() => { if (role === 'guest' && phase === 'menu' && !(conn && conn.open)){ status('Could not connect. Try both on the same Wi-Fi.'); cleanupNet(); role = null; } }, 15000);
 }
 function wireConn(){
-  const onOpen = () => send({ t: 'hi', n: myName });
+  const onOpen = () => send({ t: 'hi', n: myName, sk: mySkin() });
   if (conn.open) onOpen(); else conn.on('open', onOpen);
   conn.on('data', onData); conn.on('close', onDisconnect); conn.on('error', onDisconnect);
 }
@@ -1539,16 +1546,17 @@ function onData(m){
   if (!m || typeof m !== 'object') return;
   switch (m.t){
     case 'hi':
-      remoteName = String(m.n || 'Partner').slice(0, 12); applyColors();
-      if (role === 'host'){ send({ t: 'welcome', n: myName, lv: 1 }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
+      remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
+      if (role === 'host'){ send({ t: 'welcome', n: myName, lv: 1, sk: mySkin() }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
       break;
     case 'welcome':
       if (m.lv && m.lv !== 1){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(code); return; }
-      remoteName = String(m.n || 'Partner').slice(0, 12); applyColors();
+      remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
       $('roomCode').textContent = code; $('lobbyMsg').textContent = `Connected to ${remoteName}. Waiting for them to open the door…`;
       $('btnStart').disabled = true; $('btnStart').textContent = 'Waiting for host';
       show('lobby'); phase = 'lobby';
       break;
+    case 'skin': if (m.sk === 0 || m.sk === 1){ remoteSkin = m.sk; applyColors(); } break;
     case 'g':
       if (role !== 'host') break;
       other.target.set(m.p[0], 0, m.p[1]); other.ry = m.p[2]; other.moving = !!m.p[3]; other.running = !!m.p[4];
@@ -1751,6 +1759,14 @@ function updateHud(dt){
 /* ===================== menu wiring ===================== */
 $('name').value = myName;
 fillStartSelect();
+for (const el of document.querySelectorAll('.skinSel')){
+  el.value = skinPref;
+  el.addEventListener('change', e => {
+    skinPref = e.target.value; store.set('hm_skin', skinPref);
+    document.querySelectorAll('.skinSel').forEach(o => o.value = skinPref);
+    applyColors(); send({ t: 'skin', sk: mySkin() });
+  });
+}
 $('name').addEventListener('input', e => { myName = e.target.value.trim().slice(0, 12); store.set('hm_name', myName); });
 function needName(){
   myName = $('name').value.trim().slice(0, 12);
@@ -1883,7 +1899,7 @@ function updateWorldVisuals(dt, t){
   for (let i = 0; i < 2; i++){
     const p = plist.find(q => q.idx === i), rc = reflChars[i], rf = p ? reflectionOf(p.pos) : null;
     rc.group.visible = !!rf && !S.latch6;
-    if (rf){ rc.group.position.set(rf.x, 0, rf.z); rc.group.rotation.y = -p.ry; rc.bodyMat.color.setHex(COLORS[i]); rc.setStyle(i); animChar(rc, dt, p.moving, false); }
+    if (rf){ rc.group.position.set(rf.x, 0, rf.z); rc.group.rotation.y = -p.ry; rc.bodyMat.color.setHex(COLORS[i]); rc.setStyle(i === myIdx() ? mySkin() : otherSkin()); animChar(rc, dt, p.moving, false); }
   }
   // crates
   for (let i = 0; i < 3; i++){
