@@ -77,3 +77,63 @@ def text_hit(txt, u, v, u0, v0, w, h):
     k = int((u - u0) / cw); ch = txt[k]
     gx = int(((u - u0) - k * cw) / cw * 6); gy = int((1 - (v - v0) / h) * 7)
     return gx < 5 and 0 <= gy < 7 and FONT.get(ch, FONT[' '])[gy][gx] == '1'
+
+def mat_glow_tex(name, img, rough=.3, es=1.5):
+    """image drives both colour and emission (stained glass, glowing runes)."""
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    m.use_nodes = True; nt = m.node_tree; nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial'); b = nt.nodes.new('ShaderNodeBsdfPrincipled')
+    nt.links.new(b.outputs['BSDF'], out.inputs['Surface'])
+    t = nt.nodes.new('ShaderNodeTexImage'); t.image = img
+    nt.links.new(t.outputs['Color'], b.inputs['Base Color'])
+    nt.links.new(t.outputs['Color'], b.inputs['Emission Color'])
+    b.inputs['Emission Strength'].default_value = es
+    b.inputs['Roughness'].default_value = rough
+    return m
+
+def script_px(u, v, lines=18, ink=(.08, .06, .08), base=(.86, .76, .56), seed=0, caps=True):
+    """parchment covered in rows of handwriting, with the odd red and gold capital."""
+    n = noise.noise(Vector((u * 12, v * 12, seed))) * .5 + .5
+    col = [c * (.82 + .18 * n) for c in base]
+    row = v * lines; k = int(row); f = row - k
+    wobble = .18 * math.sin(u * 70 + k * 3.1) + .1 * math.sin(u * 190 + k)
+    word = noise.noise(Vector((u * 18, k * 1.7, seed + 3)))
+    if word > -.25 and abs(f - .5 - wobble * .5) < .07: col = list(ink)
+    if caps and ((int(u * 9) + k * 5) % 23 == 0) and .15 < f < .85 and (u * 9 % 1) < .1:
+        col = [.65, .08, .06] if k % 2 else [.85, .62, .2]
+    return tuple(col)
+
+def stripes_px(u, v, n, cols, line=None):
+    """horizontal bands (v) cycling through cols, optional thin dividing line colour."""
+    x = v * n; k = int(x) % len(cols); f = x - int(x)
+    if line and (f < .08 or f > .92): return line
+    nz = noise.noise(Vector((u * 25, v * 25, k))) * .5 + .5
+    return tuple(c * (.85 + .15 * nz) for c in cols[k])
+
+def bandage_px(u, v):
+    x = v * 34 + u * 6 + .4 * math.sin(u * 20)
+    f = x - math.floor(x)
+    nz = noise.noise(Vector((u * 30, v * 30, 7))) * .5 + .5
+    base = [(.62 + .1 * nz) * c for c in (1, .92, .74)]
+    if f < .12: base = [c * .45 for c in base]
+    stain = noise.noise(Vector((u * 5, v * 5, 2)))
+    if stain > .35: base = [base[0] * .7, base[1] * .62, base[2] * .5]
+    return tuple(base)
+
+def magma_px(u, v, pts=None):
+    """cooled dark rock split by glowing cracks (use with mat_glow_tex)."""
+    global _MAGMA_PTS
+    if pts is None:
+        if '_MAGMA_PTS' not in globals():
+            import random as _r; _r.seed(77); _MAGMA_PTS = [(_r.random(), _r.random()) for _ in range(40)]
+        pts = _MAGMA_PTS
+    b0 = b1 = 9
+    for px, py in pts:
+        dx = min(abs(u - px), 1 - abs(u - px)); d = dx * dx + (v - py) ** 2 * 1.5
+        if d < b0: b0, b1 = d, b0
+        elif d < b1: b1 = d
+    e = math.sqrt(b1) - math.sqrt(b0)
+    if e < .012: return (1, .45, .08)
+    if e < .03: k = (.03 - e) / .018; return (.04 + .7 * k, .025 + .2 * k, .02)
+    n = noise.noise(Vector((u * 30, v * 30, 1))) * .5 + .5
+    return (.035 * (.7 + .3 * n), .03 * (.7 + .3 * n), .03 * (.7 + .3 * n))

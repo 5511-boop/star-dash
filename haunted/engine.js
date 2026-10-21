@@ -135,6 +135,19 @@ const SKIN_SETS = {
   5: [{ name: 'The Silent Abbot', url: '../models/silent_abbot.glb', scale: .9, swing: .55 }, { name: 'The Snow Wraith', url: '../models/snow_wraith.glb', scale: .88, swing: .4 }],
   6: [{ name: 'The Bog Lantern Man', url: '../models/bog_lantern_man.glb', scale: .87, swing: 1 }, { name: 'The Hedge Witch', url: '../models/hedge_witch.glb', scale: .88, swing: .6 }],
   7: [{ name: 'The Phantom Conductor', url: '../models/phantom_conductor.glb', scale: .9, swing: 1 }, { name: 'The Last Passenger', url: '../models/last_passenger.glb', scale: .98, swing: 1, flicker: true }],
+  8: [{ name: 'The Masked Patron', url: '../models/masked_patron.glb', scale: .92, swing: 1 }, { name: 'The Fallen Diva', url: '../models/fallen_diva.glb', scale: .96, swing: .45 }],
+  9: [{ name: 'The Penitent Knight', url: '../models/penitent_knight.glb', scale: .85, swing: .9 }, { name: 'The Stained-Glass Saint', url: '../models/stained_glass_saint.glb', scale: .9, swing: .4 }],
+  10: [{ name: 'The Silvered Prince', url: '../models/silvered_prince.glb', scale: .93, swing: 1 }, { name: 'The Reflection', url: '../models/the_reflection.glb', scale: .93, swing: 1 }],
+  11: [{ name: 'The Keeper of Pages', url: '../models/keeper_of_pages.glb', scale: .92, swing: .55 }, { name: 'The Living Manuscript', url: '../models/living_manuscript.glb', scale: .95, swing: .5 }],
+  12: [{ name: 'The Broken Soldier', url: '../models/broken_soldier.glb', scale: .84, swing: .8 }, { name: 'The Stitched Doll', url: '../models/stitched_doll.glb', scale: 1, swing: 1 }],
+  13: [{ name: 'The Lost Miner', url: '../models/lost_miner.glb', scale: .92, swing: 1 }, { name: "The Canary's Ghost", url: '../models/canarys_ghost.glb', scale: .97, swing: .5 }],
+  14: [{ name: 'The Aeronaut', url: '../models/aeronaut.glb', scale: .92, swing: 1 }, { name: 'The Bloom Fairy', url: '../models/bloom_fairy.glb', scale: 1, swing: .5 }],
+  15: [{ name: 'The Risen Pharaoh', url: '../models/risen_pharaoh.glb', scale: .92, swing: .9 }, { name: 'The Jackal Priestess', url: '../models/jackal_priestess.glb', scale: .95, swing: .5 }],
+  16: [{ name: 'The Sculptor', url: '../models/the_sculptor.glb', scale: .92, swing: .8 }, { name: 'The Exhibit', url: '../models/the_exhibit.glb', scale: .97, swing: .5 }],
+  17: [{ name: 'The Deep Diver', url: '../models/deep_diver.glb', scale: .92, swing: .8 }, { name: 'The Angler Queen', url: '../models/angler_queen.glb', scale: .95, swing: .5 }],
+  18: [{ name: 'The Forgemaster', url: '../models/forgemaster.glb', scale: .93, swing: .9 }, { name: 'The Ember Spirit', url: '../models/ember_spirit.glb', scale: .92, swing: .4 }],
+  19: [{ name: 'The Sleepwalker', url: '../models/sleepwalker.glb', scale: .88, swing: .3 }, { name: 'The Moon Jester', url: '../models/moon_jester.glb', scale: .95, swing: 1 }],
+  20: [{ name: 'The Ghost Hunter', url: '../models/ghost_hunter.glb', scale: .9, swing: 1 }, { name: 'The Ghost Bride', url: '../models/ghost_bride.glb', scale: .94, swing: .4, opacity: .72 }],
 };
 const MODEL_VER = 1;   // bump when models/*.glb change so browsers don't show old cached ones
 const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
@@ -416,7 +429,8 @@ function makeChar(color, ghostly = false){
       if (o.name.startsWith('Spin_')) spins.push(o);
       if (!o.isMesh) return;
       o.material = o.material.clone(); o.material.envMap = r.env; o.material.envMapIntensity = .35;
-      if (SKINS[i].flicker){ o.material.transparent = true; o.material.depthWrite = true; }   // flickering skins stay transparent so the fades don't recompile shaders
+      if (SKINS[i].flicker || SKINS[i].opacity){ o.material.transparent = true; o.material.depthWrite = true; }   // flickering / see-through skins stay transparent so fades don't recompile shaders
+      if (SKINS[i].opacity) o.material.opacity *= SKINS[i].opacity;
       o.material.userData.op = o.material.opacity; o.material.userData.tr = o.material.transparent; mats.push(o.material);
     });
     const f = n => root.getObjectByName(n);
