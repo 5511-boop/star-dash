@@ -825,7 +825,7 @@ addEventListener('keyup', e => {
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; btn.dash = btn.pow = false; me.sight = 0; });
 // ---- touch camera: drag with one finger on the right side to turn/tilt, pinch with two to zoom, double-tap to reset ----
 const camTouch = (() => {
-  const pts = new Map(); let pinch0 = 0, zoom0 = 1, lastTap = 0;
+  const pts = new Map(); let pinch0 = 0, zoom0 = 1, lastTap = -1e9;
   const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
   return {
     start(t){
