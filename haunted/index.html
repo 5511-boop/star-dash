@@ -154,6 +154,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /* ===================== helpers ===================== */
 const $ = id => document.getElementById(id);
@@ -752,6 +753,22 @@ function nameSprite(){
 // Player characters: little explorers in a coloured coat with a scarf, boots, backpack and a lantern.
 // Player 1 (blue) wears a wide-brim adventurer hat; player 2 (pink) wears a knit beanie with a pom-pom and braids.
 // setStyle(idx) switches outfits, because which colour you are depends on who hosts.
+// 3D skins: models/*.glb built in Blender (rigid Pivot_* nodes drive the walk cycle in animChar). The primitive
+// explorers below stay as the fallback if a model fails to load; add ?noskin to the URL to force them.
+const SKINS_ON = !/[?&]noskin/.test(location.search);
+const MODEL_VER = 2;   // bump when models/*.glb change so browsers don't show old cached ones
+const SKIN_DEF = [
+  { url: 'models/night_warden.glb', scale: .92, swing: 1 },     // player 1, cool-toned: The Night Warden
+  { url: 'models/lady_in_grey.glb', scale: .96, swing: .5 },    // player 2, warm-toned: The Lady in Grey (her skirt hides her legs)
+];
+const skinLoads = []; let gltfLoader = null;
+function loadSkinScene(i){
+  if (!skinLoads[i]) skinLoads[i] = new Promise(res => {
+    gltfLoader = gltfLoader || new GLTFLoader();
+    gltfLoader.load(SKIN_DEF[i].url + '?v=' + MODEL_VER, g => res(g.scene), undefined, e => { console.warn('skin failed', SKIN_DEF[i].url, e); res(null); });
+  });
+  return skinLoads[i];
+}
 const SKIN = 0xf1c7a1, BOOT = 0x3b2414, PANTS = 0x2b2638, LEATHER = 0x6b4426;
 const ACCENT = [0xf2b84b, 0x7fe0d0];          // scarf / hat band colour per player
 const HAIR = [0x4a2e1c, 0x2a1a12];
@@ -828,16 +845,42 @@ function makeChar(color, ghostly = false){
   });
 
   const out = { group, rig, body: null, bodyMat, t: 0, legs, arms, head, scarfTail, hatA, hatB, accentMat, hairMat };
+  out.skins = [null, null]; out.styleIdx = 0; out.swing = 1;
+  const prim = { legs, arms, head, scarfTail };
   out.setStyle = idx => {
+    out.styleIdx = idx;
     hatA.visible = idx === 0; hatB.visible = idx === 1;
     accentMat.color.setHex(ACCENT[idx]); hairMat.color.setHex(HAIR[idx]);
     hairCap.scale.set(1, idx === 1 ? 1.05 : 1, 1);
+    // a loaded 3D skin replaces the primitive body; its Pivot_* nodes take over the animation hooks
+    const sk = out.skins[idx];
+    for (const s of out.skins) if (s) s.root.visible = s === sk;
+    for (const ch of rig.children) if (!ch.userData.skin) ch.visible = !sk;
+    const P = sk || prim;
+    out.legs = P.legs; out.arms = P.arms; out.head = P.head; out.scarfTail = P.scarfTail;
+    out.swing = sk ? sk.swing : 1; out.skinTail = !!sk;
+    if (out.candle){ P.arms[0].add(out.candle); out.candle.position.set(0, sk ? -.5 : -.42, sk ? .1 : .08); }
+    if (out.lant) out.lant.visible = !sk;
+    if (out.light) out.light.position.set(.35, sk ? 2.6 : 1.9, .25);   // keep the lantern light clear of the Warden's hat brim
   };
   out.setStyle(color === COLORS[1] ? 1 : 0);
+  if (SKINS_ON) [0, 1].forEach(i => loadSkinScene(i).then(src => {
+    if (!src) return;
+    const root = src.clone(true); root.userData.skin = true; root.scale.setScalar(SKIN_DEF[i].scale);
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      o.material = o.material.clone(); o.material.metalness = Math.min(o.material.metalness, .6);   // no env map in here, so full metal would render black
+      if (ghostly){ o.material.transparent = true; o.material.opacity = Math.min(o.material.opacity, .4); o.material.depthWrite = false; }
+    });
+    const f = n => root.getObjectByName(n);
+    out.skins[i] = { root, legs: [f('Pivot_LegA'), f('Pivot_LegB')], arms: [f('Pivot_ArmA'), f('Pivot_ArmB')], head: f('Pivot_Head'), scarfTail: f('Pivot_Tail'), swing: SKIN_DEF[i].swing };
+    rig.add(root);
+    out.setStyle(out.styleIdx);
+  }));
 
   if (!ghostly){
     // lantern in the right hand
-    const lant = new THREE.Group(); lant.position.set(0, -.5, .06); arms[1].add(lant);
+    const lant = new THREE.Group(); lant.position.set(0, -.5, .06); arms[1].add(lant); out.lant = lant;
     const brass = mat(0x8a7442, { metalness: .7, roughness: .35 });
     add(lant, new THREE.TorusGeometry(.06, .012, 6, 12, Math.PI), brass, 0, .17, 0);
     add(lant, new THREE.CylinderGeometry(.07, .09, .03, 8), brass, 0, .11, 0);
@@ -868,14 +911,19 @@ function animChar(c, dt, moving, running){
   c.rig.position.y = moving ? Math.abs(Math.cos(c.t)) * (running ? .08 : .05) : Math.sin(c.t) * .012;
   c.rig.rotation.x = moving ? (running ? .14 : .06) : 0;            // lean into the run
   c.rig.rotation.z = moving ? s * .035 : 0;
-  c.legs[0].rotation.x = s * sw; c.legs[1].rotation.x = -s * sw;
+  c.legs[0].rotation.x = s * sw * c.swing; c.legs[1].rotation.x = -s * sw * c.swing;
   const carry = c.candle && c.candle.visible;
   c.arms[0].rotation.x = carry ? -.9 : -s * sw * .9;
   c.arms[1].rotation.x = moving ? s * sw * .5 - .15 : Math.sin(c.t * .5) * .04 - .1;   // lantern arm swings less
   c.head.rotation.y = moving ? 0 : Math.sin(c.t * .35) * .18;        // idle look-around
   c.head.rotation.z = moving ? s * .04 : 0;
-  c.scarfTail.rotation.x = moving ? -.5 - Math.abs(s) * (running ? .7 : .35) : -.08 + Math.sin(c.t * .8) * .05;
-  c.scarfTail.rotation.z = s * .15;
+  if (c.skinTail){   // coat tail / bustle bow: hinged at the waist, flicks backwards as they move
+    c.scarfTail.rotation.x = moving ? .05 + Math.abs(s) * (running ? .32 : .15) : Math.sin(c.t * .8) * .03;
+    c.scarfTail.rotation.z = 0;
+  } else {
+    c.scarfTail.rotation.x = moving ? -.5 - Math.abs(s) * (running ? .7 : .35) : -.08 + Math.sin(c.t * .8) * .05;
+    c.scarfTail.rotation.z = s * .15;
+  }
   if (c.light) c.light.intensity = 11 + Math.sin(performance.now() * .013) * .5 + Math.sin(performance.now() * .031) * .35;
 }
 
