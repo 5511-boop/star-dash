@@ -197,7 +197,7 @@ if (isTouch) document.body.classList.add('touch');
 {
   const keysTxt = ['WASD move', 'Shift run'];
   if (has('dash')) keysTxt.push('Space ⚡'); if (has('flash')) keysTxt.push('F ☀' + (has('sight') ? ' (hold: sight)' : ''));
-  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('T room start'); keysTxt.push('H hint'); if (!isTouch) keysTxt.push('right-drag turn camera · scroll zoom · C reset');
+  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('T room start'); keysTxt.push('H hint'); keysTxt.push(isTouch ? 'drag right side to turn camera · pinch to zoom · double-tap to reset' : 'right-drag turn camera · scroll zoom · C reset');
   $('hint').textContent = keysTxt.join(' · ');
 }
 
@@ -823,6 +823,29 @@ addEventListener('keyup', e => {
   if (e.code === 'KeyF') releasePow();
 });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; btn.dash = btn.pow = false; me.sight = 0; });
+// ---- touch camera: drag with one finger on the right side to turn/tilt, pinch with two to zoom, double-tap to reset ----
+const camTouch = (() => {
+  const pts = new Map(); let pinch0 = 0, zoom0 = 1, lastTap = 0;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  return {
+    start(t){
+      pts.set(t.identifier, { x: t.clientX, y: t.clientY });
+      if (pts.size === 1){ const now = performance.now(); if (now - lastTap < 300) resetCam(); lastTap = now; }
+      if (pts.size === 2){ pinch0 = dist(); zoom0 = CAM.tz; }
+    },
+    move(t){
+      const p = pts.get(t.identifier); if (!p) return false;
+      if (pts.size === 1){
+        CAM.ty -= (t.clientX - p.x) * .009;
+        CAM.tp = clamp(CAM.tp + (t.clientY - p.y) * .006, .5 - BASE_PITCH, 1.45 - BASE_PITCH);
+      }
+      p.x = t.clientX; p.y = t.clientY;
+      if (pts.size >= 2 && pinch0 > 0) CAM.tz = clamp(zoom0 * pinch0 / Math.max(20, dist()), .3, 1.8);
+      return true;
+    },
+    end(t){ pts.delete(t.identifier); if (pts.size < 2) pinch0 = 0; }
+  };
+})();
 const joy = { x: 0, y: 0, id: null, ox: 0, oy: 0 };
 let runTouch = false;
 const taps = {};
@@ -836,13 +859,13 @@ const taps = {};
       if (joy.id === null && t.clientX < innerWidth * .5){
         joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY;
         base.style.left = (t.clientX - 60) + 'px'; base.style.top = (t.clientY - 60) + 'px'; base.style.bottom = 'auto';
-      } else taps[t.identifier] = { x: t.clientX, y: t.clientY, t: performance.now() };
+      } else { taps[t.identifier] = { x: t.clientX, y: t.clientY, t: performance.now() }; camTouch.start(t); }
     }
   }, { passive: false });
   layer.addEventListener('touchmove', e => {
     e.preventDefault();
     for (const t of e.changedTouches){
-      if (t.identifier !== joy.id) continue;
+      if (t.identifier !== joy.id){ camTouch.move(t); continue; }
       let dx = t.clientX - joy.ox, dy = t.clientY - joy.oy; const l = Math.hypot(dx, dy);
       if (l > R){ dx *= R / l; dy *= R / l; }
       knob.style.transform = `translate(${dx}px,${dy}px)`; joy.x = dx / R; joy.y = dy / R;
@@ -851,6 +874,7 @@ const taps = {};
   const end = e => {
     for (const t of e.changedTouches){
       if (t.identifier === joy.id) reset();
+      camTouch.end(t);
       const tp = taps[t.identifier]; delete taps[t.identifier];
       if (tp && performance.now() - tp.t < 350 && Math.hypot(t.clientX - tp.x, t.clientY - tp.y) < 16) screenPing(t.clientX, t.clientY);
     }
