@@ -28,7 +28,8 @@ const LEVELS = LEVEL_NAMES.slice(0, BUILT).map((name, i) => ({ n: i + 1, name })
 // powers unlock at a level and are kept for every later level
 const UNLOCK = { dash: 4, flash: 5, throw: 6, ping: 7, sight: 8, grapple: 9, swap: 10, phase: 11, decoy: 12, oil: 13, bridge: 14, bolt: 15, vault: 16, shadow: 17, bombs: 18, rewind: 19, blast: 20 };
 const has = k => LEVEL >= (UNLOCK[k] || 99);
-const GMULT = CFG.ghostMult || (1 + Math.max(0, LEVEL - 3) * .03);
+const BASE_GMULT = CFG.ghostMult || (1 + Math.max(0, LEVEL - 3) * .03);
+let GMULT = BASE_GMULT;   // eased by hostTick after repeated freezes or while a puzzle panel is up (see pressure())
 const FREEZE = CFG.freezeSecs || (LEVEL >= 4 ? 6 + Math.floor((LEVEL - 4) / 4) : 6);
 const RESET_RULE = LEVEL >= 8;
 function levelUrl(n){
@@ -111,6 +112,7 @@ style.textContent = `
   #frost.on{opacity:1}
   #sightFx{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;transition:opacity .25s;background:radial-gradient(circle at 50% 50%,#0000 40%,#7a3aff55 85%,#3a0a8aaa 100%)}
   #sightFx.on{opacity:1}
+  #dread{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;background:radial-gradient(ellipse at 50% 50%,#0000 38%,#12000acc 82%,#000000f0 100%)}
   #touch{position:fixed;inset:0;z-index:8}
   #joyBase{position:absolute;width:120px;height:120px;border-radius:50%;background:#ffffff1c;border:3px solid #ffffff55;left:calc(30px + env(safe-area-inset-left));bottom:calc(40px + env(safe-area-inset-bottom))}
   #joyKnob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:#ffffffaa}
@@ -155,7 +157,7 @@ const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
 const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
 const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
-<canvas id="c"></canvas><div id="flash"></div><div id="frost"></div><div id="sightFx"></div>
+<canvas id="c"></canvas><div id="dread"></div><div id="flash"></div><div id="frost"></div><div id="sightFx"></div>
 <div id="hud" hidden>
   <div id="hudTop"><div class="pill" id="roomName"></div><div class="pill" id="timer">0:00</div><div class="pill" id="hintBtn" hidden>💡 Hint</div></div>
   <div id="objective"></div>
@@ -178,6 +180,7 @@ document.body.innerHTML = `
   <label>Your name<input id="name" maxlength="12" autocomplete="off" placeholder="Name"></label>
   ${SKINS ? `<label>Character<select class="skinSel">${skinOpts()}</select></label>` : ''}
   <div class="two"><label>Level<select id="levelSel"></select></label><label>Start at<select id="startRoom"></select></label></div>
+  <button id="btnResume" class="big" hidden></button>
   <button id="btnHost" class="big">Create game</button>
   <div class="join"><input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="btnJoin">Join</button></div>
   <button id="btnSolo" class="link">Explore solo (test mode)</button>
@@ -202,7 +205,9 @@ if (isTouch) document.body.classList.add('touch');
 }
 
 /* ===================== audio ===================== */
-let actx = null, droneGain = null, whisperGain = null;
+// Layers: a detuned drone, a whisper (band-passed noise) that swells and pans toward the nearest ghost, a heartbeat
+// that quickens as one closes in, low wind, and the odd creak from somewhere in the house (see updateAmbience).
+let actx = null, droneGain = null, whisperGain = null, whisperPan = null, windGain = null;
 function unlockAudio(){
   try {
     if (!actx){
@@ -215,25 +220,36 @@ function unlockAudio(){
       const n = actx.createBufferSource(); n.buffer = buf; n.loop = true;
       const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 6;
       whisperGain = actx.createGain(); whisperGain.gain.value = 0;
-      n.connect(f).connect(whisperGain).connect(actx.destination); n.start();
+      whisperPan = actx.createStereoPanner ? actx.createStereoPanner() : null;
+      n.connect(f).connect(whisperGain); (whisperPan ? whisperGain.connect(whisperPan) : whisperGain).connect(actx.destination); n.start();
+      const w = actx.createBufferSource(); w.buffer = buf; w.loop = true; w.playbackRate.value = .5;
+      const wf = actx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 420;
+      windGain = actx.createGain(); windGain.gain.value = 0;
+      w.connect(wf).connect(windGain).connect(actx.destination); w.start();
     }
     if (actx.state === 'suspended') actx.resume();
   } catch {}
 }
-function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0){
+// any tap or key unlocks audio, including pages reached by the auto-join redirect (no button press there)
+addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListener('keydown', unlockAudio);
+function out(pan){
+  if (!pan || !actx.createStereoPanner) return actx.destination;
+  const p = actx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(actx.destination); return p;
+}
+function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0, pan = 0){
   if (!actx) return;
   const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.05);
+  o.connect(g).connect(out(pan)); o.start(t); o.stop(t + dur + 0.05);
 }
-function noise(dur = .3, vol = .12, freq = 800, delay = 0){
+function noise(dur = .3, vol = .12, freq = 800, delay = 0, pan = 0){
   if (!actx) return;
   const t = actx.currentTime + delay, len = Math.floor(actx.sampleRate * dur), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
   const n = actx.createBufferSource(); n.buffer = buf; const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
-  const g = actx.createGain(); g.gain.value = vol; n.connect(f).connect(g).connect(actx.destination); n.start(t);
+  const g = actx.createGain(); g.gain.value = vol; n.connect(f).connect(g).connect(out(pan)); n.start(t);
 }
 const sfx = {
   door(){ beep(70, .9, 'sawtooth', .07, -30); beep(110, .6, 'triangle', .06, -50, .1); },
@@ -267,7 +283,13 @@ const sfx = {
   rewind(){ [900, 700, 500, 350].forEach((f, i) => beep(f, .08, 'sine', .08, 0, i * .05)); },
   bolt(){ beep(2200, .2, 'square', .05, -1800); },
   blast(){ noise(1, .3, 300); beep(200, 1, 'sine', .15, -150); },
+  ui(){ beep(900, .04, 'triangle', .05); beep(1350, .05, 'triangle', .03, 0, .03); },
+  pulse(v = 1){ beep(55, .16, 'sine', .22 * v, -15); beep(48, .2, 'sine', .16 * v, -12, .17); },
+  creak(pan = 0){ const f = 140 + Math.random() * 120; beep(f, .9, 'sawtooth', .025, f * .35, 0, pan); beep(f * 1.5, .7, 'triangle', .015, -f * .4, .25, pan); },
+  gust(pan = 0){ noise(2.2, .05, 600, 0, pan); },
 };
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('button') && !e.target.closest('#touch')) sfx.ui(); });
+document.addEventListener('change', e => { if (e.target.tagName === 'SELECT') sfx.ui(); });
 
 /* ===================== renderer / scene ===================== */
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -651,7 +673,8 @@ function EAPI(){
   if (_api) return _api;
   _api = {
     THREE, scene, mat, glow, canvasTex, tiledTex, pbr, boxUV, symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
-    makeChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE, GMULT,
+    makeChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE,
+    get GMULT(){ return GMULT; },
     get P(){ return curP; },
     get elapsed(){ return S.elapsed; },
     get phase(){ return phase; },
@@ -661,7 +684,7 @@ function EAPI(){
     soul: idx => idx < 0 ? -1 : SOLO() ? (S.soulFlip ? 1 : 0) : idx,
     me, other,
     ev, toast, flash,
-    freeze(idx, secs = FREEZE, msg = ''){ if (S.frozen[idx] > 0) return; S.frozen[idx] = secs; S.freezes++; ev('freeze', msg, idx); },
+    freeze(idx, secs = FREEZE, msg = ''){ if (S.frozen[idx] > 0) return; S.frozen[idx] = secs; S.freezes++; S.mercy = Math.min(4, (S.mercy || 0) + 1); ev('freeze', msg, idx); },
     isFrozen: idx => S.frozen[idx] > 0,
     teleport(idx, x, z){
       if (idx === myIdx()){ me.pos.set(x, 0, z); me.slide = null; me.dash = null; me.grap = null; }
@@ -1259,7 +1282,7 @@ function playEv(e){
     case 'door': sfx.door(); break;
     case 'chime': sfx.chime(e.a); break;
     case 'wrong': sfx.wrong(); break;
-    case 'freeze': sfx.freeze(); if (e.a === myIdx()) flash(); break;
+    case 'freeze': sfx.freeze(); if (e.a === myIdx()){ flash(); shakeT = .5; } break;
     case 'thaw': sfx.thaw(); break;
     case 'pick': sfx.pick(); break;
     case 'place': sfx.place(); break;
@@ -1318,6 +1341,7 @@ function hostTick(dt){
   S.bolts = S.bolts.filter(b => b.t > 0);
   if (S.sb){ S.sb.t -= dt; if (S.sb.t <= 0) S.sb = null; }
   const n = names();
+  GMULT = BASE_GMULT * pressure(dt, P);
   for (const g of GHOSTS) updateGhost(g, dt, P, n);
   for (const p of P){
     if (S.frozen[p.idx] <= 0) continue;
@@ -1331,7 +1355,15 @@ function hostTick(dt){
     if (ri >= 0 && ri === roomAt(P[1].pos.z)) resetRoom(ri);
     else S.frozen = [Math.min(S.frozen[0], 2), Math.min(S.frozen[1], 2)];
   }
-  if (P.every(p => p.pos.z < WIN_Z)) setPhase('won');
+  // a dropped partner must rejoin before the level can be won
+  if ((SOLO() || P.length === 2) && P.every(p => p.pos.z < WIN_Z)) setPhase('won');
+}
+// Ghost pressure eases a little after recent freezes (mercy decays over ~20 s each) and while either player
+// is in a room with a puzzle panel up, so ciphers and talking things through don't end in back-to-back wipes.
+function pressure(dt, P){
+  S.mercy = Math.max(0, (S.mercy || 0) - dt / 20);
+  const puzzling = P.some(p => { const ri = roomAt(p.pos.z), R = ROOMS[ri]; try { return !!(R && R.def.panel && R.def.panel(S.rs[ri], R, E)); } catch { return false; } });
+  return clamp(1 - S.mercy * .07 - (puzzling ? .12 : 0), .7, 1);
 }
 function inBounds(g, pos, m = .6){ return pos.x > g.b[0] - m && pos.x < g.b[1] + m && pos.z > g.b[2] - m && pos.z < g.b[3] + m; }
 function stepToward(g, tx, tz, sp, dt){
@@ -1386,41 +1418,81 @@ function ghostTouch(g, targets, n, rad = .95){
 let peer = null, conn = null, code = '';
 function send(o){ try { if (conn && conn.open) conn.send(o); } catch {} }
 function randomCode(){ const A = 'ABCDEFGHJKMNPQRSTUVWXYZ'; let s = ''; for (let i = 0; i < 4; i++) s += A[Math.floor(Math.random() * A.length)]; return s; }
-function hostGame(){
+// useCode: re-host under the same code after a refresh. The signalling server can hold the old id for a while,
+// so keep retrying it (about a minute) before giving up and picking a fresh code.
+function hostGame(useCode = null, tries = 0){
   if (typeof Peer === 'undefined'){ status('Could not load the network library. Check your connection.'); return; }
-  role = 'host'; applyColors(); code = randomCode();
-  $('roomCode').textContent = code; $('lobbyMsg').textContent = 'Connecting…';
+  role = 'host'; applyColors(); code = useCode || randomCode();
+  $('roomCode').textContent = code; $('lobbyMsg').textContent = useCode ? `Reopening game ${code}…` : 'Connecting…';
   $('btnStart').disabled = true; $('btnStart').textContent = 'Enter';
   show('lobby'); phase = 'lobby';
   peer = new Peer(PREFIX + code);
-  peer.on('open', () => { $('lobbyMsg').textContent = 'Tell your partner to enter this code and tap Join.'; });
-  peer.on('connection', c => { if (conn && conn.open){ c.on('open', () => c.close()); return; } conn = c; wireConn(); });
-  peer.on('error', e => { if (e.type === 'unavailable-id'){ peer.destroy(); hostGame(); return; } $('lobbyMsg').textContent = 'Network error: ' + e.type; });
+  peer.on('open', () => { $('lobbyMsg').textContent = resume ? `Waiting for ${remoteName} to rejoin code ${code}… (or share it again)` : 'Tell your partner to enter this code and tap Join.'; });
+  peer.on('connection', c => {
+    // a refreshed partner can arrive before their old link has timed out: take over a link that has gone quiet
+    if (conn && conn.open && performance.now() - lastRecv < 4000){ c.on('open', () => c.close()); return; }
+    const old = conn; conn = c; wireConn(); if (old){ try { old.close(); } catch {} }
+  });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id'){
+      peer.destroy(); peer = null;
+      if (useCode && tries < 20){ $('lobbyMsg').textContent = `Reopening game ${code}… (${tries + 1})`; setTimeout(() => { if (role === 'host' && phase === 'lobby' && !peer) hostGame(useCode, tries + 1); }, 3000); }
+      else hostGame();
+      return;
+    }
+    $('lobbyMsg').textContent = 'Network error: ' + e.type;
+  });
   peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
+}
+let rejoinCode = '', rejoinTries = 0;
+function tryRejoin(){
+  if (!rejoinCode || role !== null || phase !== 'menu') return;
+  if (rejoinTries++ >= 15){ status('Could not reconnect. Ask your partner for their code.'); rejoinCode = ''; return; }
+  joinGame(rejoinCode); status(`Lost connection — reconnecting to ${rejoinCode}… (${rejoinTries})`);
 }
 function joinGame(c){
   if (typeof Peer === 'undefined'){ status('Could not load the network library. Check your connection.'); return; }
   role = 'guest'; applyColors(); code = c; status('Connecting to ' + c + '…');
   peer = new Peer();
+  const p0 = peer;
   peer.on('open', () => { conn = peer.connect(PREFIX + c, { reliable: true }); wireConn(); });
-  peer.on('error', e => { status(e.type === 'peer-unavailable' ? 'No game found with code ' + c + '.' : 'Network error: ' + e.type); cleanupNet(); role = null; });
-  setTimeout(() => { if (role === 'guest' && phase === 'menu' && !(conn && conn.open)){ status('Could not connect. Try both on the same Wi-Fi.'); cleanupNet(); role = null; } }, 15000);
+  peer.on('error', e => { if (peer !== p0) return; status(e.type === 'peer-unavailable' ? 'No game found with code ' + c + '.' : 'Network error: ' + e.type); cleanupNet(); role = null; if (rejoinCode) setTimeout(tryRejoin, 4000); });
+  setTimeout(() => { if (peer === p0 && role === 'guest' && phase === 'menu' && !(conn && conn.open)){ status('Could not connect. Try both on the same Wi-Fi.'); cleanupNet(); role = null; if (rejoinCode) setTimeout(tryRejoin, 1000); } }, 15000);
 }
+/* ----- resume after a refresh or dropped connection: sessionStorage survives a reload of this tab only ----- */
+let resume = null, sessT = 0;
+const sess = {
+  get(){ try { const v = JSON.parse(sessionStorage.getItem('hm_sess') || 'null'); return v && v.lv === LEVEL && Date.now() - v.ts < 15 * 60e3 ? v : null; } catch { return null; } },
+  save(){ try { sessionStorage.setItem('hm_sess', JSON.stringify({ lv: LEVEL, role, code: role === 'solo' ? '' : code, room: Math.max(0, roomAt(me.pos.z)), el: r2(S.elapsed), fz: S.freezes, partner: remoteName, ts: Date.now() })); } catch {} },
+  clear(){ try { sessionStorage.removeItem('hm_sess'); } catch {} }
+};
+function applyResume(){ if (!resume) return; startGame(resume.room); S.elapsed = resume.el || 0; S.freezes = resume.fz || 0; resume = null; }
+let lastRecv = 0;
 function wireConn(){
-  const onOpen = () => send({ t: 'hi', n: myName, sk: mySkin() });
-  if (conn.open) onOpen(); else conn.on('open', onOpen);
-  conn.on('data', onData); conn.on('close', onDisconnect); conn.on('error', onDisconnect);
+  const c = conn, onOpen = () => send({ t: 'hi', n: myName, sk: mySkin() });
+  if (c.open) onOpen(); else c.on('open', onOpen);
+  c.on('data', m => { if (c === conn) onData(m); }); c.on('close', () => onDisconnect(c)); c.on('error', () => onDisconnect(c));
 }
 function onData(m){
   if (!m || typeof m !== 'object') return;
+  lastRecv = performance.now();
   switch (m.t){
     case 'hi':
       remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
-      if (role === 'host'){ send({ t: 'welcome', n: myName, lv: LEVEL, sk: mySkin() }); $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; sfx.chime(1); }
+      if (role === 'host'){
+        send({ t: 'welcome', n: myName, lv: LEVEL, sk: mySkin() }); sfx.chime(1);
+        if (phase === 'play'){
+          // partner rejoined mid-level: drop them at the start of the room you're in
+          toast(`${remoteName} is back!`);
+          setTimeout(() => { if (phase !== 'play' || !(conn && conn.open)) return; const R = ROOMS[Math.max(0, roomAt(me.pos.z))], sp = R.spawnW[1]; E.teleport(1, sp[0], sp[1]); }, 900);
+        } else if (resume) applyResume();
+        else { $('lobbyMsg').textContent = `${remoteName} is here. Ready when you are…`; $('btnStart').disabled = false; }
+      }
       break;
     case 'welcome':
       if (m.lv && m.lv !== LEVEL){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(code); return; }
       remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
+      if (rejoinCode) status(''); rejoinCode = ''; rejoinTries = 0;
       $('roomCode').textContent = code; $('lobbyMsg').textContent = `Connected to ${remoteName}. Waiting for them to start…`;
       $('btnStart').disabled = true; $('btnStart').textContent = 'Waiting for host';
       show('lobby'); phase = 'lobby';
@@ -1430,7 +1502,7 @@ function onData(m){
       if (role !== 'host') break;
       other.target.set(m.p[0], 0, m.p[1]); other.ry = m.p[2]; other.moving = !!m.p[3]; other.running = !!m.p[4]; other.dashing = m.p[5] || 0; other.sight = m.p[6] || 0; other.oil = m.p[7] ?? 1;
       other.inp = m.in || [0, 0, 0];
-      if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
+      if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); if (phase === 'play') otherChar.group.visible = true; }
       break;
     case 'ab': if (role === 'host') hostAbility(1, m); break;
     case 'ping': addPing(m.x, m.z, m.w, !!m.sw); sfx.ping(); if (role === 'host') hostPing(m.w, m.x, m.z); if (m.sw) toast(`${remoteName} wants to SWAP — press G or tap them to accept!`); break;
@@ -1455,15 +1527,22 @@ function onData(m){
     case 'ev': if (role === 'guest' || m.k === 'fallo' || m.k === 'zap' || m.k === 'respo') playEv(m); break;
   }
 }
-function onDisconnect(){
-  if (!conn) return;
+function onDisconnect(c){
+  if (!conn || (c && c !== conn)) return;
   conn = null; other.seen = false; otherChar.group.visible = false;
-  if (role === 'host'){
+  if (role === 'host' && phase === 'play'){
+    // keep the level running; the peer stays open so they can rejoin (a refreshed tab offers Resume)
+    toast(`${remoteName} disconnected — they can rejoin with code ${code}.`);
+  } else if (role === 'host'){
     phase = 'lobby'; hideGameUI();
     $('roomCode').textContent = code; $('btnStart').disabled = true; $('btnStart').textContent = 'Enter';
     $('lobbyMsg').textContent = `${remoteName} left. They can rejoin with the same code.`;
     show('lobby');
-  } else if (role === 'guest') toMenu('Lost connection to the host.');
+  } else if (role === 'guest'){
+    const c = code, wasIn = phase === 'play' || phase === 'won';
+    toMenu('Lost connection to the host.');
+    if ((wasIn || rejoinCode) && c){ if (wasIn) rejoinTries = 0; rejoinCode = c; setTimeout(tryRejoin, 1500); }
+  }
 }
 function cleanupNet(){ try { conn && conn.close(); } catch {} try { peer && peer.destroy(); } catch {} conn = null; peer = null; }
 function myP(){ return [r2(me.pos.x), r2(me.pos.z), r2(me.ry), me.moving ? 1 : 0, me.running ? 1 : 0, (me.dash || me.grap) ? 1 : 0, me.sight > 0 ? 1 : 0, r2(me.oil)]; }
@@ -1489,7 +1568,7 @@ let toastT = 0, storyT = 0, roomTime = 0, lastRoom = -1, hintT = 0;
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); toastT = 3.2; }
 function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('btnRespawn').hidden = true; $('btnSkip').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
 function chosenStart(){ return clamp(parseInt($('startRoom').value) || 0, 0, Math.min(reached, ROOMS.length - 1)); }
-function startGame(startRoom = 0){ resetWorld(); solveUpTo(startRoom); setPhase('play'); }
+function startGame(startRoom = 0){ resetWorld(); S.mercy = 0; GMULT = BASE_GMULT; solveUpTo(startRoom); setPhase('play'); }
 function spawn(){ fallCD = 0; soloAnchor = null; S.soulFlip = 0; if (SOLO()) meChar.bodyMat.color.setHex(COLORS[0]); const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
 function setPhase(p){
   const prev = phase; phase = p;
@@ -1507,6 +1586,7 @@ function setPhase(p){
     sfx.boo();
   }
   if (p === 'won'){
+    sess.clear();
     sfx.win(); $('touch').hidden = true; $('frost').classList.remove('on');
     const t = S.elapsed, full = S.startRoom === 0, bk = 'hm_best_L' + LEVEL;
     const best = parseFloat(store.get(bk, '0')) || 0, newBest = full && (!best || t < best);
@@ -1633,9 +1713,25 @@ $('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnJoin')
 $('code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
 $('btnSolo').onclick = () => { unlockAudio(); myName = $('name').value.trim().slice(0, 12) || 'You'; role = 'solo'; applyColors(); startGame(chosenStart()); };
 $('btnStart').onclick = () => { unlockAudio(); if (role === 'host' && conn && conn.open) startGame(chosenStart()); };
-$('btnLeave').onclick = () => toMenu();
-$('btnMenu').onclick = () => toMenu();
-$('btnExit').onclick = () => toMenu();
+$('btnLeave').onclick = () => { sess.clear(); resume = null; rejoinCode = ''; toMenu(); };
+$('btnMenu').onclick = () => { sess.clear(); toMenu(); };
+$('btnExit').onclick = () => { sess.clear(); toMenu(); };
+{
+  const s = sess.get();
+  if (s){
+    const where = `room ${s.room + 1}, ${ROOMS[s.room] ? ROOMS[s.room].name : ''}`;
+    $('btnResume').hidden = false;
+    $('btnResume').textContent = s.role === 'solo' ? `↻ Resume solo — ${where}` : s.role === 'host' ? `↻ Reopen game ${s.code} — ${where}` : `↻ Rejoin ${s.code} — ${where}`;
+    $('btnResume').onclick = () => {
+      unlockAudio(); if (s.role !== 'solo' && !needName()) return;
+      $('btnResume').hidden = true; status('');
+      if (s.partner) remoteName = s.partner;
+      if (s.role === 'solo'){ myName = $('name').value.trim().slice(0, 12) || 'You'; role = 'solo'; applyColors(); resume = s; applyResume(); }
+      else if (s.role === 'host'){ resume = s; hostGame(s.code); }
+      else { rejoinCode = s.code; rejoinTries = 0; tryRejoin(); }
+    };
+  }
+}
 $('btnRespawn').onclick = e => { e.currentTarget.blur(); respawnRoom(); };
 $('btnSkip').onclick = e => { e.currentTarget.blur(); skipRoom(); };
 // skip the room you're in: it counts as solved and everyone in it (or behind it) hops to the start of the next room
@@ -1749,7 +1845,7 @@ function updateWorldVisuals(dt, t){
   for (let i = PINGS.length - 1; i >= 0; i--){ const p = PINGS[i]; p.t -= dt; const s = 1 + (4 - p.t) * .15; p.ring.scale.setScalar(s); p.g.children.forEach(c => c.material.opacity = Math.max(0, p.t / 4)); if (p.t <= 0){ scene.remove(p.g); PINGS.splice(i, 1); } }
   for (let i = fxLights.length - 1; i >= 0; i--){ const f = fxLights[i]; f.t -= dt; f.l.intensity = Math.max(0, f.t / .45 * 30); f.s.scale.setScalar(1 + (.45 - f.t) * 12); f.s.material.opacity = Math.max(0, f.t / .45 * .45); if (f.t <= 0){ scene.remove(f.l); scene.remove(f.s); fxLights.splice(i, 1); } }
   // ghosts
-  let nearest = 99;
+  let nearest = 99, ng = null;
   spectralMat.emissiveIntensity = me.sight > 0 ? 1.8 : .6; spectralMat.color.setHex(me.sight > 0 ? 0xeee6ff : 0x9a6bff);
   for (const g of GHOSTS){
     if (role === 'guest'){ g.x += (g.tx - g.x) * damp(10, dt); g.z += (g.tz - g.z) * damp(10, dt); }
@@ -1758,15 +1854,45 @@ function updateWorldVisuals(dt, t){
     let d = g.ry - m.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); m.rotation.y += d * damp(g.snap ? 30 : 8, dt);
     const hidden = g.invisible && !(me.sight > 0) && !(g.revealed && g.revealed(S.rs[g.room]));
     m.visible = g.y < 11 && !hidden;
-    if (m.visible && !g.harmless) nearest = Math.min(nearest, Math.hypot(g.x - me.pos.x, g.z - me.pos.z));
-    else if (hidden) nearest = Math.min(nearest, Math.hypot(g.x - me.pos.x, g.z - me.pos.z) + 1);
+    const gd = Math.hypot(g.x - me.pos.x, g.z - me.pos.z) + (hidden ? 1 : 0);
+    if ((m.visible && !g.harmless || hidden) && gd < nearest){ nearest = gd; ng = g; }
   }
-  if (whisperGain) whisperGain.gain.value = phase === 'play' ? clamp((7 - nearest) / 7, 0, 1) * .07 : 0;
-  if (droneGain) droneGain.gain.value = phase === 'menu' ? .02 : .045;
-  // darkness: dim the world while you're in a dark room
+  updateAmbience(dt, nearest, ng);
+  // darkness: dim the world while you're in a dark room; lights stutter when a ghost is close (and now and then anyway)
   const R = ROOMS[roomAt(me.pos.z)], dark = R && R.def.dark ? (typeof R.def.dark === 'function' ? R.def.dark(S.rs[R.i], R, E) : R.def.dark) : 0;
-  hemi.intensity += (AMB * (1 - dark * .9) - hemi.intensity) * damp(3, dt);
-  moon.intensity += (.45 * (1 - dark) - moon.intensity) * damp(3, dt);
+  hemiBase += (AMB * (1 - dark * .9) - hemiBase) * damp(3, dt);
+  moonBase += (.45 * (1 - dark) - moonBase) * damp(3, dt);
+  const flk = flicker(dt, nearest);
+  hemi.intensity = hemiBase * flk; moon.intensity = moonBase * flk;
+}
+let hemiBase = AMB, moonBase = .45, beatT = 0, creakT = 12, flickT = 30, flickOn = 0, shakeT = 0;
+const camShake = new THREE.Vector3();
+const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function updateAmbience(dt, nearest, ng){
+  const play = phase === 'play', close = play ? clamp((7 - nearest) / 7, 0, 1) : 0;
+  if (whisperGain) whisperGain.gain.value = close * .07;
+  if (whisperPan && ng){
+    // pan toward the ghost relative to the camera's right-hand side (the camera sits behind you at CAM.yaw)
+    const dx = ng.x - me.pos.x, dz = ng.z - me.pos.z, d = Math.hypot(dx, dz) || 1;
+    whisperPan.pan.value = clamp((dx * Math.cos(CAM.yaw) - dz * Math.sin(CAM.yaw)) / d, -1, 1) * .8;
+  }
+  if (droneGain) droneGain.gain.value = phase === 'menu' ? .02 : .045;
+  if (windGain) windGain.gain.value = play ? .025 + Math.max(0, Math.sin(clockT * .21) * Math.sin(clockT * .07)) * .05 : .012;
+  $('dread').style.opacity = play ? (clamp((5 - nearest) / 4, 0, 1) * .85).toFixed(3) : '0';
+  if (!play) return;
+  // heartbeat: starts within 4.5 m and quickens to ~130 bpm when a ghost is on top of you
+  if (nearest < 4.5 && !myFrozen()){ beatT -= dt; if (beatT <= 0){ const k = 1 - nearest / 4.5; sfx.pulse(.5 + k * .5); beatT = 1.05 - k * .6; } } else beatT = .2;
+  creakT -= dt;
+  if (creakT <= 0){ creakT = 9 + Math.random() * 14; Math.random() < .65 ? sfx.creak(Math.random() * 1.6 - .8) : sfx.gust(Math.random() * 1.6 - .8); }
+  if (nearest < 1.6 && shakeT < .15) shakeT = .15;
+}
+function flicker(dt, nearest){
+  if (phase !== 'play') return 1;
+  flickT -= dt;
+  if (flickT <= 0){ flickT = 25 + Math.random() * 30; flickOn = .35; }
+  if (flickOn > 0){ flickOn -= dt; return Math.random() < .5 ? .35 : 1; }
+  if (nearest < 3.5 && Math.random() < (3.5 - nearest) / 3.5 * .12) return .55 + Math.random() * .3;
+  return 1;
 }
 function updateCharVisuals(c, frozenSec){
   const fr = frozenSec > 0;
@@ -1815,6 +1941,7 @@ function tick(dt){
     }
     const rm = roomAt(me.pos.z);
     if (phase === 'play' && rm > reached && rm < ROOMS.length){ reached = rm; store.set(reachKey, String(reached)); }
+    sessT -= dt; if (phase === 'play' && sessT <= 0 && rm >= 0){ sessT = 2; sess.save(); }
   }
   updateWorldVisuals(dt, clockT);
   if (inGame){
@@ -1824,7 +1951,10 @@ function tick(dt){
     const look = 1.2 * Math.min(1, CAM.zoom);
     camLook.set(me.pos.x - sy * look, .8 + (1 - Math.min(1, CAM.zoom)) * .5, me.pos.z - cy * look);
     camPos.set(me.pos.x + sy * Math.cos(P) * D, Math.sin(P) * D + .4, me.pos.z + cy * Math.cos(P) * D);
-    camera.position.lerp(camPos, damp(5, dt)); camera.lookAt(camLook);
+    camera.position.sub(camShake).lerp(camPos, damp(5, dt)); camera.lookAt(camLook);
+    // shake is a small offset added after lookAt and removed next frame, so it never drifts the follow camera
+    camShake.set(0, 0, 0);
+    if (shakeT > 0){ shakeT -= dt; if (!calm){ const a = Math.min(1, shakeT / .5) * .12; camShake.set((Math.random() - .5) * a, (Math.random() - .5) * a, (Math.random() - .5) * a); camera.position.add(camShake); } }
   } else {
     const a = clockT * .08;
     camera.position.set(Math.sin(a) * 9, 13, 2 + Math.cos(a) * 9); camera.lookAt(0, 0, 0);
