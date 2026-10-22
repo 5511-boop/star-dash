@@ -1342,7 +1342,16 @@ function hostTick(dt){
   if (S.sb){ S.sb.t -= dt; if (S.sb.t <= 0) S.sb = null; }
   const n = names();
   GMULT = BASE_GMULT * pressure(dt, P);
-  for (const g of GHOSTS) updateGhost(g, dt, P, n);
+  // walls, closed doors, uncracked walls and ghost-walls stop every enemy (low walls can still be crossed).
+  // Exempt: ghosts drifting home after a freeze (harmless until they rest), ones a room marks throughWalls, and
+  // ones already overlapping something (crows on perches, reflections in mirrors) until they've stepped clear of it.
+  const solid = GHOSTS.length ? colliders(-1, { vaulting: true }) : null;
+  const overlaps = g => solid.some(b => Math.hypot(g.x - clamp(g.x, b.x1, b.x2), g.z - clamp(g.z, b.z1, b.z2)) < PR * .8);   // .8: one resting against a wall is still "free"
+  for (const g of GHOSTS){
+    const free = !g.ret && !g.throughWalls && g.y < 1 && !overlaps(g);
+    updateGhost(g, dt, P, n);
+    if (free) resolve(g, solid);
+  }
   for (const p of P){
     if (S.frozen[p.idx] <= 0) continue;
     S.frozen[p.idx] -= dt;
