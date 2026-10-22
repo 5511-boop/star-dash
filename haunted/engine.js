@@ -239,7 +239,8 @@ if (isTouch) document.body.classList.add('touch');
 // Layers: a detuned drone, a whisper (band-passed noise) that swells and pans toward the nearest ghost, a heartbeat
 // that quickens as one closes in, low wind, and the odd creak from somewhere in the house (see updateAmbience).
 // Everything routes through master; one-shot effects go via sfxBus and the looping layers via ambBus (menu volume sliders).
-let actx = null, droneGain = null, whisperGain = null, whisperPan = null, windGain = null, master = null, sfxBus = null, ambBus = null;
+let actx = null, droneGain = null, whisperGain = null, whisperPan = null, master = null, sfxBus = null, ambBus = null;
+let themeGain = null, noiseBuf = null, brownBuf = null, ambOut = null;   // level soundscape (see THEMES below)
 function applyAudio(){ if (!master) return; master.gain.value = OPT.vol; sfxBus.gain.value = OPT.sfx; ambBus.gain.value = OPT.amb; }
 function unlockAudio(){
   try {
@@ -257,10 +258,10 @@ function unlockAudio(){
       whisperGain = actx.createGain(); whisperGain.gain.value = 0;
       whisperPan = actx.createStereoPanner ? actx.createStereoPanner() : null;
       n.connect(f).connect(whisperGain); (whisperPan ? whisperGain.connect(whisperPan) : whisperGain).connect(ambBus); n.start();
-      const w = actx.createBufferSource(); w.buffer = buf; w.loop = true; w.playbackRate.value = .5;
-      const wf = actx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 420;
-      windGain = actx.createGain(); windGain.gain.value = 0;
-      w.connect(wf).connect(windGain).connect(ambBus); w.start();
+      noiseBuf = buf; brownBuf = actx.createBuffer(1, len, actx.sampleRate);
+      { const b = brownBuf.getChannelData(0); let v = 0; for (let i = 0; i < len; i++){ v = (v + .02 * (Math.random() * 2 - 1)) / 1.02; b[i] = v * 3.5; } }
+      themeGain = actx.createGain(); themeGain.connect(ambBus);
+      try { THEME.build && THEME.build(); } catch (e) { console.warn('soundscape', e); }
     }
     if (actx.state === 'suspended') actx.resume();
   } catch {}
@@ -268,8 +269,9 @@ function unlockAudio(){
 // any tap or key unlocks audio, including pages reached by the auto-join redirect (no button press there)
 addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListener('keydown', unlockAudio);
 function out(pan){
-  if (!pan || !actx.createStereoPanner) return sfxBus;
-  const p = actx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(sfxBus); return p;
+  const dst = ambOut || sfxBus;   // soundscape one-shots (asAmb) go to the ambience bus instead
+  if (!pan || !actx.createStereoPanner) return dst;
+  const p = actx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(dst); return p;
 }
 function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0, pan = 0){
   if (!actx) return;
@@ -325,6 +327,124 @@ const sfx = {
 };
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('button') && !e.target.closest('#touch')) sfx.ui(); });
 document.addEventListener('change', e => { if (e.target.tagName === 'SELECT') sfx.ui(); });
+
+/* ----- level soundscapes: each level gets its own looping beds (noise / pads), a steady pulse (clock, rails, heart)
+   and random one-shots, all synthesized. They play on the menu (quieter) and in the level, through themeGain. ----- */
+const rnd = (a, b) => a + Math.random() * (b - a), rpan = () => rnd(-.8, .8), st = (f, s) => f * Math.pow(2, s / 12);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function asAmb(f){ ambOut = themeGain; try { f(); } finally { ambOut = null; } }
+function bed(o){   // looping filtered noise: o.f filter freq, o.type, o.q, o.g gain, o.lfo swell rate (Hz), o.sweep [depth Hz, rate Hz], o.brown
+  const s = actx.createBufferSource(); s.buffer = o.brown ? brownBuf : noiseBuf; s.loop = true; s.playbackRate.value = o.rate || 1;
+  const f = actx.createBiquadFilter(); f.type = o.type || 'lowpass'; f.frequency.value = o.f || 600; f.Q.value = o.q || .7;
+  const g = actx.createGain(); g.gain.value = o.g;
+  s.connect(f).connect(g).connect(themeGain); s.start();
+  if (o.lfo){ const l = actx.createOscillator(), lg = actx.createGain(); l.frequency.value = o.lfo; lg.gain.value = o.g * (o.depth ?? .7); l.connect(lg).connect(g.gain); l.start(); }
+  if (o.sweep){ const l = actx.createOscillator(), lg = actx.createGain(); l.frequency.value = o.sweep[1]; lg.gain.value = o.sweep[0]; l.connect(lg).connect(f.frequency); l.start(); }
+}
+function pad(freqs, o = {}){   // sustained chord, each note a detuned pair, through a lowpass; o.trem = tremolo rate
+  const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp || 900;
+  const g = actx.createGain(); g.gain.value = o.g || .006; f.connect(g).connect(themeGain);
+  for (const fr of freqs) for (const d of [-1, 1]){ const os = actx.createOscillator(); os.type = o.type || 'sine'; os.frequency.value = fr; os.detune.value = d * (o.det ?? 6); os.connect(f); os.start(); }
+  if (o.trem){ const l = actx.createOscillator(), lg = actx.createGain(); l.frequency.value = o.trem; lg.gain.value = (o.g || .006) * .6; l.connect(lg).connect(g.gain); l.start(); }
+}
+const mel = (base, seq, step, type, vol, pan = 0, dur) => seq.forEach((s, i) => { if (s !== null) beep(st(base, s), dur || step * 1.6, type, vol, 0, i * step, pan); });
+const A = {   // one-shot sound library
+  bell(f, p = 0, v = .035){ beep(f, 3.5, 'sine', v, 0, 0, p); beep(f * 2.76, 2.2, 'sine', v * .35, 0, 0, p); beep(f * 5.4, 1.2, 'sine', v * .15, 0, 0, p); beep(f * .5, 4, 'sine', v * .5, 0, 0, p); },
+  drip(p){ const f = rnd(1200, 2000); beep(f, .07, 'sine', .035, -f * .6, 0, p); beep(f * .9, .07, 'sine', .012, -f * .5, .28, -p); },
+  gull(p){ beep(rnd(1600, 2000), .3, 'sine', .02, -700, 0, p); beep(rnd(1500, 1900), .35, 'sine', .018, -800, .38, p); },
+  foghorn(){ beep(98, 3, 'sawtooth', .016, -3); beep(147, 3, 'sawtooth', .008, -4); },
+  crow(p){ [0, .32].forEach(d => beep(rnd(500, 620), .22, 'sawtooth', .018, -220, d, p)); },
+  croak(p){ const f = rnd(85, 120); for (let i = 0; i < 3; i++) beep(f, .12, 'sawtooth', .022, -25, i * .16, p); },
+  crickets(p){ for (let i = 0; i < 8; i++) beep(4200, .025, 'sine', .008, 0, i * .06 + (i > 3 ? .2 : 0), p); },
+  bubble(p){ const n = 2 + Math.floor(Math.random() * 4); for (let i = 0; i < n; i++) beep(rnd(200, 500), .1, 'sine', .03, rnd(300, 700), i * rnd(.08, .2), p); },
+  whistle(p){ [740, 932, 1108].forEach((f, i) => beep(f, 1.8, 'triangle', .016 - i * .003, -30, 0, p)); },
+  choir(base, p){ [0, 3, 7].forEach(s => beep(st(base, s), 5, 'triangle', .008, st(base, s) * .006, 0, p)); },
+  soprano(p){ mel(rnd(520, 660), [0, 1, 0, -2, 0, 3, null, -1], .55, 'sine', .018, p, .9); },
+  clang(p){ beep(rnd(480, 560), 1.2, 'triangle', .028, -15, 0, p); beep(1350, .7, 'sine', .012, 0, 0, p); noise(.05, .05, 5000, 0, p); },
+  bloop(p){ beep(rnd(60, 90), .35, 'sine', .05, rnd(40, 90), 0, p); },
+  whale(p){ const f = rnd(120, 180); beep(f, 3.5, 'sine', .028, f * rnd(-.4, .3), 0, p); beep(f * 1.5, 3, 'sine', .01, f * .2, .4, p); },
+  sonar(){ beep(1500, 1, 'sine', .02); beep(1500, 1, 'sine', .006, 0, .9); },
+  pages(p){ for (let i = 0; i < 3; i++) noise(.2, .035, 3500, i * .18, p); },
+  musicbox(base, seq, p, step = .32){ mel(base, seq, step, 'triangle', .016, p, .5); },
+  ratchet(p){ for (let i = 0; i < 6; i++) beep(2600, .02, 'square', .01, 0, i * .05, p); },
+  squeak(p){ beep(rnd(2000, 2600), .15, 'sine', .01, rnd(300, 800), 0, p); },
+  chimes(p){ for (let i = 0; i < 5; i++) beep(st(1046, pick([0, 2, 4, 7, 9])), 1.2, 'triangle', .011, 0, i * rnd(.1, .3), p); },
+  birds(p){ for (let i = 0; i < 4; i++) beep(rnd(2500, 3500), .08, 'sine', .01, rnd(600, 1200), i * .12, p); },
+  sand(p){ noise(1.5, .025, 2500, 0, p); },
+  oud(p){ const s = [0, 1, 4, 5, 7, 8, 7, 5, 4, 1]; const k = Math.floor(Math.random() * 4); mel(147, s.slice(k, k + 6), .22, 'sawtooth', .008, p, .4); },
+  scarab(p){ for (let i = 0; i < 5; i++) beep(3000, .015, 'square', .008, 0, i * rnd(.04, .09), p); },
+  pickaxe(p){ beep(2300, .18, 'triangle', .018, 0, 0, p); beep(2300, .18, 'triangle', .006, 0, .35, -p); },
+  canary(p){ for (let i = 0; i < 6; i++) beep(rnd(3200, 3800), .05, 'sine', .01, 400, i * .07, p); },
+  rumble(){ noise(2.5, .06, 120); },
+  whisper(p){ noise(1.2, .018, 1400, 0, p); },
+  shimmer(p){ for (let i = 0; i < 4; i++) beep(rnd(2000, 4200), .9, 'sine', .007, 0, i * .15, p); },
+  rise(p){ beep(200, 1.2, 'sine', .018, 600, 0, p); },
+  crackle(p){ const n = 3 + Math.floor(Math.random() * 5); for (let i = 0; i < n; i++) noise(.02, .045, 6000, rnd(0, .6), p); },
+  waltz(p){ mel(rnd(330, 392), [0, 4, 7, 4, 0, -1, 2, 7, null], .4, 'triangle', .013, p, .6); },
+  calliope(p){ mel(rnd(240, 300), [0, 3, 7, 6, 3, null, 0, -1], .28, 'square', .01, p); },
+  laughter(p){ [420, 380, 440, 360, 300].forEach((f, i) => beep(f * rnd(.6, .8), .12, 'sawtooth', .013, -40, i * .11, p)); },
+  creak: p => sfx.creak(p), gust: p => sfx.gust(p),
+};
+const LULLABY = [0, 4, 7, 12, 7, 4, 0, null, 2, 5, 9, 5];
+// per level: build() makes the looping layers, ev = [[fn, weight], ...] fired every `every` seconds, pulse = [interval, fn(k)]
+const THEMES = {
+  2: { build(){ bed({ f: 380, g: .02, lfo: .07 }); pad([110, st(110, 3), st(110, 7)], { type: 'triangle', g: .005, lp: 700, trem: .25 }); },
+       ev: [[A.calliope, 1], [A.laughter, .6], [A.creak, .6]], every: [6, 13] },                                       // Grimwood Carnival
+  3: { build(){ bed({ f: 500, g: .014, lfo: .05 }); },
+       pulse: [1, k => beep(k % 2 ? 1500 : 1100, .035, 'square', .02)],
+       ev: [[p => A.bell(rnd(150, 210), p), 1], [p => { noise(1.4, .02, 700, 0, p); A.ratchet(p); }, .7], [A.creak, .5]], every: [8, 16] },   // Clocktower
+  4: { build(){ bed({ brown: 1, f: 500, g: .05, lfo: .12, depth: .9 }); bed({ f: 2500, g: .006, lfo: .12, depth: .9 }); },
+       ev: [[A.gull, 1], [A.foghorn, .5], [A.creak, .6]], every: [6, 14] },                                            // Sunken Lighthouse
+  5: { build(){ bed({ type: 'bandpass', f: 700, q: 3, g: .045, sweep: [400, .05], lfo: .09 }); },
+       ev: [[p => A.choir(rnd(98, 131), p), 1], [p => A.bell(rnd(180, 240), p, .02), .6], [A.gust, .6]], every: [8, 16] },   // Frozen Monastery
+  6: { build(){ bed({ brown: 1, f: 300, g: .02 }); },
+       ev: [[A.croak, 1], [A.crickets, 1], [A.bubble, .8], [A.crow, .5]], every: [3, 8] },                            // Witch's Bog
+  7: { build(){ bed({ brown: 1, f: 160, g: .05, lfo: .5, depth: .3 }); },
+       pulse: [.45, k => { if (k % 4 < 2) noise(.05, .045, 1800); }],
+       ev: [[A.whistle, 1], [A.gust, .6]], every: [10, 20] },                                                         // Ghost Train
+  8: { build(){ pad([65.4, 98, 130.8], { type: 'triangle', g: .006, lp: 600 }); },
+       ev: [[A.soprano, 1], [p => beep(440, 3, 'sawtooth', .005, 0, 0, p), .4], [A.creak, .6]], every: [8, 15] },     // Opera House
+  9: { build(){ pad([55, 82.4, 110, 164.8], { type: 'triangle', g: .006, lp: 700, trem: .1 }); bed({ f: 600, g: .012, lfo: .06 }); },
+       ev: [[p => A.bell(rnd(110, 147), p), .8], [p => A.choir(rnd(110, 147), p), 1], [A.drip, .7], [A.crow, .5]], every: [7, 14] },   // Ruined Cathedral
+  10: { build(){ pad([880, 1318.5, 1760], { g: .0018, trem: .2, det: 10 }); bed({ f: 3000, g: .004 }); },
+        ev: [[A.shimmer, 1], [A.rise, .7], [A.whisper, .6]], every: [6, 12] },                                        // Mirror Palace
+  11: { build(){ bed({ f: 250, g: .015 }); },
+        pulse: [2, () => beep(900, .05, 'square', .012)],
+        ev: [[A.pages, 1], [A.whisper, .7], [A.creak, .6]], every: [5, 11] },                                         // Spectral Archive
+  12: { build(){ bed({ brown: 1, f: 250, g: .02, lfo: .8, depth: .3 }); },
+        ev: [[p => A.musicbox(523, LULLABY, p), 1], [A.ratchet, .7], [A.squeak, .7], [A.laughter, .3]], every: [6, 12] },   // Toy Factory
+  13: { build(){ bed({ brown: 1, f: 120, g: .04, lfo: .05 }); },
+        ev: [[A.drip, 1.4], [A.pickaxe, .8], [A.canary, .5], [A.rumble, .4]], every: [3, 8] },                        // Coal Mine
+  14: { build(){ bed({ type: 'bandpass', f: 900, q: 1.5, g: .03, sweep: [300, .07], lfo: .1 }); },
+        ev: [[A.chimes, 1], [A.birds, .8], [A.gust, .6]], every: [4, 9] },                                            // Sky Gardens
+  15: { build(){ bed({ f: 1800, g: .008, lfo: .06, depth: .9 }); pad([73.4, 110], { type: 'sawtooth', g: .004, lp: 300 }); },
+        ev: [[A.oud, 1], [A.sand, .7], [A.scarab, .6], [A.whisper, .5]], every: [6, 12] },                            // Pharaoh's Tomb
+  16: { build(){ bed({ f: 6000, g: .003 }); },
+        ev: [[A.waltz, 1], [A.drip, .6], [A.creak, .6], [A.crackle, 1]], every: [5, 11] },                            // Wax Museum
+  17: { build(){ bed({ brown: 1, f: 200, g: .06, lfo: .08 }); },
+        ev: [[A.whale, 1], [A.sonar, .6], [A.bubble, 1]], every: [6, 13] },                                           // Abyssal Depths
+  18: { build(){ bed({ brown: 1, f: 420, g: .05, lfo: .3, depth: .4 }); },
+        ev: [[p => { A.clang(p); if (Math.random() < .5) A.clang(p); }, 1], [A.bloop, .9], [A.crackle, 1.2], [A.rumble, .4]], every: [3, 7] },   // Volcano Forge
+  19: { build(){ pad([261.6, 329.6, 392, 493.9], { g: .0028, trem: .15, det: 14 }); },
+        ev: [[p => A.musicbox(392, LULLABY.slice().reverse(), p, .45), 1], [A.whisper, .6], [A.rise, .6], [A.shimmer, .6]], every: [6, 12] },   // Dream Realm
+  20: { build(){ pad([41.2, 61.7, 82.4], { type: 'sawtooth', g: .004, lp: 400 }); },
+        pulse: [1.4, () => sfx.pulse(.3)],
+        ev: [[A.creak, 1], [A.whisper, .8], [p => A.choir(rnd(73, 98), p), .6], [p => A.bell(rnd(98, 123), p, .02), .4]], every: [6, 12] },   // Heart of Hollow Manor
+};
+const THEME = THEMES[LEVEL] || { ev: [[A.creak, 1], [A.gust, .5]], every: [9, 23] };
+let ambEvT = 3, pulseT = 0, pulseK = 0;
+function themeTick(dt){
+  if (!actx || !themeGain) return;
+  themeGain.gain.value = phase === 'play' ? 1 : .6;   // the menu gets the same soundscape, a little quieter
+  if (THEME.pulse){ pulseT -= dt; if (pulseT <= 0){ pulseT += THEME.pulse[0]; if (pulseT < 0) pulseT = THEME.pulse[0]; asAmb(() => THEME.pulse[1](pulseK++)); } }
+  ambEvT -= dt;
+  if (ambEvT <= 0 && THEME.ev){
+    const [a, b] = THEME.every; ambEvT = rnd(a, b);
+    let w = Math.random() * THEME.ev.reduce((s, e) => s + e[1], 0);
+    const e = THEME.ev.find(e => (w -= e[1]) <= 0) || THEME.ev[0];
+    asAmb(() => e[0](rpan()));
+  }
+}
 
 /* ===================== renderer / scene ===================== */
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -1964,7 +2084,7 @@ function updateWorldVisuals(dt, t){
   const flk = flicker(dt, nearest);
   hemi.intensity = hemiBase * flk; moon.intensity = moonBase * flk;
 }
-let hemiBase = AMB, moonBase = .45, beatT = 0, creakT = 12, flickT = 30, flickOn = 0, shakeT = 0;
+let hemiBase = AMB, moonBase = .45, beatT = 0, flickT = 30, flickOn = 0, shakeT = 0;
 const camShake = new THREE.Vector3();
 const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 function updateAmbience(dt, nearest, ng){
@@ -1976,13 +2096,11 @@ function updateAmbience(dt, nearest, ng){
     whisperPan.pan.value = clamp((dx * Math.cos(CAM.yaw) - dz * Math.sin(CAM.yaw)) / d, -1, 1) * .8;
   }
   if (droneGain) droneGain.gain.value = phase === 'menu' ? .02 : .045;
-  if (windGain) windGain.gain.value = play ? .025 + Math.max(0, Math.sin(clockT * .21) * Math.sin(clockT * .07)) * .05 : .012;
+  themeTick(dt);
   $('dread').style.opacity = play && OPT.dread ? (clamp((5 - nearest) / 4, 0, 1) * .85).toFixed(3) : '0';
   if (!play) return;
   // heartbeat: starts within 4.5 m and quickens to ~130 bpm when a ghost is on top of you
   if (nearest < 4.5 && !myFrozen()){ beatT -= dt; if (beatT <= 0){ const k = 1 - nearest / 4.5; sfx.pulse(.5 + k * .5); beatT = 1.05 - k * .6; } } else beatT = .2;
-  creakT -= dt;
-  if (creakT <= 0){ creakT = 9 + Math.random() * 14; Math.random() < .65 ? sfx.creak(Math.random() * 1.6 - .8) : sfx.gust(Math.random() * 1.6 - .8); }
   if (nearest < 1.6 && shakeT < .15) shakeT = .15;
 }
 function flicker(dt, nearest){
