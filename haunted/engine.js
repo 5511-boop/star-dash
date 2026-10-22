@@ -32,6 +32,10 @@ const BASE_GMULT = CFG.ghostMult || (1 + Math.max(0, LEVEL - 3) * .03);
 let GMULT = BASE_GMULT;   // eased by hostTick after repeated freezes or while a puzzle panel is up (see pressure())
 const FREEZE = CFG.freezeSecs || (LEVEL >= 4 ? 6 + Math.floor((LEVEL - 4) / 4) : 6);
 const RESET_RULE = LEVEL >= 8;
+// player options from the ☰ menu, saved per browser and shared by all levels
+const OPT_DEF = { vol: 1, sfx: 1, amb: 1, sens: 1, inv: false, shake: true, dread: true, qual: 'high', hints: true };
+const OPT = (() => { try { return { ...OPT_DEF, ...JSON.parse(store.get('hm_opts', '{}')) }; } catch { return { ...OPT_DEF }; } })();
+const QUAL = { high: 1, medium: .75, low: .5 };
 function levelUrl(n){
   const p = location.pathname, i = p.indexOf('/haunted/');
   const base = i >= 0 ? p.slice(0, i + 9) : (LEVEL === 1 ? './' : '../');
@@ -128,7 +132,21 @@ style.textContent = `
   #leftBtns button[hidden]{display:none}
   #hudTop{padding:0 92px}
   body:not(.touch) #hudTop{padding:0 270px}
-  body.touch #leftBtns .full{display:none}`;
+  body.touch #leftBtns .full{display:none}
+  #pause{background:#05030cb8;z-index:25}
+  #pause .card{width:min(460px,100%);text-align:left;touch-action:pan-y}
+  #pause h2{text-align:center}
+  .pnote{font-family:system-ui,sans-serif;font-size:12.5px;color:var(--dim);text-align:center;margin:0 0 12px}
+  .prow{display:flex;gap:6px;margin-bottom:8px}
+  .prow button{flex:1;font-size:14px;padding:10px 6px}
+  .sec{font-family:system-ui,sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;color:var(--accent);margin:16px 0 4px}
+  label.opt{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:system-ui,sans-serif;font-size:14px;padding:7px 0;margin:0;border-bottom:1px solid #ffffff10;color:var(--ink)}
+  .opt input[type=range]{width:46%;margin:0;padding:0;border:0;background:none;accent-color:var(--accent)}
+  .opt input[type=checkbox]{width:22px;height:22px;margin:0;padding:0;accent-color:var(--accent)}
+  .opt select{width:46%;margin:0;padding:6px 10px;font-size:14px}
+  .ctl{display:grid;grid-template-columns:minmax(84px,36%) 1fr;gap:6px 12px;font-family:system-ui,sans-serif;font-size:13.5px;line-height:1.35}
+  .ctl b{color:var(--gold)}
+  #pause .link{display:block;margin:10px auto 0}`;
 document.head.appendChild(style);
 const SKIN_SETS = {
   2: [{ name: 'The Last Ringmaster', url: '../models/last_ringmaster.glb', scale: .85, swing: 1 }, { name: 'The Porcelain Acrobat', url: '../models/porcelain_acrobat.glb', scale: .92, swing: 1 }],
@@ -169,7 +187,28 @@ document.body.innerHTML = `
   <div id="arrow" hidden></div>
   <div id="hint"></div>
 </div>
-<button id="btnExit" hidden>Leave</button><div id="leftBtns"><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺<span class="full"> Room start (T)</span></button><button id="btnSkip" hidden title="Skip this room">⏭<span class="full"> Skip room</span></button></div>
+<button id="btnExit" hidden title="Menu (Esc)">☰ Menu</button>
+<div id="pause" class="screen" hidden><div class="card">
+  <h2>☰ Menu</h2>
+  <p class="pnote">The game keeps running while this is open — the ghosts don't wait!</p>
+  <div class="prow"><button id="pResume" class="big" style="margin:0">Resume${isTouch ? '' : ' (Esc)'}</button></div>
+  <div class="prow"><button id="pHint">💡 Hint</button><button id="pRespawn">↺ Room start</button><button id="pSkip">⏭ Skip room</button></div>
+  <div class="sec">SOUND</div>
+  <label class="opt">Master volume<input type="range" id="oVol" min="0" max="1" step="0.05"></label>
+  <label class="opt">Sound effects<input type="range" id="oSfx" min="0" max="1" step="0.05"></label>
+  <label class="opt">Ambience<input type="range" id="oAmb" min="0" max="1" step="0.05"></label>
+  <div class="sec">CAMERA &amp; SCREEN</div>
+  <label class="opt">Camera sensitivity<input type="range" id="oSens" min="0.3" max="2.5" step="0.1"></label>
+  <label class="opt">Invert camera tilt<input type="checkbox" id="oInv"></label>
+  <label class="opt">Camera shake<input type="checkbox" id="oShake"></label>
+  <label class="opt">Dread effects (dark edges, flicker)<input type="checkbox" id="oDread"></label>
+  <label class="opt">Graphics quality<select id="oQual"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (faster)</option></select></label>
+  ${isTouch ? '' : '<label class="opt">Show controls bar<input type="checkbox" id="oHints"></label>'}
+  <div class="sec">CONTROLS</div>
+  <div class="ctl" id="ctlList"></div>
+  <button id="pReset" class="link">Reset options</button>
+  <button id="pLeave" class="link" style="color:#ff9a9a">Leave game</button>
+</div></div><div id="leftBtns"><button id="btnRespawn" hidden title="Stuck? Go back to the start of this room (T)">↺<span class="full"> Room start (T)</span></button><button id="btnSkip" hidden title="Skip this room">⏭<span class="full"> Skip room</span></button></div>
 <div id="touch" hidden><div id="joyBase"><div id="joyKnob"></div></div>
   <button class="tb" id="runBtn">RUN</button><button class="tb" id="dashBtn" hidden>⚡</button><button class="tb" id="powBtn" hidden>☀</button></div>
 <div id="menu" class="screen"><div class="card">
@@ -207,25 +246,29 @@ if (isTouch) document.body.classList.add('touch');
 /* ===================== audio ===================== */
 // Layers: a detuned drone, a whisper (band-passed noise) that swells and pans toward the nearest ghost, a heartbeat
 // that quickens as one closes in, low wind, and the odd creak from somewhere in the house (see updateAmbience).
-let actx = null, droneGain = null, whisperGain = null, whisperPan = null, windGain = null;
+// Everything routes through master; one-shot effects go via sfxBus and the looping layers via ambBus (menu volume sliders).
+let actx = null, droneGain = null, whisperGain = null, whisperPan = null, windGain = null, master = null, sfxBus = null, ambBus = null;
+function applyAudio(){ if (!master) return; master.gain.value = OPT.vol; sfxBus.gain.value = OPT.sfx; ambBus.gain.value = OPT.amb; }
 function unlockAudio(){
   try {
     if (!actx){
       actx = new (window.AudioContext || window.webkitAudioContext)();
+      master = actx.createGain(); master.connect(actx.destination);
+      sfxBus = actx.createGain(); sfxBus.connect(master); ambBus = actx.createGain(); ambBus.connect(master); applyAudio();
       const o = actx.createOscillator(), o2 = actx.createOscillator(); droneGain = actx.createGain();
       o.type = 'sine'; o.frequency.value = CFG.drone || 55; o2.type = 'sine'; o2.frequency.value = (CFG.drone || 55) + .7;
-      droneGain.gain.value = 0.04; o.connect(droneGain); o2.connect(droneGain); droneGain.connect(actx.destination); o.start(); o2.start();
+      droneGain.gain.value = 0.04; o.connect(droneGain); o2.connect(droneGain); droneGain.connect(ambBus); o.start(); o2.start();
       const len = actx.sampleRate * 2, buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       const n = actx.createBufferSource(); n.buffer = buf; n.loop = true;
       const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 6;
       whisperGain = actx.createGain(); whisperGain.gain.value = 0;
       whisperPan = actx.createStereoPanner ? actx.createStereoPanner() : null;
-      n.connect(f).connect(whisperGain); (whisperPan ? whisperGain.connect(whisperPan) : whisperGain).connect(actx.destination); n.start();
+      n.connect(f).connect(whisperGain); (whisperPan ? whisperGain.connect(whisperPan) : whisperGain).connect(ambBus); n.start();
       const w = actx.createBufferSource(); w.buffer = buf; w.loop = true; w.playbackRate.value = .5;
       const wf = actx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 420;
       windGain = actx.createGain(); windGain.gain.value = 0;
-      w.connect(wf).connect(windGain).connect(actx.destination); w.start();
+      w.connect(wf).connect(windGain).connect(ambBus); w.start();
     }
     if (actx.state === 'suspended') actx.resume();
   } catch {}
@@ -233,8 +276,8 @@ function unlockAudio(){
 // any tap or key unlocks audio, including pages reached by the auto-join redirect (no button press there)
 addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListener('keydown', unlockAudio);
 function out(pan){
-  if (!pan || !actx.createStereoPanner) return actx.destination;
-  const p = actx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(actx.destination); return p;
+  if (!pan || !actx.createStereoPanner) return sfxBus;
+  const p = actx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(sfxBus); return p;
 }
 function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0, pan = 0){
   if (!actx) return;
@@ -301,7 +344,7 @@ const BG = CFG.bg || 0x05060c;
 scene.background = new THREE.Color(BG);
 scene.fog = new THREE.Fog(BG, 20, 42);
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 300);
-function resize(){ renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+function resize(){ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2) * (QUAL[OPT.qual] || 1)); renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 const AMB = CFG.ambient || 0.8;
 const hemi = new THREE.HemisphereLight(CFG.sky || 0x6a6fa8, 0x15121f, AMB); scene.add(hemi);
@@ -569,7 +612,7 @@ function ghostMesh(look, tint){
 }
 
 /* ===================== state ===================== */
-let role = null, phase = 'menu';
+let role = null, phase = 'menu', paused = false;
 let myName = store.get('hm_name', '');
 let remoteName = 'Partner';
 let skinPref = store.get('hm_skin', 'auto'), remoteSkin = null;
@@ -827,6 +870,9 @@ function releaseDash(){ if (!btn.dash) return; btn.dash = false; if (!btn.dashUs
 function pressPow(){ if (!has('flash') || btn.pow) return; btn.pow = true; btn.powT = 0; btn.powUsed = false; }
 function releasePow(){ if (!btn.pow) return; btn.pow = false; if (!btn.powUsed) actPow(); me.sight = 0; }
 addEventListener('keydown', e => {
+  const typing = e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'checkbox';
+  if (!e.repeat && (e.code === 'Escape' || (e.code === 'KeyP' && !typing)) && (phase === 'play' || paused)){ setPaused(!paused); e.preventDefault(); return; }
+  if (paused) return;
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
   if (e.repeat){ if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault(); return; }
   keys[e.code] = true;
@@ -859,8 +905,8 @@ const camTouch = (() => {
     move(t){
       const p = pts.get(t.identifier); if (!p) return false;
       if (pts.size === 1){
-        CAM.ty -= (t.clientX - p.x) * .009;
-        CAM.tp = clamp(CAM.tp + (t.clientY - p.y) * .006, .5 - BASE_PITCH, 1.45 - BASE_PITCH);
+        CAM.ty -= (t.clientX - p.x) * .009 * OPT.sens;
+        CAM.tp = clamp(CAM.tp + (t.clientY - p.y) * .006 * OPT.sens * (OPT.inv ? -1 : 1), .5 - BASE_PITCH, 1.45 - BASE_PITCH);
       }
       p.x = t.clientX; p.y = t.clientY;
       if (pts.size >= 2 && pinch0 > 0) CAM.tz = clamp(zoom0 * pinch0 / Math.max(20, dist()), .3, 1.8);
@@ -926,13 +972,14 @@ function resetCam(){ CAM.ty = Math.round(CAM.ty / (Math.PI * 2)) * Math.PI * 2; 
   addEventListener('pointermove', e => {
     if (!CAM.drag) return;
     const dx = e.clientX - CAM.lx, dy = e.clientY - CAM.ly; CAM.lx = e.clientX; CAM.ly = e.clientY;
-    CAM.ty -= dx * .006; CAM.tp = clamp(CAM.tp + dy * .004, .5 - BASE_PITCH, 1.45 - BASE_PITCH);
+    CAM.ty -= dx * .006 * OPT.sens; CAM.tp = clamp(CAM.tp + dy * .004 * OPT.sens * (OPT.inv ? -1 : 1), .5 - BASE_PITCH, 1.45 - BASE_PITCH);
   });
   addEventListener('pointerup', e => { if (e.button === 2) CAM.drag = false; });
   addEventListener('blur', () => { CAM.drag = false; });
   cv.addEventListener('wheel', e => { e.preventDefault(); CAM.tz = clamp(CAM.tz * Math.exp(e.deltaY * .0012), .3, 1.8); }, { passive: false });
 }
 function rawInput(){
+  if (paused) return [0, 0, 0];
   let x = joy.x, z = joy.y;
   if (keys.KeyW || keys.ArrowUp) z -= 1;
   if (keys.KeyS || keys.ArrowDown) z += 1;
@@ -1305,6 +1352,7 @@ function playEv(e){
     case 'boom': sfx.boom(); if (e.x !== undefined) flashFx(e.x, e.z, 0); break;
     case 'blast': sfx.blast(); if (e.x !== undefined) flashFx(e.x, e.z, 0); flash(); break;
     case 'oil': if (e.a === myIdx()){ me.oil = 1; toast('Lantern refilled!'); } sfx.pick(); break;
+    case 'pz': break;   // partner opened the menu: just the toast below
     default: { ROOMS.find(R => R.def.onEvent && R.def.onEvent(e, R, E)); }
   }
   if (e.m) toast(e.m);
@@ -1533,7 +1581,7 @@ function onData(m){
       if (!other.seen){ other.seen = true; otherChar.group.position.copy(other.target); }
       if (m.ph !== phase) setPhase(m.ph);
       break;
-    case 'ev': if (role === 'guest' || m.k === 'fallo' || m.k === 'zap' || m.k === 'respo') playEv(m); break;
+    case 'ev': if (role === 'guest' || m.k === 'fallo' || m.k === 'zap' || m.k === 'respo' || m.k === 'pz') playEv(m); break;
   }
 }
 function onDisconnect(c){
@@ -1575,7 +1623,7 @@ function show(id){ screens.forEach(s => $(s).hidden = s !== id); }
 function status(t){ $('status').textContent = t; }
 let toastT = 0, storyT = 0, roomTime = 0, lastRoom = -1, hintT = 0;
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); toastT = 3.2; }
-function hideGameUI(){ $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('btnRespawn').hidden = true; $('btnSkip').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
+function hideGameUI(){ setPaused(false); $('hud').hidden = true; $('touch').hidden = true; $('btnExit').hidden = true; $('btnRespawn').hidden = true; $('btnSkip').hidden = true; $('frost').classList.remove('on'); $('sightFx').classList.remove('on'); }
 function chosenStart(){ return clamp(parseInt($('startRoom').value) || 0, 0, Math.min(reached, ROOMS.length - 1)); }
 function startGame(startRoom = 0){ resetWorld(); S.mercy = 0; GMULT = BASE_GMULT; solveUpTo(startRoom); setPhase('play'); }
 function spawn(){ fallCD = 0; soloAnchor = null; S.soulFlip = 0; if (SOLO()) meChar.bodyMat.color.setHex(COLORS[0]); const sp = ROOMS[clamp(S.startRoom, 0, ROOMS.length - 1)].spawnW[myIdx()]; me.pos.set(sp[0], 0, sp[1]); me.ry = Math.PI; me.stamina = STAM; me.slide = null; me.dash = null; me.grap = null; me.oil = 1; me.hist = []; }
@@ -1583,7 +1631,7 @@ function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
     if (role === 'guest' && prev !== 'play') for (const g of GHOSTS){ g.x = g.tx; g.z = g.tz; }
-    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = false; $('hint').hidden = isTouch;
+    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = false; $('hint').hidden = isTouch || !OPT.hints;
     $('dashBtn').hidden = !has('dash'); $('powBtn').hidden = !has('flash'); $('oilM').hidden = !has('oil');
     spawn(); meChar.group.visible = true; otherChar.group.visible = role !== 'solo';
     const partner = role === 'solo' ? 'You arrive' : `You and <b>${esc(remoteName)}</b> arrive`;
@@ -1595,7 +1643,7 @@ function setPhase(p){
     sfx.boo();
   }
   if (p === 'won'){
-    sess.clear();
+    sess.clear(); setPaused(false);
     sfx.win(); $('touch').hidden = true; $('frost').classList.remove('on');
     const t = S.elapsed, full = S.startRoom === 0, bk = 'hm_best_L' + LEVEL;
     const best = parseFloat(store.get(bk, '0')) || 0, newBest = full && (!best || t < best);
@@ -1724,7 +1772,57 @@ $('btnSolo').onclick = () => { unlockAudio(); myName = $('name').value.trim().sl
 $('btnStart').onclick = () => { unlockAudio(); if (role === 'host' && conn && conn.open) startGame(chosenStart()); };
 $('btnLeave').onclick = () => { sess.clear(); resume = null; rejoinCode = ''; toMenu(); };
 $('btnMenu').onclick = () => { sess.clear(); toMenu(); };
-$('btnExit').onclick = () => { sess.clear(); toMenu(); };
+$('btnExit').onclick = e => { e.currentTarget.blur(); setPaused(true); };
+/* ----- ☰ menu: only an overlay — the level keeps running underneath (it's co-op; nothing can stop the ghosts) ----- */
+function setPaused(on){
+  if (on && phase !== 'play') return;
+  if (on === paused) return;
+  paused = on; $('pause').hidden = !on;
+  if (on){
+    for (const k in keys) keys[k] = false;
+    btn.dash = btn.pow = false; me.sight = 0; runTouch = false; CAM.drag = false;
+    joy.id = null; joy.x = joy.y = 0; $('joyKnob').style.transform = '';
+    syncOptInputs(); $('ctlList').innerHTML = controlsHTML();
+    if (role !== 'solo') send({ t: 'ev', k: 'pz', m: `${myName || 'Your partner'} opened the menu.` });
+  }
+}
+function controlsHTML(){
+  const rows = [], r = (pc, ph, what) => rows.push(`<b>${esc(isTouch ? ph : pc)}</b><span>${what}</span>`);
+  r('W A S D / arrows', 'Joystick (left side)', 'Move — forward is away from the camera');
+  r('Shift (hold)', 'RUN', 'Run (uses stamina)' + (has('phase') ? ' — runs through purple ghost-walls' : ''));
+  if (has('dash')) r('Space / E', '⚡', 'Dash through ghosts and over short gaps' + (has('throw') ? '; throw what you carry' : '') + (has('grapple') ? '; zip to a golden ring you face' : '') + (has('vault') ? '; vault low barriers' : ''));
+  if (has('decoy')) r('Hold Space', 'Hold ⚡', 'Drop a decoy lantern (15 s)');
+  if (has('flash')) r('F', '☀', 'Lantern flash — stuns nearby ghosts (5 s)' + (has('bolt') ? '; while moving: freeze bolt' : '') + (has('bridge') ? '; facing a gap: spirit bridge' : ''));
+  if (has('sight')) r('Hold F', 'Hold ☀', 'Ghost Sight — see invisible ghosts and hidden things');
+  if (has('ping')) r('Click the ground / Q', 'Tap the ground', 'Ping a marker for your partner');
+  if (has('swap')) r('G / click partner', 'Tap partner', 'Soul Swap — trade places' + (SOLO() ? ' (solo: drop / return to an anchor)' : ''));
+  if (has('rewind')) r('R', 'Double-tap ☀', 'Rewind 3 seconds and leave a dream echo');
+  if (has('blast')) r('Both F together', 'Both ☀ together', 'Soul Blast');
+  if (has('shadow')) r('Passive', 'Passive', 'Hide behind your partner\'s back or in deep shadow');
+  if (has('oil')) r('Passive', 'Passive', 'Your lantern burns oil in dark rooms — red cans refill it');
+  r('Right-drag · wheel · C', 'Drag right side · pinch · double-tap', 'Turn · zoom · reset the camera');
+  r('H', '💡', 'Hint (after 40 s in a room)');
+  r('T', '↺', 'Back to the start of this room');
+  r('Esc / P', '☰ Menu', 'This menu');
+  return rows.join('');
+}
+const OPT_INPUTS = { oVol: 'vol', oSfx: 'sfx', oAmb: 'amb', oSens: 'sens', oInv: 'inv', oShake: 'shake', oDread: 'dread', oQual: 'qual', oHints: 'hints' };
+function syncOptInputs(){ for (const [id, k] of Object.entries(OPT_INPUTS)){ const el = $(id); if (!el) continue; if (el.type === 'checkbox') el.checked = !!OPT[k]; else el.value = OPT[k]; } }
+function applyOpts(){
+  applyAudio(); resize();
+  if (phase === 'play') $('hint').hidden = isTouch || !OPT.hints;
+  store.set('hm_opts', JSON.stringify(OPT));
+}
+for (const [id, k] of Object.entries(OPT_INPUTS)){
+  const el = $(id); if (!el) continue;
+  el.addEventListener(el.type === 'range' ? 'input' : 'change', () => { OPT[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value; applyOpts(); });
+}
+$('pResume').onclick = () => setPaused(false);
+$('pHint').onclick = () => { setPaused(false); showHint(); if (hintT <= 0) toast('No hint for this room.'); };
+$('pRespawn').onclick = () => { setPaused(false); respawnRoom(); };
+$('pSkip').onclick = () => { setPaused(false); skipRoom(); };
+$('pReset').onclick = () => { Object.assign(OPT, OPT_DEF); syncOptInputs(); applyOpts(); toast('Options reset.'); };
+$('pLeave').onclick = () => { if (role !== 'solo' && !confirm('Leave the game? Your partner will be left on their own.')) return; setPaused(false); sess.clear(); toMenu(); };
 {
   const s = sess.get();
   if (s){
@@ -1887,7 +1985,7 @@ function updateAmbience(dt, nearest, ng){
   }
   if (droneGain) droneGain.gain.value = phase === 'menu' ? .02 : .045;
   if (windGain) windGain.gain.value = play ? .025 + Math.max(0, Math.sin(clockT * .21) * Math.sin(clockT * .07)) * .05 : .012;
-  $('dread').style.opacity = play ? (clamp((5 - nearest) / 4, 0, 1) * .85).toFixed(3) : '0';
+  $('dread').style.opacity = play && OPT.dread ? (clamp((5 - nearest) / 4, 0, 1) * .85).toFixed(3) : '0';
   if (!play) return;
   // heartbeat: starts within 4.5 m and quickens to ~130 bpm when a ghost is on top of you
   if (nearest < 4.5 && !myFrozen()){ beatT -= dt; if (beatT <= 0){ const k = 1 - nearest / 4.5; sfx.pulse(.5 + k * .5); beatT = 1.05 - k * .6; } } else beatT = .2;
@@ -1896,7 +1994,7 @@ function updateAmbience(dt, nearest, ng){
   if (nearest < 1.6 && shakeT < .15) shakeT = .15;
 }
 function flicker(dt, nearest){
-  if (phase !== 'play') return 1;
+  if (phase !== 'play' || !OPT.dread) return 1;
   flickT -= dt;
   if (flickT <= 0){ flickT = 25 + Math.random() * 30; flickOn = .35; }
   if (flickOn > 0){ flickOn -= dt; return Math.random() < .5 ? .35 : 1; }
@@ -1963,7 +2061,7 @@ function tick(dt){
     camera.position.sub(camShake).lerp(camPos, damp(5, dt)); camera.lookAt(camLook);
     // shake is a small offset added after lookAt and removed next frame, so it never drifts the follow camera
     camShake.set(0, 0, 0);
-    if (shakeT > 0){ shakeT -= dt; if (!calm){ const a = Math.min(1, shakeT / .5) * .12; camShake.set((Math.random() - .5) * a, (Math.random() - .5) * a, (Math.random() - .5) * a); camera.position.add(camShake); } }
+    if (shakeT > 0){ shakeT -= dt; if (!calm && OPT.shake){ const a = Math.min(1, shakeT / .5) * .12; camShake.set((Math.random() - .5) * a, (Math.random() - .5) * a, (Math.random() - .5) * a); camera.position.add(camShake); } }
   } else {
     const a = clockT * .08;
     camera.position.set(Math.sin(a) * 9, 13, 2 + Math.cos(a) * 9); camera.lookAt(0, 0, 0);
