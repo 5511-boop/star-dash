@@ -33,7 +33,7 @@ let GMULT = BASE_GMULT;   // eased by hostTick after repeated freezes or while a
 const FREEZE = CFG.freezeSecs || (LEVEL >= 4 ? 6 + Math.floor((LEVEL - 4) / 4) : 6);
 const RESET_RULE = LEVEL >= 8;
 // player options from the ☰ menu, saved per browser and shared by all levels
-const OPT_DEF = { vol: 1, sfx: 1, amb: 1, sens: 1, inv: false, shake: true, dread: true, qual: 'high', hints: true };
+const OPT_DEF = { vol: 1, sfx: 1, amb: 1, sens: 1, inv: false, shake: true, dread: true, qual: 'high' };
 const OPT = (() => { try { return { ...OPT_DEF, ...JSON.parse(store.get('hm_opts', '{}')) }; } catch { return { ...OPT_DEF }; } })();
 const QUAL = { high: 1, medium: .75, low: .5 };
 function levelUrl(n){
@@ -98,17 +98,17 @@ style.textContent = `
     border-radius:18px;padding:20px;font-family:Georgia,serif;font-size:17px;line-height:1.5;opacity:0;transition:opacity .6s}
   #story.show{opacity:1}
   #story b{color:var(--gold)}
-  #hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:13px;color:#ffffff88}
   #meters{position:absolute;right:calc(26px + env(safe-area-inset-right));bottom:calc(282px + env(safe-area-inset-bottom));display:grid;gap:4px;width:92px}
-  body:not(.touch) #meters{left:50%;right:auto;transform:translateX(-50%);bottom:36px;width:120px}
+  body:not(.touch) #meters{left:50%;right:auto;transform:translateX(-50%);bottom:20px;width:120px}
   .meter{height:8px;border-radius:4px;background:#ffffff22;overflow:hidden}
   .meter i{display:block;height:100%;width:100%;background:var(--gold)}
   #oilM i{background:#ff9a3d}
-  #powRow{position:absolute;left:50%;bottom:56px;transform:translateX(-50%);display:flex;gap:8px}
+  #powRow{position:absolute;left:50%;bottom:50px;transform:translateX(-50%);display:flex;gap:10px}
   body.touch #powRow{display:none}
+  .pwc{display:flex;flex-direction:column;align-items:center;gap:4px}
   .pw{width:42px;height:42px;border-radius:12px;background:#0b0918cc;border:1px solid #ffffff33;display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;overflow:hidden}
   .pw i{position:absolute;left:0;right:0;bottom:0;background:#ffffff33}
-  .pw small{position:absolute;bottom:1px;right:3px;font-size:9px;color:#fff9}
+  .key{min-width:22px;padding:1px 6px;border-radius:5px;background:#0b0918dd;border:1px solid #ffffff40;border-bottom-width:2px;font-size:11px;font-weight:700;line-height:15px;text-align:center;color:#fffc}
   #arrow{position:absolute;width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:22px solid var(--pink);transform-origin:50% 60%;filter:drop-shadow(0 0 6px #000)}
   #flash{position:fixed;inset:0;background:#9fd8ff;opacity:0;pointer-events:none;z-index:9;transition:opacity .5s}
   #flash.on{opacity:.4;transition:none}
@@ -185,7 +185,6 @@ document.body.innerHTML = `
   <div id="meters"><div class="meter" id="stamM"><i></i></div><div class="meter" id="oilM" hidden><i></i></div></div>
   <div id="powRow"></div>
   <div id="arrow" hidden></div>
-  <div id="hint"></div>
 </div>
 <button id="btnExit" hidden title="Menu (Esc)">☰ Menu</button>
 <div id="pause" class="screen" hidden><div class="card">
@@ -203,7 +202,6 @@ document.body.innerHTML = `
   <label class="opt">Camera shake<input type="checkbox" id="oShake"></label>
   <label class="opt">Dread effects (dark edges, flicker)<input type="checkbox" id="oDread"></label>
   <label class="opt">Graphics quality<select id="oQual"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (faster)</option></select></label>
-  ${isTouch ? '' : '<label class="opt">Show controls bar<input type="checkbox" id="oHints"></label>'}
   <div class="sec">CONTROLS</div>
   <div class="ctl" id="ctlList"></div>
   <button id="pReset" class="link">Reset options</button>
@@ -236,12 +234,6 @@ document.body.innerHTML = `
   <button id="btnAgain" class="big">Play again</button><button id="btnMenu" class="link">Back to menu</button>
 </div></div>`;
 if (isTouch) document.body.classList.add('touch');
-{
-  const keysTxt = ['WASD move', 'Shift run'];
-  if (has('dash')) keysTxt.push('Space ⚡'); if (has('flash')) keysTxt.push('F ☀' + (has('sight') ? ' (hold: sight)' : ''));
-  if (has('ping')) keysTxt.push('click: ping'); if (has('swap')) keysTxt.push('G swap'); if (has('rewind')) keysTxt.push('R rewind'); keysTxt.push('T room start'); keysTxt.push('H hint'); keysTxt.push(isTouch ? 'drag right side to turn camera · pinch to zoom · double-tap to reset' : 'right-drag turn camera · scroll zoom · C reset');
-  $('hint').textContent = keysTxt.join(' · ');
-}
 
 /* ===================== audio ===================== */
 // Layers: a detuned drone, a whisper (band-passed noise) that swells and pans toward the nearest ghost, a heartbeat
@@ -1631,7 +1623,7 @@ function setPhase(p){
   const prev = phase; phase = p;
   if (p === 'play'){
     if (role === 'guest' && prev !== 'play') for (const g of GHOSTS){ g.x = g.tx; g.z = g.tz; }
-    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = false; $('hint').hidden = isTouch || !OPT.hints;
+    show(null); $('hud').hidden = false; $('touch').hidden = !isTouch; $('btnExit').hidden = false; $('btnRespawn').hidden = false; $('btnSkip').hidden = false;
     $('dashBtn').hidden = !has('dash'); $('powBtn').hidden = !has('flash'); $('oilM').hidden = !has('oil');
     spawn(); meChar.group.visible = true; otherChar.group.visible = role !== 'solo';
     const partner = role === 'solo' ? 'You arrive' : `You and <b>${esc(remoteName)}</b> arrive`;
@@ -1691,12 +1683,13 @@ $('hintBtn').addEventListener('click', showHint);
 $('hintBtn').addEventListener('touchstart', e => { e.preventDefault(); showHint(); }, { passive: false });
 function powIcons(){
   const out = [];
-  const cd = (v, max) => `<i style="height:${clamp(v / max, 0, 1) * 100}%"></i>`;
-  if (has('dash')) out.push(`<div class="pw">⚡${cd(me.dashCD, 1.1)}<small>Spc</small></div>`);
-  if (has('flash')) out.push(`<div class="pw">☀${cd(me.powCD, 5)}<small>F</small></div>`);
-  if (has('decoy')) out.push(`<div class="pw">🏮${cd(me.decoyCD, 15)}<small>hold</small></div>`);
-  if (has('swap')) out.push(`<div class="pw">🔁${cd(swapCD, 1)}<small>G/tap ${SOLO() ? 'self' : 'partner'}</small></div>`);
-  if (has('rewind')) out.push(`<div class="pw">⏪${cd(me.rewCD, 10)}<small>R</small></div>`);
+  // icon with its cooldown fill, and the key that uses it underneath
+  const pw = (icon, v, max, key) => out.push(`<div class="pwc"><div class="pw">${icon}<i style="height:${clamp(v / max, 0, 1) * 100}%"></i></div><span class="key">${key}</span></div>`);
+  if (has('dash')) pw('⚡', me.dashCD, 1.1, 'Space');
+  if (has('flash')) pw('☀', me.powCD, 5, 'F');
+  if (has('decoy')) pw('🏮', me.decoyCD, 15, 'Hold Space');
+  if (has('swap')) pw('🔁', swapCD, 1, 'G');
+  if (has('rewind')) pw('⏪', me.rewCD, 10, 'R');
   return out.join('');
 }
 function updateHud(dt){
@@ -1806,11 +1799,10 @@ function controlsHTML(){
   r('Esc / P', '☰ Menu', 'This menu');
   return rows.join('');
 }
-const OPT_INPUTS = { oVol: 'vol', oSfx: 'sfx', oAmb: 'amb', oSens: 'sens', oInv: 'inv', oShake: 'shake', oDread: 'dread', oQual: 'qual', oHints: 'hints' };
+const OPT_INPUTS = { oVol: 'vol', oSfx: 'sfx', oAmb: 'amb', oSens: 'sens', oInv: 'inv', oShake: 'shake', oDread: 'dread', oQual: 'qual' };
 function syncOptInputs(){ for (const [id, k] of Object.entries(OPT_INPUTS)){ const el = $(id); if (!el) continue; if (el.type === 'checkbox') el.checked = !!OPT[k]; else el.value = OPT[k]; } }
 function applyOpts(){
   applyAudio(); resize();
-  if (phase === 'play') $('hint').hidden = isTouch || !OPT.hints;
   store.set('hm_opts', JSON.stringify(OPT));
 }
 for (const [id, k] of Object.entries(OPT_INPUTS)){
