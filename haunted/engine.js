@@ -169,7 +169,7 @@ const SKIN_SETS = {
   19: [{ name: 'The Sleepwalker', url: '../models/sleepwalker.glb', scale: .88, swing: .3 }, { name: 'The Moon Jester', url: '../models/moon_jester.glb', scale: .95, swing: 1 }],
   20: [{ name: 'The Ghost Hunter', url: '../models/ghost_hunter.glb', scale: .9, swing: 1 }, { name: 'The Ghost Bride', url: '../models/ghost_bride.glb', scale: .94, swing: .4, opacity: .72 }],
 };
-const MODEL_VER = 1;   // bump when models/*.glb change so browsers don't show old cached ones
+const MODEL_VER = 2;   // bump when models/*.glb change so browsers don't show old cached ones
 const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
 // Either player may wear either skin: 'auto' = host gets [0], guest gets [1]. Saved per browser, shared by all levels.
 const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
