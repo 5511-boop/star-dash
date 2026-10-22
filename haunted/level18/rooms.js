@@ -5,7 +5,8 @@ import { orbRow, setOrbs, near, inRect, textPlane, redraw } from '../lib.js';
 let EE = null;
 const solo = () => EE && EE.solo();
 const basalt = E => E.mat(0xffffff, { roughness: .95, map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#2a2224'; x.fillRect(0, 0, w, h); x.strokeStyle = '#ff5a1a'; x.globalAlpha = .35; x.lineWidth = 2; for (let i = 0; i < 6; i++){ x.beginPath(); x.moveTo(Math.random() * w, Math.random() * h); x.lineTo(Math.random() * w, Math.random() * h); x.stroke(); } x.globalAlpha = 1; x.strokeStyle = '#1a1416'; x.lineWidth = 3; for (let j = 0; j < 4; j++) for (let i = 0; i < 2; i++) x.strokeRect(i * 64 + (j % 2) * 32, j * 32, 64, 32); }, 6, 6) });
-const lavaMat = E => new E.THREE.MeshStandardMaterial({ color: 0xff5a1a, emissive: 0xff3a0a, emissiveIntensity: 1.2, roughness: .6 });
+// molten lava: tex/level18/lava.jpg over a hot emissive glow (the flat orange stays as the look until the image loads)
+const lavaMat = (E, rx = 1, ry = 1) => E.pbr('lava', rx, ry, { color: 0xff5a1a, emissive: 0xff3a0a, emissiveIntensity: .25, roughness: .5, normal: .6 });
 const ironMat = E => E.mat(0x4a4a52, { metalness: .8, roughness: .4 });
 const reinforcedMat = E => E.mat(0x5a3a2a, { metalness: .6, roughness: .5, emissive: 0x3a1a0a, emissiveIntensity: .3 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
@@ -29,7 +30,7 @@ const flicker = (gs, t) => gs.forEach((g, k) => g.fl && g.fl.forEach((f, i) => {
 const gate = {
   name: 'The Cracked Gate',
   floor: basalt,
-  dark: .5,
+  dark: .35,
   notes: [[0, 1.6, '“The forge-masters sealed the way with cracked stone. Bombs, please.”', 1.5]],
   hint: 'Walk over a bomb to pick it up, then press Space / ⚡ to throw it. It explodes a second after landing and smashes any cracked wall nearby — keep clear of the blast! New bombs appear in the crate.',
   build(R, E){
@@ -50,7 +51,7 @@ const RW2 = [[-10, 7.6, -2, 8.4], [-2, 12.6, 4, 13.4], [2, 17.6, 10, 18.4]];
 const hammers = {
   name: 'The Hammer Hall',
   floor: basalt,
-  dark: .5,
+  dark: .35,
   notes: [[0, 1.6, '“Iron walls. An ordinary bomb won\'t scratch them — but a bomb under a forge hammer…”', 1.5]],
   hint: 'The dark iron walls shrug off ordinary blasts. But if a bomb is sitting on an anvil when its giant hammer comes down, the hammer sets off a HUGE explosion that tears the nearby iron wall apart. Time your throw so the bomb lands just before the slam. Never stand on an anvil!',
   build(R, E){
@@ -86,12 +87,12 @@ const PIL3 = [[-5, 5.2], [4, 5.2], [-1, 12.8], [7, 12.8]];   // pillars on the n
 const magma = {
   name: 'The Magma Channels',
   floor: basalt,
-  dark: .45,
+  dark: .32,
   notes: [[0, 1.6, '“A blast pushes. Topple the stone pillars across the lava.”', 1.5]],
   hint: 'A bomb blast knocks a stone pillar over AWAY from the explosion. To drop one across a lava river, land a bomb on the near side of it (between you and the pillar) — then stand well back. The fallen pillar is a bridge.',
   build(R, E){
     EE = E; const T = E.THREE;
-    RIV3.forEach(([a, b]) => R.floor(-10, a, 10, b, lavaMat(E), .02));
+    this.lm = RIV3.map(([a, b]) => { const m = lavaMat(E, 5, (b - a) / 4); R.floor(-10, a, 10, b, m, .02); return m; });
     this.pm = PIL3.map(([x, lz]) => { const m = new T.Mesh(new T.CylinderGeometry(.55, .65, 5, 10), E.mat(0x5a5052)); m.position.set(x, 2.5, R.Z(lz)); E.scene.add(m); return m; });
     crate(E, R, 0, 2.2); crate(E, R, -7, 11.2);
     this.e = [elemental(R, E, [6, 11], { b: [-9.5, 9.5, 9.8, 13.2] })];
@@ -103,7 +104,7 @@ const magma = {
   bridges(st, R){ return PIL3.map(([x, lz], i) => { const f = st.fall[i]; if (!f) return null; const ex = x + f[0] * 5, el = lz + f[1] * 5; return R.rect(Math.min(x, ex) - .65, Math.min(lz, el) - .65, Math.max(x, ex) + .65, Math.max(lz, el) + .65); }).filter(Boolean); },
   onBomb(st, R, E, it){ PIL3.forEach(([x, lz], i) => { if (st.fall[i]) return; const dx = x - it.x, dl = lz - it.lz, d = Math.hypot(dx, dl); if (d < 3){ const ax = Math.abs(dx) > Math.abs(dl) ? [Math.sign(dx), 0] : [0, Math.sign(dl)]; st.fall[i] = ax; E.ev('crash', ax[1] > 0 ? 'The pillar topples across the lava!' : 'The pillar topples — the wrong way!'); } }); },
   host(dt, st, R, E){ respawnBombs(st, dt); if (!R.isOpen('exit') && E.P.length && E.P.every(p => R.inside(p.pos) && R.lz(p.pos.z) > 17.5)){ R.open('exit'); E.ev('door', 'Over the magma — the door opens!'); } },
-  visual(dt, t, st, R, E){ this.pm.forEach((m, i) => { const f = st.fall[i]; if (!f){ m.rotation.set(0, 0, 0); m.position.y = 2.5; return; } const [x, lz] = PIL3[i]; m.position.set(x + f[0] * 2.5, .5, R.Z(lz + f[1] * 2.5)); m.rotation.set(f[1] ? -Math.PI / 2 * f[1] * -1 : 0, 0, f[0] ? -Math.PI / 2 * f[0] : 0); }); flicker(this.e, t); },
+  visual(dt, t, st, R, E){ this.lm.forEach((m, i) => { if (m.map) m.map.offset.x = t * (i ? -.03 : .03); if (m.normalMap) m.normalMap.offset.x = m.map ? m.map.offset.x : 0; }); this.pm.forEach((m, i) => { const f = st.fall[i]; if (!f){ m.rotation.set(0, 0, 0); m.position.y = 2.5; return; } const [x, lz] = PIL3[i]; m.position.set(x + f[0] * 2.5, .5, R.Z(lz + f[1] * 2.5)); m.rotation.set(f[1] ? -Math.PI / 2 * f[1] * -1 : 0, 0, f[0] ? -Math.PI / 2 * f[0] : 0); }); flicker(this.e, t); },
   objective(st, R, E){ return R.isOpen('exit') ? 'The door is open!' : 'Cross the two <b>lava rivers</b>: a bomb blast topples a stone pillar <b>away from the explosion</b> — knock them across the lava as bridges.'; }
 };
 
@@ -113,7 +114,7 @@ const ING4 = [[-8, 4], [8, 11], [-8, 17]], BOMB4 = [[-5, 4], [5, 11], [-5, 17]];
 const furnace = {
   name: 'The Elemental Furnace',
   floor: basalt,
-  dark: .55,
+  dark: .39,
   notes: [[0, 1.6, '“These bombs are too hot to touch. But a fire elemental will happily light one…”', 1.5]],
   hint: 'The bombs here are glowing hot — you can\'t pick them up. A fire elemental that touches one lights its fuse! Lure an elemental onto a bomb beside a cracked wall, then run. Each blast opens an alcove with a golden ingot.',
   build(R, E){
@@ -144,7 +145,7 @@ const WALL5 = [-2, 20.4, 2, 21.2];
 const kegs = {
   name: 'The Powder Kegs',
   floor: basalt,
-  dark: .5,
+  dark: .35,
   notes: [[0, 1.6, '“One bomb. A long way to the door. And a cellar full of gunpowder.”', 1.5]],
   hint: 'A powder keg explodes when another explosion happens within a few steps of it — and that can set off the next keg, and the next. The iron door at the far end only breaks in a keg blast. Carry and throw the kegs into a chain (each within about 3 steps of the next) from the bomb crate to the door, then light the first one with your bomb. Stand clear!',
   build(R, E){
@@ -176,7 +177,7 @@ const PLUG6 = { p0: [-7, 10], p1: [-3.5, 13], p2: [3.5, 13], p3: [0, 10], p4: [0
 const crucible = {
   name: 'The Crucible',
   floor: basalt,
-  dark: .5,
+  dark: .35,
   notes: [[0, 1.6, '“Pour the molten iron into the mould — and nowhere else.”', 1.5]],
   hint: 'The molten iron runs from the crucible (top left) along every open channel. The channels are blocked by clay plugs — a bomb blast within a couple of steps smashes a plug. Open exactly the plugs on the path to the mould (bottom right). Any open branch to a drain wastes the pour. Pull the lever to pour; ↺ rebuilds the plugs.',
   build(R, E){
@@ -210,7 +211,7 @@ const RUBY7 = [7.5, 11.8];
 const obsidian = {
   name: 'The Obsidian Maze',
   floor: basalt,
-  dark: .6,
+  dark: .42,
   notes: [[0, 1.6, '“Three bombs. That\'s all the forge can spare.”', 1.5]],
   hint: 'You only get three bombs here (↺ resets the maze and the bombs). Every cracked wall you blow costs one — think about which walls actually lead to the ruby (right side, middle) and then to the door. Fire elementals wander the halls.',
   build(R, E){
@@ -237,7 +238,7 @@ const SHEL8 = [[-9.5, 3, -6.5, 6], [3, 5, 6.5, 8], [-4, 9.5, -.5, 12.5], [5, 12.
 const eruption = {
   name: 'The Eruption',
   floor: basalt,
-  dark: .45,
+  dark: .32,
   notes: [[0, 1.6, '“When the mountain roars, get under a rock.”', 1.5]],
   hint: 'Every few seconds the volcano erupts and molten rocks rain down on the red circles. Shelter under the stone overhangs (dark patches) — nothing can hit you there. The door is behind a cracked wall: bomb it (bombs in the crate at the start). Falling lava rocks will set off any bomb lying around!',
   build(R, E){
@@ -267,7 +268,7 @@ const FURN9 = [-7, 12], ANV9 = [0, 12], QUENCH9 = [7, 12], ORE9 = [[-8, 3.5], [-
 const smithy = {
   name: 'The Smith\'s Workshop',
   floor: basalt,
-  dark: .45,
+  dark: .32,
   notes: [[0, 1.6, '“Furnace, anvil, water. Three blades for the ghost-smith, and be quick about it.”', 1.5]],
   hint: 'Carry an ore lump into the furnace glow (left) and hold it there until it\'s red-hot. Then THROW it onto the anvil (middle): the hammer shapes it into a blade on its next blow. Pick the blade up and carry it to the quenching barrel (right) before it cools. Hot metal cools in ~10 seconds. Don\'t stand on the anvil!',
   build(R, E){
@@ -301,7 +302,7 @@ const CRATE10 = [[-8.5, 3], [8.5, 3], [-8.5, 20], [8.5, 20]];
 const titan = {
   name: 'The Forge Titan',
   floor: basalt,
-  dark: .4,
+  dark: .28,
   notes: [[0, 1.4, '“Iron plates, a heart of fire. Crack the plates — then freeze the heart.”', 1.4]],
   hint: 'Bomb blasts right next to the Titan crack its armour plates. When all three plates are cracked its fiery heart is exposed for a few seconds — hit it with a freeze bolt (tap ☀ while moving towards it). Three hearts\' worth. Mind the stomp shockwave (the red ring).',
   build(R, E){
@@ -337,7 +338,7 @@ export default {
   texFloors: {
     "The Cracked Gate": "gate_basalt",
     "The Hammer Hall": "hammer_iron",
-    "The Magma Channels": "channel_crust",
+    "The Magma Channels": "ash_ground",   // plain ash so the lava rivers are the only thing that looks hot
     "The Elemental Furnace": "furnace_brick",
     "The Powder Kegs": "keg_boards",
     "The Crucible": "crucible_slag",
@@ -357,6 +358,7 @@ export default {
   doorColor: 0x3a2a24,
   sky: 0xff6a3a,
   bg: 0x0a0402,
+  ambient: 1.6, exposure: 2.2,   // brighter than the engine defaults (0.8 / 1.7): the dark forge textures were too murky
   drone: 35,
   rooms: [gate, hammers, magma, furnace, kegs, crucible, obsidian, eruption, smithy, titan],
 };
