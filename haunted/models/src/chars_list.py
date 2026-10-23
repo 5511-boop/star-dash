@@ -1,0 +1,23 @@
+# Every player character: (script, exported glb name, level). Used by render_sheet.py and export_all.py.
+CHARS = [
+    ('warden.py', 'night_warden.glb', 1), ('lady.py', 'lady_in_grey.glb', 1),
+    ('ringmaster.py', 'last_ringmaster.glb', 2), ('acrobat.py', 'porcelain_acrobat.glb', 2),
+    ('horologist.py', 'horologist.glb', 3), ('ballerina.py', 'clockwork_ballerina.glb', 3),
+    ('keeper.py', 'drowned_keeper.glb', 4), ('siren.py', 'tide_siren.glb', 4),
+    ('abbot.py', 'silent_abbot.glb', 5), ('wraith.py', 'snow_wraith.glb', 5),
+    ('lanternman.py', 'bog_lantern_man.glb', 6), ('witch.py', 'hedge_witch.glb', 6),
+    ('conductor.py', 'phantom_conductor.glb', 7), ('passenger.py', 'last_passenger.glb', 7),
+    ('patron.py', 'masked_patron.glb', 8), ('diva.py', 'fallen_diva.glb', 8),
+    ('knight.py', 'penitent_knight.glb', 9), ('saint.py', 'stained_glass_saint.glb', 9),
+    ('silvered_prince.py', 'silvered_prince.glb', 10), ('reflection.py', 'the_reflection.glb', 10),
+    ('pagekeeper.py', 'keeper_of_pages.glb', 11), ('manuscript.py', 'living_manuscript.glb', 11),
+    ('soldier.py', 'broken_soldier.glb', 12), ('doll.py', 'stitched_doll.glb', 12),
+    ('miner.py', 'lost_miner.glb', 13), ('canary.py', 'canarys_ghost.glb', 13),
+    ('aeronaut.py', 'aeronaut.glb', 14), ('fairy.py', 'bloom_fairy.glb', 14),
+    ('pharaoh.py', 'risen_pharaoh.glb', 15), ('priestess.py', 'jackal_priestess.glb', 15),
+    ('sculptor.py', 'the_sculptor.glb', 16), ('exhibit.py', 'the_exhibit.glb', 16),
+    ('diver.py', 'deep_diver.glb', 17), ('angler.py', 'angler_queen.glb', 17),
+    ('forgemaster.py', 'forgemaster.glb', 18), ('ember.py', 'ember_spirit.glb', 18),
+    ('sleepwalker.py', 'sleepwalker.glb', 19), ('jester.py', 'moon_jester.glb', 19),
+    ('hunter.py', 'ghost_hunter.glb', 20), ('bride.py', 'ghost_bride.glb', 20),
+]

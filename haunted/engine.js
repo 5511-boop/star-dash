@@ -181,7 +181,7 @@ const SKIN_SETS = {
   19: [{ name: 'The Sleepwalker', url: '../models/sleepwalker.glb', scale: .88, swing: .3 }, { name: 'The Moon Jester', url: '../models/moon_jester.glb', scale: .95, swing: 1 }],
   20: [{ name: 'The Ghost Hunter', url: '../models/ghost_hunter.glb', scale: .9, swing: 1 }, { name: 'The Ghost Bride', url: '../models/ghost_bride.glb', scale: .94, swing: .4, opacity: .72 }],
 };
-const MODEL_VER = 3;   // bump when models/*.glb change so browsers don't show old cached ones
+const MODEL_VER = 4;   // bump when models/*.glb change so browsers don't show old cached ones
 const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
 // Either player may wear either skin: 'auto' = host gets [0], guest gets [1]. Saved per browser, shared by all levels.
 const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
@@ -778,6 +778,48 @@ function ghostMesh(look, tint){
   if (look === 'big' || look === 'crown') grp.scale.setScalar(1.6);
   return grp;
 }
+// Sculpted enemies (models/enemies.glb, one Enemy_<look> root each) replace the shapes above once loaded.
+// TintBody / TintGlow take the level's ghost tint; Sway_* nodes drift, Reach_* arms reach for you when close.
+const ENEMY_ROOT = { small: 'wisp', big: 'normal' };
+let enemyGlb = null;
+function dressGhost(g){
+  if (!enemyGlb || g.model) return;
+  const src = enemyGlb.getObjectByName('Enemy_' + (ENEMY_ROOT[g.look] || g.look)) || enemyGlb.getObjectByName('Enemy_normal');
+  if (!src) return;
+  const solid = g.look === 'statue' || g.look === 'knight', mats = {};
+  const root = src.clone(); root.position.set(0, 0, 0);
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.userData.enemy = 1;
+    const n = o.material.name;
+    if (n !== 'TintBody' && n !== 'TintGlow') return;
+    o.material = mats[n] = mats[n] || (() => {
+      const m = o.material.clone();
+      if (n === 'TintGlow'){ if (g.tint) m.emissive.setHex(g.tint); }
+      else if (solid){ if (g.tint) m.color.setHex(g.tint); }
+      else { m.color.setHex(g.tint || 0xeaf2ff); m.emissive.setHex(g.tint || 0x9fc4ff); m.emissiveIntensity = .45; m.transparent = true; m.opacity = .85; m.depthWrite = false; m.side = THREE.DoubleSide; }
+      return m;
+    })();
+  });
+  for (const ch of g.mesh.children) if (ch !== g.coneMesh && ch !== g.beamMesh) ch.visible = false;
+  g.mesh.add(root);
+  g.model = root; g.sway = []; g.reach = []; g.reachK = 0;
+  root.traverse(o => {
+    if (o.isMesh) return;   // merged meshes inherit their pivot's name; only the pivots move
+    const p = { o, rx: o.rotation.x, rz: o.rotation.z, ph: Math.random() * 6 };
+    if (o.name.startsWith('Sway_')) g.sway.push(p);
+    else if (o.name.startsWith('Reach_')) g.reach.push(p);
+  });
+}
+function animGhost(g, t, dt, gd){
+  if (!g.model) return;
+  for (const s of g.sway){ s.o.rotation.z = s.rz + Math.sin(t * 1.3 + s.ph) * .07; s.o.rotation.x = s.rx + Math.sin(t * .9 + s.ph) * .05; }
+  g.reachK += (clamp((6 - gd) / 5, 0, 1) - g.reachK) * damp(4, dt);
+  g.reach.forEach((r, i) => { r.o.rotation.x = r.rx - g.reachK * 1.1 + Math.sin(t * (2 + g.reachK * 6) + i * 1.7) * (.05 + g.reachK * .12); });
+}
+if (/[?&]dev\b/.test(location.search)) window.HM = { GHOSTS, scene, get me(){ return me; }, ghost(look, tint){ const g = { look, tint, mesh: ghostMesh(look, tint) }; dressGhost(g); return g; }, animGhost };
+if (!/noskin/.test(location.search)) skinKit().then(kit => kit && kit.loader.load((LEVEL === 1 ? '' : '../') + 'models/enemies.glb?v=' + MODEL_VER,
+  gl => { enemyGlb = gl.scene; GHOSTS.forEach(dressGhost); }, undefined, e => console.warn('enemy models failed', e)));
 
 /* ===================== state ===================== */
 let role = null, phase = 'menu', paused = false;
@@ -845,7 +887,8 @@ CFG.rooms.forEach((def, i) => {
     if (gdef.beam){ const b = new THREE.Mesh(new THREE.BoxGeometry(.25, .12, gdef.beam.len), new THREE.MeshBasicMaterial({ color: gdef.beam.color || 0xbfeaff, transparent: true, opacity: .6 })); b.position.set(0, 1, gdef.beam.len / 2); g.mesh.add(b); g.beamMesh = b; }
     if (gdef.scale) g.mesh.scale.setScalar(gdef.scale);
     g.x = g.tx = g.home[0]; g.z = g.tz = g.home[1]; g.y = 0; g.ry = gdef.ry || 0; g.rest = 1.5; g.ret = false; g.wx = null; g.wt = 0; g.w = 0; g.mem = {}; g.stun = 0;
-    GHOSTS.push(g); return g;
+    g.look = gdef.look || 'normal';
+    GHOSTS.push(g); dressGhost(g); return g;
   };
   R.hook = (x, lz, opt = {}) => { const h = { x, z: R.Z(lz), room: i, ...opt }; HOOKS.push(h); return h; };
   R.spectral = (x1, lz1, x2, lz2) => { const r = R.rect(x1, lz1, x2, lz2); SPECTRAL.push(r); return r; };
@@ -2161,6 +2204,7 @@ function updateWorldVisuals(dt, t){
     const hidden = g.invisible && !(me.sight > 0) && !(g.revealed && g.revealed(S.rs[g.room]));
     m.visible = g.y < 11 && !hidden;
     const gd = Math.hypot(g.x - me.pos.x, g.z - me.pos.z) + (hidden ? 1 : 0);
+    if (m.visible) animGhost(g, t, dt, g.harmless ? 99 : gd);
     if ((m.visible && !g.harmless || hidden) && gd < nearest){ nearest = gd; ng = g; }
   }
   updateAmbience(dt, nearest, ng);
