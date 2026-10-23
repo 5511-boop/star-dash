@@ -242,7 +242,9 @@ if (isTouch) document.body.classList.add('touch');
 let actx = null, droneGain = null, whisperGain = null, whisperPan = null, master = null, sfxBus = null, ambBus = null;
 let themeGain = null, noiseBuf = null, brownBuf = null, ambOut = null;   // level soundscape (see THEMES below)
 function applyAudio(){ if (!master) return; master.gain.value = OPT.vol; sfxBus.gain.value = OPT.sfx; ambBus.gain.value = OPT.amb; }
-function unlockAudio(){
+// The audio graph is built and the level's soundscape downloaded as soon as the page loads (the context starts
+// suspended), so the first tap only has to resume it. Browsers that remember you tapped on this site start it at once.
+function initAudio(){
   try {
     if (!actx){
       actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -263,9 +265,13 @@ function unlockAudio(){
       themeGain = actx.createGain(); themeGain.connect(ambBus);
       loadScape();
     }
-    if (actx.state === 'suspended') actx.resume();
   } catch {}
 }
+function unlockAudio(){
+  initAudio();
+  try { if (actx && actx.state !== 'running') actx.resume(); } catch {}
+}
+const audioOn = () => actx && actx.state === 'running';
 // any tap or key unlocks audio, including pages reached by the auto-join redirect (no button press there)
 addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListener('keydown', unlockAudio);
 function out(pan){
@@ -274,7 +280,7 @@ function out(pan){
   const p = actx.createStereoPanner(); p.pan.value = clamp(pan, -1, 1); p.connect(dst); return p;
 }
 function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0, pan = 0){
-  if (!actx) return;
+  if (!audioOn()) return;   // nothing queues up while the context is still suspended
   const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
@@ -282,7 +288,7 @@ function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0,
   o.connect(g).connect(out(pan)); o.start(t); o.stop(t + dur + 0.05);
 }
 function noise(dur = .3, vol = .12, freq = 800, delay = 0, pan = 0){
-  if (!actx) return;
+  if (!audioOn()) return;
   const t = actx.currentTime + delay, len = Math.floor(actx.sampleRate * dur), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
   const n = actx.createBufferSource(); n.buffer = buf; const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
@@ -442,7 +448,8 @@ async function loadScape(){
       .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
       .then(a => new Promise((ok, no) => actx.decodeAudioData(a, ok, no)));
     const [bed, fx] = await Promise.all([get('_bed'), get('_fx')]);
-    const s = actx.createBufferSource(), g = actx.createGain(); g.gain.value = BED_GAIN;
+    const s = actx.createBufferSource(), g = actx.createGain(), t = actx.currentTime;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(BED_GAIN, t + 1.2);   // fade in (runs once the context is going)
     s.buffer = bed; s.loop = true; s.loopStart = .1; s.loopEnd = bed.duration - .1;   // the files carry .1 s of wrap-around padding at each end
     s.connect(g).connect(themeGain); s.start(0, .1);
     scape = { fx, slots: Math.max(1, Math.round(fx.duration / FX_SLOT)) };
@@ -457,8 +464,9 @@ function scapeFx(){
   let node = g; if (actx.createStereoPanner){ const p = actx.createStereoPanner(); p.pan.value = rpan(); g.connect(p); node = p; }
   node.connect(themeGain); src.connect(g); src.start(0, k * FX_SLOT, FX_SLOT);
 }
+initAudio();   // build the graph and start downloading this level's soundscape right away
 function themeTick(dt){
-  if (!actx || !themeGain) return;
+  if (!audioOn() || !themeGain) return;
   themeGain.gain.value = phase === 'play' ? 1 : .6;   // the menu gets the same soundscape, a little quieter
   if (scape === 'loading') return;
   if (scape){ ambEvT -= dt; if (ambEvT <= 0){ const [a, b] = THEME.every; ambEvT = rnd(a, b) * 1.4; scapeFx(); } return; }
