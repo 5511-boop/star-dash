@@ -27,6 +27,10 @@ PICKS = {
  'l16_gramophone': 609698, 'l16_radio_box': 258174,
  'l12_squeak': 468444, 'l12_toy_piano': 449787, 'l12_vintage_box': 613084,
  'l10_glass_break': 566453, 'l19_rev_piano': 648909, 'l11_quill': 856167, 'l5_monks': 274835,
+ # Level 1, Hollow Manor
+ 'l1_storm': 409403, 'l1_thunder_far': 581124, 'l1_thunder_roll': 675992, 'l1_thunder_clap': 760212, 'l1_clock': 626162, 'l1_clock_strike': 658589,
+ 'l1_owl': 735744, 'l1_floor_creak': 822745, 'l1_door_creak': 607912, 'l1_big_door': 273466, 'l1_stairs': 266528, 'l1_moan': 581090,
+ 'l1_ghost_moan': 329518, 'l1_ghost_piano': 324958, 'l1_ghost_crying': 238500, 'l1_ghost_singing': 223848, 'l1_wind_howl': 797852, 'l1_fire': 718202, 'l1_chains': 370877,
  'l6_mud': 456806, 'l18_bellows': 567083, 'l18_steam': 365071, 'l7_horn': 591824, 'l20_floorboards': 802595, 'l20_footsteps': 817482,
 }
 if __name__ == '__main__':

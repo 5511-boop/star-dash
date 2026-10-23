@@ -179,7 +179,8 @@ function mulberry32(a){ return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = M
 
 /* ===================== audio ===================== */
 let actx = null, droneGain = null, whisperGain = null;
-function unlockAudio(){
+// Built as soon as the page loads (suspended until allowed), so the soundscape is ready the moment sound can play.
+function initAudio(){
   try {
     if (!actx){
       actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -192,12 +193,46 @@ function unlockAudio(){
       const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 6;
       whisperGain = actx.createGain(); whisperGain.gain.value = 0;
       n.connect(f).connect(whisperGain).connect(actx.destination); n.start();
+      scapeGain = actx.createGain(); scapeGain.connect(actx.destination);
+      loadScape();
     }
-    if (actx.state === 'suspended') actx.resume();
   } catch {}
 }
+function unlockAudio(){
+  initAudio();
+  try { if (actx && actx.state !== 'running') actx.resume(); } catch {}
+}
+addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListener('keydown', unlockAudio);
+const audioOn = () => actx && actx.state === 'running';
+/* ----- soundscape: audio/level1_bed.mp3 (seamless 42 s loop) + level1_fx.mp3 (one-shots in 8 s slots), rendered by
+   audio/src/render.py: storm and wind on the house, the grandfather clock, thunder, an owl; ghosts, creaks, footsteps ----- */
+const AUDIO_VER = 1, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 8;
+let scapeGain = null, scape = null, scapeT = 4;
+async function loadScape(){
+  try {
+    const get = s => fetch('./audio/level1' + s + '.mp3?v=' + AUDIO_VER).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then(a => new Promise((ok, no) => actx.decodeAudioData(a, ok, no)));
+    const [bed, fx] = await Promise.all([get('_bed'), get('_fx')]);
+    const s = actx.createBufferSource(), g = actx.createGain(), t = actx.currentTime;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(BED_GAIN, t + 1.2);
+    s.buffer = bed; s.loop = true; s.loopStart = .1; s.loopEnd = bed.duration - .1;   // .1 s of wrap-around padding at each end
+    s.connect(g).connect(scapeGain); s.start(0, .1);
+    scape = { fx, slots: Math.max(1, Math.round(fx.duration / FX_SLOT)) };
+  } catch {}
+}
+function scapeTick(dt){
+  if (!audioOn() || !scapeGain) return;
+  scapeGain.gain.value = phase === 'play' ? 1 : .6;   // the menu gets the same soundscape, a little quieter
+  if (!scape || (scapeT -= dt) > 0) return;
+  scapeT = 8 + Math.random() * 12;
+  const src = actx.createBufferSource(), g = actx.createGain(), k = Math.floor(Math.random() * scape.slots);
+  src.buffer = scape.fx; g.gain.value = FX_GAIN * (.5 + Math.random() * .5);
+  let node = g; if (actx.createStereoPanner){ const p = actx.createStereoPanner(); p.pan.value = Math.random() * 1.6 - .8; g.connect(p); node = p; }
+  node.connect(scapeGain); src.connect(g); src.start(0, k * FX_SLOT, FX_SLOT);
+}
+initAudio();
 function beep(freq, dur = 0.12, type = 'sine', vol = 0.12, slide = 0, delay = 0){
-  if (!actx) return;
+  if (!audioOn()) return;
   const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
@@ -1977,6 +2012,7 @@ function updateWorldVisuals(dt, t){
   updateAtmosphere(dt, t);
   if (whisperGain) whisperGain.gain.value = phase === 'play' ? clamp((7 - nearest) / 7, 0, 1) * .07 : 0;
   if (droneGain) droneGain.gain.value = phase === 'menu' ? .02 : .045;
+  scapeTick(dt);
 }
 function updateCharVisuals(c, frozenSec, pos){
   const fr = frozenSec > 0;

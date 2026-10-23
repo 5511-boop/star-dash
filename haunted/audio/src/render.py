@@ -434,6 +434,16 @@ def texture(name, n=None, xf=2.5):
 def lvl(n):
     lp_ = Loop(); X = N + F
     T = lambda name, g, **k: lp_.layer(texture(name, **k), db(g))
+    if n == 1:   # Hollow Manor: a storm lashing the house, wind moaning in the chimneys, the grandfather clock in the hall,
+                 # a dying fire, thunder rolling over the moors, an owl outside; ghosts, creaks and footsteps come at random
+        T('l1_storm', 0); T('l1_wind_howl', -9); T('l1_clock', -11, xf=.04); T('l1_fire', -20)
+        lp_.wide(lambda: lp(brown(X), 140) * slow(X, .07, .4, 1), .25)
+        lp_.put(E('l1_thunder_roll'), 6, db(-3), -.3); lp_.put(E('l1_thunder_far'), 27, db(-6), .4)
+        lp_.put(E('l1_owl', 0, 7), 17, db(-13), .7); lp_.put(E('l1_floor_creak', 2, 5), 34, db(-11), -.6)
+        return lp_.render(.75, .3), fx_sheet([E('l1_thunder_clap'), E('l1_thunder_far'), E('l1_clock_strike', 0, 7.4), E('l1_owl', 0, 7.4),
+                                             E('l1_door_creak'), E('l1_big_door'), E('l1_stairs', 0, 7.4), E('l1_floor_creak', 8, 7.4),
+                                             E('l1_moan'), E('l1_ghost_moan'), E('l1_ghost_crying'), E('l1_ghost_singing', 0, 7.4),
+                                             E('l1_ghost_piano', 0, 7.4), E('l1_chains')], room=.75, wet=.28)
     if n == 2:   # Grimwood Carnival: a broken calliope and creepy circus tune drifting over the empty fair, a ride grinding, clowns
         lp_.wide(lambda: wind(X, 200, 700, .2), .3)
         T('l2_ride_mech', -14)
