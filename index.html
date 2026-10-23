@@ -64,6 +64,13 @@
   #jumpBtn{position:absolute;right:calc(28px + env(safe-area-inset-right));bottom:calc(48px + env(safe-area-inset-bottom));width:96px;height:96px;
     border-radius:50%;background:#ffffffc0;border:3px solid #fff;font-size:16px;font-weight:900;color:var(--ink);padding:0}
   #jumpBtn:active{background:#fff;transform:scale(.95)}
+  .hm{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px 14px;border-radius:16px;text-decoration:none;text-align:left;
+    background:linear-gradient(135deg,#1a1230,#3a1f5c);color:#ece6ff;box-shadow:0 8px 22px #1d234055;font-family:Georgia,"Times New Roman",serif}
+  .hm:hover{filter:brightness(1.15)}
+  .hm b{display:block;font-size:18px;letter-spacing:.5px;text-shadow:0 0 12px #9b6bff}
+  .hm small{display:block;font-family:system-ui,sans-serif;font-size:12px;opacity:.75;margin-top:2px}
+  .hmIcon{font-size:28px}
+  .hmGo{margin-left:auto;font-size:22px;color:#c9a8ff}
   #btnExit{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;z-index:11;padding:6px 12px;font-size:13px;background:#ffffffcc}
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -98,6 +105,7 @@
     </div>
     <button id="btnSolo" class="link">Practice solo</button>
     <p id="status"></p>
+    <a class="hm" href="haunted/"><span class="hmIcon">🏚️</span><span><b>Hollow Manor</b><small>Co-op haunted escape · 20 levels</small></span><span class="hmGo">→</span></a>
   </div>
 </div>
 
