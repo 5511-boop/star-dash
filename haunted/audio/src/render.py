@@ -436,11 +436,12 @@ def lvl(n):
     T = lambda name, g, **k: lp_.layer(texture(name, **k), db(g))
     if n == 1:   # Hollow Manor: a storm lashing the house, wind moaning in the chimneys, the grandfather clock in the hall,
                  # a dying fire, thunder rolling over the moors, an owl outside; ghosts, creaks and footsteps come at random
-        T('l1_storm', 0); T('l1_wind_howl', -9); T('l1_clock', -11, xf=.04); T('l1_fire', -20)
+        T('l1_storm', 0); T('l1_wind_howl', -9); T('l1_fire', -20)
+        lp_.pulse(lambda k: tick(1250 if k % 2 else 980) * .3, 1.0)   # plain tick-tock: the l1_clock recording has chimes in it
         lp_.wide(lambda: lp(brown(X), 140) * slow(X, .07, .4, 1), .25)
         lp_.put(E('l1_thunder_roll'), 6, db(-3), -.3); lp_.put(E('l1_thunder_far'), 27, db(-6), .4)
         lp_.put(E('l1_owl', 0, 7), 17, db(-13), .7); lp_.put(E('l1_floor_creak', 2, 5), 34, db(-11), -.6)
-        return lp_.render(.75, .3), fx_sheet([E('l1_thunder_clap'), E('l1_thunder_far'), E('l1_clock_strike', 0, 7.4), E('l1_owl', 0, 7.4),
+        return lp_.render(.75, .3), fx_sheet([E('l1_thunder_clap'), E('l1_thunder_far'), E('l1_owl', 0, 7.4),   # no clock strikes or bells here (player request)
                                              E('l1_door_creak'), E('l1_big_door'), E('l1_stairs', 0, 7.4), E('l1_floor_creak', 8, 7.4),
                                              E('l1_moan'), E('l1_ghost_moan'), E('l1_ghost_crying'), E('l1_ghost_singing', 0, 7.4),
                                              E('l1_ghost_piano', 0, 7.4), E('l1_chains')], room=.75, wet=.28)

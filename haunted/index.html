@@ -206,7 +206,7 @@ addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListene
 const audioOn = () => actx && actx.state === 'running';
 /* ----- soundscape: audio/level1_bed.mp3 (seamless 42 s loop) + level1_fx.mp3 (one-shots in 8 s slots), rendered by
    audio/src/render.py: storm and wind on the house, the grandfather clock, thunder, an owl; ghosts, creaks, footsteps ----- */
-const AUDIO_VER = 1, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 8;
+const AUDIO_VER = 2, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 8;
 let scapeGain = null, scape = null, scapeT = 4;
 async function loadScape(){
   try {
