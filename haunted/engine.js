@@ -149,6 +149,7 @@ style.textContent = `
   #pause .link{display:block;margin:10px auto 0}`;
 document.head.appendChild(style);
 const SKIN_SETS = {
+  1: [{ name: 'The Night Warden', url: 'models/night_warden.glb', scale: .92, swing: 1 }, { name: 'The Lady in Grey', url: 'models/lady_in_grey.glb', scale: .96, swing: .5 }],   // Level 1 lives at haunted/ itself
   2: [{ name: 'The Last Ringmaster', url: '../models/last_ringmaster.glb', scale: .85, swing: 1 }, { name: 'The Porcelain Acrobat', url: '../models/porcelain_acrobat.glb', scale: .92, swing: 1 }],
   3: [{ name: 'The Horologist', url: '../models/horologist.glb', scale: .9, swing: 1 }, { name: 'The Clockwork Ballerina', url: '../models/clockwork_ballerina.glb', scale: .95, swing: .8 }],
   4: [{ name: 'The Drowned Keeper', url: '../models/drowned_keeper.glb', scale: .9, swing: 1 }, { name: 'The Tide Siren', url: '../models/tide_siren.glb', scale: .95, swing: .5 }],
@@ -169,7 +170,7 @@ const SKIN_SETS = {
   19: [{ name: 'The Sleepwalker', url: '../models/sleepwalker.glb', scale: .88, swing: .3 }, { name: 'The Moon Jester', url: '../models/moon_jester.glb', scale: .95, swing: 1 }],
   20: [{ name: 'The Ghost Hunter', url: '../models/ghost_hunter.glb', scale: .9, swing: 1 }, { name: 'The Ghost Bride', url: '../models/ghost_bride.glb', scale: .94, swing: .4, opacity: .72 }],
 };
-const MODEL_VER = 2;   // bump when models/*.glb change so browsers don't show old cached ones
+const MODEL_VER = 3;   // bump when models/*.glb change so browsers don't show old cached ones
 const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
 // Either player may wear either skin: 'auto' = host gets [0], guest gets [1]. Saved per browser, shared by all levels.
 const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
@@ -518,7 +519,7 @@ function sector(len, half, color, opacity = .18){
 // or opts.color) and swaps in tex/levelN/name.jpg + name_n.jpg (normal map) once they load, so a missing file is harmless.
 // opts.tile = metres per texture repeat on boxes (walls, blocks); opts.fullHeight stretches V over the box height.
 const TL = new THREE.TextureLoader();
-const TEX_DIR = (LEVEL === 1 ? './tex/' : '../tex/') + 'level' + LEVEL + '/';
+const TEX_DIR = LEVEL === 1 ? './tex/' : '../tex/level' + LEVEL + '/';   // Level 1's pack predates the per-level folders
 const TEX_VER = CFG.texVer || 1;   // bump in the level file when its textures change so browsers don't show cached ones
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 function loadInto(m, slot, file, rx, ry, srgb){
@@ -579,6 +580,13 @@ function floor(x1, z1, x2, z2, m, y = 0){
 
 /* ===================== doors & plates ===================== */
 const DOOR_IDS = [], DOORS = {};
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xbfe6ff, transparent: true, opacity: .22, roughness: .05, metalness: .2, emissive: 0x335577, emissiveIntensity: .3 });
+const _doorMats = {};   // CFG.doorImg / CFG.frontDoorImg give doors an image texture
+function doorMat(front){
+  const k = front ? 'f' : 'd'; if (_doorMats[k]) return _doorMats[k];
+  const img = front ? CFG.frontDoorImg : CFG.doorImg, col = front ? 0x5a1f1f : (CFG.doorColor || 0x5b3a22);
+  return _doorMats[k] = img ? pbr(img, 1, 1, { color: col, roughness: front ? .6 : .7, normal: 1.4 }) : mat(col);
+}
 function makeDoor(id, x1, z1, x2, z2, style = 'wood'){
   if (x1 > x2) [x1, x2] = [x2, x1]; if (z1 > z2) [z1, z2] = [z2, z1];
   const g = new THREE.Group(); const w = x2 - x1, d = z2 - z1;
@@ -590,8 +598,10 @@ function makeDoor(id, x1, z1, x2, z2, style = 'wood'){
       const o = -len / 2 + i * len / n; b.position.set(along ? o : 0, WALL_H / 2, along ? 0 : o); g.add(b);
     }
     const top = new THREE.Mesh(new THREE.BoxGeometry(along ? len : .14, .14, along ? .14 : len), barMat); top.position.y = WALL_H - .1; g.add(top);
+  } else if (style === 'glass'){
+    const p = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), glassMat); p.position.y = WALL_H / 2; g.add(p);
   } else {
-    const dm = mat(style === 'front' ? 0x5a1f1f : (CFG.doorColor || 0x5b3a22));
+    const dm = doorMat(style === 'front');
     const slab = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, Math.max(.2, d * .7)), dm); slab.position.y = WALL_H / 2; g.add(slab);
     const knob = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), mat(0xd4af37, { metalness: .8, roughness: .3 }));
     knob.position.set(w * .3, 1.1, d * .4); g.add(knob);
@@ -710,7 +720,7 @@ function animChar(c, dt, moving, running, oil = 1){
     if (sk.flicker){ const f = Math.sin(now * 2.3) + Math.sin(now * 5.7 + 1) + Math.sin(now * 13.1 + 2); op *= f > 2.2 ? .2 : f > 1.9 ? .55 : 1; }   // a faulty projector
     if (op !== sk.op){ sk.op = op; for (const m of sk.mats){ const tr = m.userData.tr || op < .999; if (tr !== m.transparent){ m.transparent = tr; m.needsUpdate = true; } m.opacity = m.userData.op * op; } }
   }
-  if (c.light){ const k = has('oil') ? .3 + .7 * oil : 1; c.light.intensity = (6 + Math.sin(performance.now() * .013) * .4 + Math.sin(performance.now() * .031) * .3) * k; c.light.distance = 15 * (has('oil') ? .45 + .55 * oil : 1); }
+  if (c.light){ const k = has('oil') ? .3 + .7 * oil : 1; c.light.intensity = (6 + Math.sin(performance.now() * .013) * .4 + Math.sin(performance.now() * .031) * .3) * k * (CFG.lantern || 1); c.light.distance = 15 * (has('oil') ? .45 + .55 * oil : 1); }
 }
 
 /* ===================== ghosts ===================== */
@@ -765,7 +775,7 @@ let skinPref = store.get('hm_skin', 'auto'), remoteSkin = null;
 const mySkin = () => skinPref === 'auto' ? myIdx() : (+skinPref ? 1 : 0);
 const otherSkin = () => remoteSkin === null ? 1 - myIdx() : remoteSkin;
 const reachKey = 'hm_reached_L' + LEVEL;
-let reached = parseInt(store.get(reachKey, '0')) || 0;
+let reached = parseInt(store.get(reachKey, LEVEL === 1 ? store.get('hm_reached', '0') : '0')) || 0;   // Level 1 used to save under hm_reached
 const myIdx = () => role === 'guest' ? 1 : 0;
 const names = () => myIdx() === 0 ? [myName || 'You', remoteName] : [remoteName, myName || 'You'];
 const SOLO = () => role === 'solo';
@@ -808,7 +818,7 @@ CFG.rooms.forEach((def, i) => {
   R.at = (n, pos) => onPlate(PLATES[R.id(n)], pos);
   R.plateObj = n => PLATES[R.id(n)];
   R.glow = (n, v) => { PLATES[R.id(n)].force = v; };
-  R.open = n => { S.doors[R.id(n)] = 1; };
+  R.open = n => { S.doors[R.id(n)] = 1; if (n === 'exit') for (let k = 1; k < (def.exits || []).length; k++) S.doors['X' + i + '_' + k] = 1; };
   R.close = n => { S.doors[R.id(n)] = 0; };
   R.setDoor = (n, v) => { S.doors[R.id(n)] = v ? 1 : 0; };
   R.isOpen = n => !!S.doors[R.id(n)];
@@ -839,10 +849,14 @@ const roomAt = z => ROOMS.findIndex(R => z <= R.zS && z > R.zN);
 
 /* ----- shell ----- */
 vwall(-10.5, 10.5, OUT_Z - .5); vwall(10.5, 10.5, OUT_Z - .5); hwall(10, -11, 11);
+// each room's north wall has one exit (def.exitX) or several (def.exits: [[x1, x2], ...]); door 'X'+i is the first,
+// any others are 'X'+i+'_1', '_2'… and R.open('exit') opens them all
 ROOMS.forEach((R, i) => {
-  const [dx1, dx2] = R.def.exitX || [-1.5, 1.5];
-  hwall(R.zN, -11, dx1); hwall(R.zN, dx2, 11);
-  makeDoor('X' + i, dx1, R.zN - .4, dx2, R.zN + .4, i === ROOMS.length - 1 ? 'front' : 'wood');
+  const gaps = (R.def.exits || [R.def.exitX || [-1.5, 1.5]]).slice().sort((a, b) => a[0] - b[0]);
+  let x = -11;
+  for (const [dx1, dx2] of gaps){ hwall(R.zN, x, dx1); x = dx2; }
+  hwall(R.zN, x, 11);
+  (R.def.exits || [R.def.exitX || [-1.5, 1.5]]).forEach(([dx1, dx2], k) => makeDoor('X' + i + (k ? '_' + k : ''), dx1, R.zN - .4, dx2, R.zN + .4, i === ROOMS.length - 1 ? 'front' : 'wood'));
 });
 floor(-25, OUT_Z - 40, 25, OUT_Z, mat(0x1d3322), .002);
 {
@@ -862,7 +876,7 @@ function EAPI(){
   if (_api) return _api;
   _api = {
     THREE, scene, mat, glow, canvasTex, tiledTex, pbr, boxUV, symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
-    makeChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE,
+    makeChar, animChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE, glassMat, camera, renderer,
     get GMULT(){ return GMULT; },
     get P(){ return curP; },
     get elapsed(){ return S.elapsed; },
@@ -999,7 +1013,7 @@ function solveUpTo(r){
 function resetRoom(i, msg){
   const R = ROOMS[i]; if (!R) return;
   S.rs[i] = initRoomState(R);
-  for (const id of DOOR_IDS) if (id.startsWith(i + ':') || id === 'X' + i) S.doors[id] = 0;
+  for (const id of DOOR_IDS) if (id.startsWith(i + ':') || id === 'X' + i || id.startsWith('X' + i + '_')) S.doors[id] = 0;
   for (const c of CRACKED) if (c.room === i) delete S.broken[c.id];
   for (const g of GHOSTS) if (g.room === i) ghostHome(g);
   S.frozen = [0, 0];
@@ -1793,7 +1807,7 @@ function setPhase(p){
     sess.clear(); setPaused(false);
     sfx.win(); $('touch').hidden = true; $('frost').classList.remove('on');
     const t = S.elapsed, full = S.startRoom === 0, bk = 'hm_best_L' + LEVEL;
-    const best = parseFloat(store.get(bk, '0')) || 0, newBest = full && (!best || t < best);
+    const best = parseFloat(store.get(bk, LEVEL === 1 ? store.get('hm_best10', '0') : '0')) || 0, newBest = full && (!best || t < best);
     if (newBest) store.set(bk, String(t));
     const stars = S.freezes <= 2 ? 3 : S.freezes <= 6 ? 2 : 1;
     if (full && stars > (parseInt(store.get('hm_stars_L' + LEVEL, '0')) || 0)) store.set('hm_stars_L' + LEVEL, String(stars));
@@ -2217,10 +2231,31 @@ function tick(dt){
   if (inGame) updateHud(dt);
 }
 E.chars = { me: meChar, other: otherChar };
+// CFG.fancy (Level 1): soft lantern shadows and a bloom glow on flames. Decided at load; Low graphics quality skips it.
+let composer = null;
+const FANCY = !!CFG.fancy && OPT.qual !== 'low';
+function shadowPass(){
+  scene.traverse(o => {
+    if (!o.isMesh) return;
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    o.receiveShadow = true;   // floors, glowing bits and see-through things don't cast
+    o.castShadow = ms.every(m => !m.transparent && !m.isMeshBasicMaterial) && o.geometry.type !== 'PlaneGeometry' && !(ms[0].emissiveIntensity > .8);
+  });
+}
+if (FANCY){
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  for (const c of [meChar, otherChar]) if (c.light){ const l = c.light; l.castShadow = true; l.shadow.mapSize.set(1024, 1024); l.shadow.camera.near = .2; l.shadow.camera.far = 16; l.shadow.bias = -.004; l.shadow.radius = 3; }
+  shadowPass(); setTimeout(shadowPass, 3000); setTimeout(shadowPass, 9000);   // again once the character models have loaded
+  Promise.all(['EffectComposer', 'RenderPass', 'UnrealBloomPass', 'OutputPass'].map(n => import('three/addons/postprocessing/' + n + '.js'))).then(([ec, rp, ub, op]) => {
+    composer = new ec.EffectComposer(renderer); composer.addPass(new rp.RenderPass(scene, camera));
+    composer.addPass(new ub.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .55, .45, .82)); composer.addPass(new op.OutputPass());
+    const fit = () => { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight); }; fit(); addEventListener('resize', fit);
+  }).catch(e => console.warn('bloom unavailable', e));
+}
 function loop(now){
   requestAnimationFrame(loop);
   const dt = Math.min(.05, (now - last) / 1000); last = now;
-  tick(dt); renderer.render(scene, camera);
+  tick(dt); if (composer) composer.render(); else renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
 

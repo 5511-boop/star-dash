@@ -12,8 +12,9 @@
 <body>
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { run } from '../engine.js';
-import level from './rooms.js';
+// version.json changes with every update and is always fetched fresh, so new engine/room code loads straight away
+const v = await fetch('../version.json', { cache: 'no-store' }).then(r => r.json()).then(j => j.v).catch(() => Date.now());
+const [{ run }, { default: level }] = await Promise.all([import('../engine.js?v=' + v), import('./rooms.js?v=' + v)]);
 run(THREE, level);
 </script>
 </body>
