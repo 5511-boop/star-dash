@@ -36,6 +36,12 @@ const RESET_RULE = LEVEL >= 8;
 const OPT_DEF = { vol: 1, sfx: 1, amb: 1, sens: 1, inv: false, shake: true, dread: true, qual: 'high' };
 const OPT = (() => { try { return { ...OPT_DEF, ...JSON.parse(store.get('hm_opts', '{}')) }; } catch { return { ...OPT_DEF }; } })();
 const QUAL = { high: 1, medium: .75, low: .5 };
+// leaving for another level: fade to black with its name, then go (the new page fades in from the same black)
+function goLevel(n, query = ''){
+  const f = document.getElementById('fade');
+  if (f){ f.querySelector('small').textContent = 'LEVEL ' + n; f.querySelector('b').textContent = LEVEL_NAMES[n - 1] || ''; f.classList.remove('out'); }
+  setTimeout(() => { location.href = levelUrl(n) + query; }, f ? 420 : 0);
+}
 function levelUrl(n){
   const p = location.pathname, i = p.indexOf('/haunted/');
   const base = i >= 0 ? p.slice(0, i + 9) : (LEVEL === 1 ? './' : '../');
@@ -94,6 +100,11 @@ style.textContent = `
   #toast{position:absolute;left:50%;top:calc(132px + env(safe-area-inset-top));transform:translateX(-50%);background:#000c;color:#fff;padding:8px 16px;border-radius:12px;
     font-weight:700;font-size:15px;opacity:0;transition:opacity .25s;max-width:calc(100% - 24px);text-align:center}
   #toast.show{opacity:1}
+  #fade{position:fixed;inset:0;z-index:60;background:#05060c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    opacity:1;transition:opacity .55s;pointer-events:none;font-family:Georgia,serif;color:#efe8ff;text-align:center;padding:16px}
+  #fade.out{opacity:0}
+  #fade small{font-family:system-ui,sans-serif;font-size:12px;font-weight:800;letter-spacing:3px;color:var(--accent)}
+  #fade b{font-size:32px;text-shadow:0 0 18px var(--accent)}
   #story{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100% - 32px));text-align:center;background:#0b0918e6;border:1px solid #ffffff22;
     border-radius:18px;padding:20px;font-family:Georgia,serif;font-size:17px;line-height:1.5;opacity:0;transition:opacity .6s}
   #story.show{opacity:1}
@@ -176,6 +187,7 @@ const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
 const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
 const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
+<div id="fade"><small>LEVEL ${LEVEL}</small><b>${esc(CFG.title)}</b></div>
 <canvas id="c"></canvas><div id="dread"></div><div id="flash"></div><div id="frost"></div><div id="sightFx"></div>
 <div id="hud" hidden>
   <div id="hudTop"><div class="pill" id="roomName"></div><div class="pill" id="timer">0:00</div><div class="pill" id="hintBtn" hidden>💡 Hint</div></div>
@@ -1637,13 +1649,29 @@ function send(o){ try { if (conn && conn.open) conn.send(o); } catch {} }
 function randomCode(){ const A = 'ABCDEFGHJKMNPQRSTUVWXYZ'; let s = ''; for (let i = 0; i < 4; i++) s += A[Math.floor(Math.random() * A.length)]; return s; }
 // useCode: re-host under the same code after a refresh. The signalling server can hold the old id for a while,
 // so keep retrying it (about a minute) before giving up and picking a fresh code.
+/* ----- connection servers: several STUN servers let each side find its public address; a TURN relay (configured in
+   haunted/turn.json) carries the game when two networks won't connect directly — mobile data, school or work Wi-Fi.
+   turn.json: {"metered": "<app>.metered.live", "apiKey": "..."}  or  {"iceServers": [{urls, username, credential}, ...]} ----- */
+const STUN = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+let ICE = STUN, hasRelay = false;
+const iceReady = fetch((LEVEL === 1 ? './' : '../') + 'turn.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(async j => {
+  if (!j) return;
+  let extra = j.iceServers || [];
+  if (j.metered && j.apiKey) extra = await fetch(`https://${j.metered}/api/v1/turn/credentials?apiKey=${encodeURIComponent(j.apiKey)}`).then(r => r.json());
+  if (Array.isArray(extra) && extra.length){ ICE = STUN.concat(extra); hasRelay = true; }
+}).catch(() => {});
+const peerOpts = () => ({ config: { iceServers: ICE } });
+const netHelp = () => hasRelay ? 'Check both of you are online and try again.' : 'Your networks may block direct links (common on mobile data and school/work Wi-Fi) — try both on the same Wi-Fi.';
 function hostGame(useCode = null, tries = 0){
   if (typeof Peer === 'undefined'){ status('Could not load the network library. Check your connection.'); return; }
   role = 'host'; applyColors(); code = useCode || randomCode();
   $('roomCode').textContent = code; $('lobbyMsg').textContent = useCode ? `Reopening game ${code}…` : 'Connecting…';
   $('btnStart').disabled = true; $('btnStart').textContent = 'Enter';
   show('lobby'); phase = 'lobby';
-  peer = new Peer(PREFIX + code);
+  iceReady.then(() => { if (role === 'host' && phase === 'lobby' && !peer) openHost(useCode, tries); });
+}
+function openHost(useCode, tries){
+  peer = new Peer(PREFIX + code, peerOpts());
   peer.on('open', () => { $('lobbyMsg').textContent = resume ? `Waiting for ${remoteName} to rejoin code ${code}… (or share it again)` : 'Tell your partner to enter this code and tap Join.'; });
   peer.on('connection', c => {
     // a refreshed partner can arrive before their old link has timed out: take over a link that has gone quiet
@@ -1670,11 +1698,14 @@ function tryRejoin(){
 function joinGame(c){
   if (typeof Peer === 'undefined'){ status('Could not load the network library. Check your connection.'); return; }
   role = 'guest'; applyColors(); code = c; status('Connecting to ' + c + '…');
-  peer = new Peer();
+  iceReady.then(() => { if (role === 'guest' && phase === 'menu' && !peer) openGuest(c); });
+}
+function openGuest(c){
+  peer = new Peer(peerOpts());
   const p0 = peer;
   peer.on('open', () => { conn = peer.connect(PREFIX + c, { reliable: true }); wireConn(); });
-  peer.on('error', e => { if (peer !== p0) return; status(e.type === 'peer-unavailable' ? 'No game found with code ' + c + '.' : 'Network error: ' + e.type); cleanupNet(); role = null; if (rejoinCode) setTimeout(tryRejoin, 4000); });
-  setTimeout(() => { if (peer === p0 && role === 'guest' && phase === 'menu' && !(conn && conn.open)){ status('Could not connect. Try both on the same Wi-Fi.'); cleanupNet(); role = null; if (rejoinCode) setTimeout(tryRejoin, 1000); } }, 15000);
+  peer.on('error', e => { if (peer !== p0) return; status(e.type === 'peer-unavailable' ? 'No game found with code ' + c + '. Check the code — the host\'s lobby must still be open.' : 'Network error: ' + e.type); cleanupNet(); role = null; if (rejoinCode) setTimeout(tryRejoin, 4000); });
+  setTimeout(() => { if (peer === p0 && role === 'guest' && phase === 'menu' && !(conn && conn.open)){ status('Found the game but couldn\'t link up. ' + netHelp()); cleanupNet(); role = null; if (rejoinCode) setTimeout(tryRejoin, 1000); } }, 15000);
 }
 /* ----- resume after a refresh or dropped connection: sessionStorage survives a reload of this tab only ----- */
 let resume = null, sessT = 0;
@@ -1688,6 +1719,12 @@ let lastRecv = 0;
 function wireConn(){
   const c = conn, onOpen = () => send({ t: 'hi', n: myName, sk: mySkin() });
   if (c.open) onOpen(); else c.on('open', onOpen);
+  // the direct link failed outright (usually a strict network): say so instead of hanging on "Connecting…"
+  setTimeout(() => { const pc = c.peerConnection; if (pc) pc.addEventListener('iceconnectionstatechange', () => {
+    if (pc.iceConnectionState !== 'failed' || c !== conn) return;
+    if (role === 'guest' && phase === 'menu') status('Couldn\'t link up with the host. ' + netHelp());
+    else if (role === 'host' && phase === 'lobby') $('lobbyMsg').textContent = `Your partner found the game but the link failed. ${netHelp()}`;
+  }); }, 0);
   c.on('data', m => { if (c === conn) onData(m); }); c.on('close', () => onDisconnect(c)); c.on('error', () => onDisconnect(c));
 }
 function onData(m){
@@ -1707,7 +1744,7 @@ function onData(m){
       }
       break;
     case 'welcome':
-      if (m.lv && m.lv !== LEVEL){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(code); return; }
+      if (m.lv && m.lv !== LEVEL){ cleanupNet(); goLevel(m.lv, '?join=' + encodeURIComponent(code)); return; }
       remoteName = String(m.n || 'Partner').slice(0, 12); if (m.sk === 0 || m.sk === 1) remoteSkin = m.sk; applyColors();
       if (rejoinCode) status(''); rejoinCode = ''; rejoinTries = 0;
       $('roomCode').textContent = code; $('lobbyMsg').textContent = `Connected to ${remoteName}. Waiting for them to start…`;
@@ -1726,7 +1763,7 @@ function onData(m){
     case 'again': if (role === 'host' && phase === 'won') startGame(S.startRoom); break;
     case 'next': if (role === 'host' && phase === 'won') goNextLevel(); break;
     case 'skiproom': if (role === 'host' && phase === 'play') hostSkipRoom(m.r); break;
-    case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
+    case 'nextlv': if (role === 'guest'){ cleanupNet(); goLevel(m.lv, '?join=' + encodeURIComponent(m.code)); } break;
     case 'tp': if (role === 'guest'){ me.pos.set(m.x, 0, m.z); me.slide = null; me.dash = null; me.grap = null; } break;
     case 'unfz': if (role === 'host') S.frozen[1] = 0; break;
     case 'fell': if (role === 'host'){ const ri = roomAt(other.target.z), R = ROOMS[ri]; if (R && R.def.onFall) R.def.onFall(S.rs[ri], R, E, 1); } break;
@@ -1827,8 +1864,8 @@ function setPhase(p){
 }
 function goNextLevel(){
   const n = LEVEL + 1;
-  if (role === 'host'){ send({ t: 'nextlv', lv: n, code }); setTimeout(() => { cleanupNet(); location.href = levelUrl(n) + '?host=1'; }, 400); }
-  else { cleanupNet(); location.href = levelUrl(n); }
+  if (role === 'host'){ send({ t: 'nextlv', lv: n, code }); setTimeout(() => { cleanupNet(); goLevel(n, '?host=1'); }, 400); }
+  else { cleanupNet(); goLevel(n); }
 }
 function toMenu(msg = ''){
   cleanupNet(); role = null; phase = 'menu'; hideGameUI();
@@ -1906,7 +1943,7 @@ function updateHud(dt){
 /* ===================== menu wiring ===================== */
 $('name').value = myName;
 fillSelects();
-$('levelSel').addEventListener('change', e => { const n = +e.target.value; if (n !== LEVEL) location.href = levelUrl(n); });
+$('levelSel').addEventListener('change', e => { const n = +e.target.value; if (n !== LEVEL) goLevel(n); });
 for (const el of document.querySelectorAll('.skinSel')){
   el.value = skinPref;
   el.addEventListener('change', e => {
@@ -2258,6 +2295,13 @@ function loop(now){
   tick(dt); if (composer) composer.render(); else renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
+// fade in once the first frame is drawn, and quietly fetch the next level so "Next level" opens fast
+requestAnimationFrame(() => requestAnimationFrame(() => $('fade').classList.add('out')));
+setTimeout(() => $('fade').classList.add('out'), 1500);   // in case frames are paused (background tab)
+if (LEVELS.some(l => l.n === LEVEL + 1)){
+  const v = new URL(import.meta.url).searchParams.get('v'), next = levelUrl(LEVEL + 1);
+  for (const u of [next, next + 'rooms.js' + (v ? '?v=' + v : '')]){ const l = document.createElement('link'); l.rel = 'prefetch'; l.href = u; document.head.appendChild(l); }
+}
 
 // handle for automated tests
 return {
