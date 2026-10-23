@@ -418,7 +418,7 @@ const THEMES = {
         pulse: [2, () => beep(900, .05, 'square', .012)],
         ev: [[A.pages, 1], [A.whisper, .7], [A.creak, .6]], every: [5, 11] },                                         // Spectral Archive
   12: { build(){ bed({ brown: 1, f: 250, g: .02, lfo: .8, depth: .3 }); },
-        ev: [[p => A.musicbox(523, LULLABY, p), 1], [A.ratchet, .7], [A.squeak, .7], [A.laughter, .3]], every: [6, 12] },   // Toy Factory
+        ev: [[p => A.musicbox(523, LULLABY, p), 1], [A.ratchet, .7], [A.squeak, .7]], every: [6, 12] },   // Toy Factory
   13: { build(){ bed({ brown: 1, f: 120, g: .04, lfo: .05 }); },
         ev: [[A.drip, 1.4], [A.pickaxe, .8], [A.canary, .5], [A.rumble, .4]], every: [3, 8] },                        // Coal Mine
   14: { build(){ bed({ type: 'bandpass', f: 900, q: 1.5, g: .03, sweep: [300, .07], lfo: .1 }); },
@@ -440,7 +440,7 @@ const THEMES = {
 const THEME = THEMES[LEVEL] || { ev: [[A.creak, 1], [A.gust, .5]], every: [9, 23] };
 // Pre-rendered soundscape (audio/levelN_bed.mp3 = seamless loop, levelN_fx.mp3 = one-shots in 5 s slots; made by
 // soundscape/render.py). Until it loads nothing plays; if it can't load, the synthesized THEME above is used instead.
-const AUDIO_VER = 2, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 8;   // FX_SLOT matches SLOT in render.py
+const AUDIO_VER = 3, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 8;   // FX_SLOT matches SLOT in render.py
 let scape = 'loading', ambEvT = 3, pulseT = 0, pulseK = 0;
 async function loadScape(){
   try {

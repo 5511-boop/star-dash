@@ -467,7 +467,7 @@ def lvl(n):
     if n == 8:   # Opera House: a murmuring audience that isn't there, the orchestra tuning, a soprano, ghostly singing
         T('l8_murmur', -6); T('l8_tuning', -14); lp_.layer(organ([65.4, 98, 130.8], X / SR, 5, 5) * slow(X, .07, .5, 1), .05)
         lp_.put(E('l8_soprano', 0, 9), 12, db(-12), -.5)
-        return lp_.render(.92, .45), fx_sheet([E('l8_soprano', 0, 7.4), E('l8_soprano', 9, 7.4), E('l8_ghost_sing'), E('l8_remorse'), E('l8_tuning', 5, 7), E('l8_creak'), laugh()])
+        return lp_.render(.92, .45), fx_sheet([E('l8_soprano', 0, 7.4), E('l8_soprano', 9, 7.4), E('l8_ghost_sing'), E('l8_remorse'), E('l8_tuning', 5, 7), E('l8_creak')])
     if n == 9:   # Ruined Cathedral: the organ, wind through broken windows, Gregorian chant, the bell, drips
         lp_.layer(organ([55, 82.4, 110, 164.8], X / SR, 5, 5) * slow(X, .06, .5, 1), .05)
         lp_.wide(lambda: wind(X, 300, 900), .15)
@@ -486,7 +486,7 @@ def lvl(n):
         T('l12_machine', -12)
         lp_.put(E('l12_vintage_box', 0, 14), 6, db(-12), -.4)
         return lp_.render(.7, .3), fx_sheet([E('l12_musicbox', 0, 7.4), E('l12_vintage_box', 8, 7.4), E('l12_toy_piano', 0, 7.4), E('l12_toy_piano', 12, 7.4),
-                                             E('l12_windup'), E('l12_squeak'), laugh()])
+                                             E('l12_windup'), E('l12_squeak')])
     if n == 13:   # Coal Mine: water dripping in a huge cave, a deep rumble, picks in far tunnels, the canary
         T('l13_drips', 0); T('l13_rumble', -4)
         lp_.put(E('l13_pick', 0, 4), 19, db(-10), .6)
@@ -521,7 +521,7 @@ def lvl(n):
         T('l20_heart', -4, xf=.05); T('l20_presence', -10)
         lp_.layer(organ([41.2, 61.7, 82.4], X / SR, 5, 5) * slow(X, .06, .5, 1), .03)
         lp_.put(E('l20_floorboards'), 13, db(-10), -.5); lp_.put(E('l20_footsteps', 0, 7), 31, db(-12), .6)
-        return lp_.render(.85, .4), fx_sheet([E('l20_creak'), E('l20_floorboards'), E('l20_footsteps', 0, 7.4), whisper(), choir([st(73.4, s) for s in (0, 3, 7)], 7, 'oh'), laugh()])
+        return lp_.render(.85, .4), fx_sheet([E('l20_creak'), E('l20_floorboards'), E('l20_footsteps', 0, 7.4), whisper(), choir([st(73.4, s) for s in (0, 3, 7)], 7, 'oh')])   # the cackle is the Witch's Bog's alone
 
 if __name__ == '__main__':
     levels = [int(a) for a in sys.argv[1:]] or list(range(2, 21))
