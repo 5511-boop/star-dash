@@ -83,6 +83,7 @@ style.textContent = `
   .code{font-size:54px;font-weight:800;letter-spacing:10px;margin:4px 0 6px;color:var(--gold);font-family:system-ui,sans-serif}
   .rows{margin:14px 0 16px;display:grid;gap:6px}
   .row{display:flex;justify-content:space-between;background:#ffffff0d;border-radius:10px;padding:10px 12px;font-family:system-ui,sans-serif;font-weight:600}
+  .best{font-family:system-ui,sans-serif;font-size:13px;font-weight:700;color:var(--gold);margin:-6px 0 14px}
   .stars{font-size:40px;color:var(--gold);letter-spacing:6px;margin:4px 0}
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10;padding:calc(10px + env(safe-area-inset-top)) 12px 0;font-family:system-ui,sans-serif}
   #hudTop{display:flex;justify-content:center;gap:8px;align-items:center;flex-wrap:wrap}
@@ -205,6 +206,7 @@ document.body.innerHTML = `
   <p class="pnote">The game keeps running while this is open — the ghosts don't wait!</p>
   <div class="prow"><button id="pResume" class="big" style="margin:0">Resume${isTouch ? '' : ' (Esc)'}</button></div>
   <div class="prow"><button id="pHint">💡 Hint</button><button id="pRespawn">↺ Room start</button><button id="pSkip">⏭ Skip room</button></div>
+  <div class="prow" id="fsRow"><button id="pFull">⛶ Fullscreen</button></div>
   <div class="sec">SOUND</div>
   <label class="opt">Master volume<input type="range" id="oVol" min="0" max="1" step="0.05"></label>
   <label class="opt">Sound effects<input type="range" id="oSfx" min="0" max="1" step="0.05"></label>
@@ -212,7 +214,7 @@ document.body.innerHTML = `
   <div class="sec">CAMERA &amp; SCREEN</div>
   <label class="opt">Camera sensitivity<input type="range" id="oSens" min="0.3" max="2.5" step="0.1"></label>
   <label class="opt">Invert camera tilt<input type="checkbox" id="oInv"></label>
-  <label class="opt">Camera shake<input type="checkbox" id="oShake"></label>
+  <label class="opt">Camera shake &amp; vibration<input type="checkbox" id="oShake"></label>
   <label class="opt">Dread effects (dark edges, flicker)<input type="checkbox" id="oDread"></label>
   <label class="opt">Graphics quality<select id="oQual"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (faster)</option></select></label>
   <div class="sec">CONTROLS</div>
@@ -226,6 +228,7 @@ document.body.innerHTML = `
   <div class="lvl">LEVEL ${LEVEL}</div>
   <h1>${esc(CFG.title)}</h1>
   <p class="sub">${CFG.tagline}</p>
+  <p class="best" id="bestLine" hidden></p>
   ${feat}
   <label>Your name<input id="name" maxlength="12" autocomplete="off" placeholder="Name"></label>
   ${SKINS ? `<label>Character<select class="skinSel">${skinOpts()}</select></label>` : ''}
@@ -817,7 +820,8 @@ function animGhost(g, t, dt, gd){
   g.reachK += (clamp((6 - gd) / 5, 0, 1) - g.reachK) * damp(4, dt);
   g.reach.forEach((r, i) => { r.o.rotation.x = r.rx - g.reachK * 1.1 + Math.sin(t * (2 + g.reachK * 6) + i * 1.7) * (.05 + g.reachK * .12); });
 }
-if (/[?&]dev\b/.test(location.search)) window.HM = { GHOSTS, scene, get me(){ return me; }, ghost(look, tint){ const g = { look, tint, mesh: ghostMesh(look, tint) }; dressGhost(g); return g; }, animGhost };
+const DEV = /[?&]dev\b/.test(location.search);
+if (DEV) window.HM = { GHOSTS, scene, get me(){ return me; }, ghost(look, tint){ const g = { look, tint, mesh: ghostMesh(look, tint) }; dressGhost(g); return g; }, animGhost };
 if (!/noskin/.test(location.search)) skinKit().then(kit => kit && kit.loader.load((LEVEL === 1 ? '' : '../') + 'models/enemies.glb?v=' + MODEL_VER,
   gl => { enemyGlb = gl.scene; GHOSTS.forEach(dressGhost); }, undefined, e => console.warn('enemy models failed', e)));
 
@@ -1193,9 +1197,32 @@ function resetCam(){ CAM.ty = Math.round(CAM.ty / (Math.PI * 2)) * Math.PI * 2; 
   addEventListener('blur', () => { CAM.drag = false; });
   cv.addEventListener('wheel', e => { e.preventDefault(); CAM.tz = clamp(CAM.tz * Math.exp(e.deltaY * .0012), .3, 1.8); }, { passive: false });
 }
+/* ----- gamepad: left stick moves, right stick turns the camera; A dash · X lantern (hold: sight) · RT/RB run · Y ping ·
+   B swap · LB rewind · Start menu · Back room start · D-pad up hint · R3 reset camera ----- */
+const gpad = { x: 0, z: 0, run: false, prev: [] };
+addEventListener('gamepadconnected', () => { if (phase === 'play') toast('🎮 Controller connected'); });
+function pollPad(dt){
+  const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected) : null;
+  if (!gp){ gpad.x = gpad.z = 0; gpad.run = false; return; }
+  const dz = v => Math.abs(v || 0) < .18 ? 0 : v, b = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+  const edge = (i, on, off) => { const p = b(i); if (p && !gpad.prev[i] && on) on(); if (!p && gpad.prev[i] && off) off(); gpad.prev[i] = p; };
+  gpad.x = dz(gp.axes[0]); gpad.z = dz(gp.axes[1]); gpad.run = b(7) || b(5) || b(10);
+  const rx = dz(gp.axes[2]), ry = dz(gp.axes[3]);
+  if (rx || ry){ CAM.ty -= rx * dt * 2.6 * OPT.sens; CAM.tp = clamp(CAM.tp + ry * dt * 1.6 * OPT.sens * (OPT.inv ? -1 : 1), .5 - BASE_PITCH, 1.45 - BASE_PITCH); }
+  if (paused){ edge(9, () => setPaused(false)); edge(1, () => setPaused(false)); for (let i = 0; i < gp.buttons.length; i++) gpad.prev[i] = b(i); return; }
+  edge(0, pressDash, releaseDash);
+  edge(2, pressPow, releasePow);
+  edge(3, () => { if (has('ping') && phase === 'play') doPing(me.pos.x, me.pos.z); });
+  edge(1, () => { if (has('swap')) requestSwap(); });
+  edge(4, () => { if (has('rewind')) doRewind(); });
+  edge(9, () => { if (phase === 'play') setPaused(true); });
+  edge(8, respawnRoom);
+  edge(12, showHint);
+  edge(11, resetCam);
+}
 function rawInput(){
   if (paused) return [0, 0, 0];
-  let x = joy.x, z = joy.y;
+  let x = joy.x + gpad.x, z = joy.y + gpad.z;
   if (keys.KeyW || keys.ArrowUp) z -= 1;
   if (keys.KeyS || keys.ArrowDown) z += 1;
   if (keys.KeyA || keys.ArrowLeft) x -= 1;
@@ -1203,7 +1230,7 @@ function rawInput(){
   const l = Math.hypot(x, z); if (l > 1){ x /= l; z /= l; }
   // controls follow the camera: W always walks away from it (turned into world directions here, so swap rooms still work)
   const c = Math.cos(CAM.yaw), sn = Math.sin(CAM.yaw); [x, z] = [x * c + z * sn, -x * sn + z * c];
-  return [x, z, (runTouch || keys.ShiftLeft || keys.ShiftRight) ? 1 : 0];
+  return [x, z, (runTouch || gpad.run || keys.ShiftLeft || keys.ShiftRight) ? 1 : 0];
 }
 
 /* ===================== powers (local side) ===================== */
@@ -1544,7 +1571,7 @@ function playEv(e){
     case 'door': sfx.door(); break;
     case 'chime': sfx.chime(e.a); break;
     case 'wrong': sfx.wrong(); break;
-    case 'freeze': sfx.freeze(); if (e.a === myIdx()){ flash(); shakeT = .5; } break;
+    case 'freeze': sfx.freeze(); if (e.a === myIdx()){ flash(); shakeT = .5; if (OPT.shake && navigator.vibrate) try { navigator.vibrate([90, 60, 160]); } catch {} } break;
     case 'thaw': sfx.thaw(); break;
     case 'pick': sfx.pick(); break;
     case 'place': sfx.place(); break;
@@ -1736,7 +1763,7 @@ let rejoinCode = '', rejoinTries = 0;
 function tryRejoin(){
   if (!rejoinCode || role !== null || phase !== 'menu') return;
   if (rejoinTries++ >= 15){ status('Could not reconnect. Ask your partner for their code.'); rejoinCode = ''; return; }
-  joinGame(rejoinCode); status(`Lost connection — reconnecting to ${rejoinCode}… (${rejoinTries})`);
+  joinGame(rejoinCode); status(rejoinTries > 1 ? `Waiting for game ${rejoinCode}… (${rejoinTries})` : `Connecting to ${rejoinCode}…`);
 }
 function joinGame(c){
   if (typeof Peer === 'undefined'){ status('Could not load the network library. Check your connection.'); return; }
@@ -1907,7 +1934,7 @@ function setPhase(p){
 }
 function goNextLevel(){
   const n = LEVEL + 1;
-  if (role === 'host'){ send({ t: 'nextlv', lv: n, code }); setTimeout(() => { cleanupNet(); goLevel(n, '?host=1'); }, 400); }
+  if (role === 'host'){ send({ t: 'nextlv', lv: n, code }); setTimeout(() => { cleanupNet(); goLevel(n, '?host=' + code); }, 400); }
   else { cleanupNet(); goLevel(n); }
 }
 function toMenu(msg = ''){
@@ -1922,6 +1949,10 @@ function fillSelects(){
   const ls = $('levelSel'); ls.innerHTML = '';
   for (const l of LEVELS){ const o = document.createElement('option'); o.value = l.n; const st = parseInt(store.get('hm_stars_L' + l.n, '0')) || 0; o.textContent = `${l.n}. ${l.name}${st ? ' ' + '★'.repeat(st) : ''}`; ls.appendChild(o); }
   ls.value = String(LEVEL);
+  // your record on this level, under the title
+  const stars = parseInt(store.get('hm_stars_L' + LEVEL, '0')) || 0, best = parseFloat(store.get('hm_best_L' + LEVEL, LEVEL === 1 ? store.get('hm_best10', '0') : '0')) || 0;
+  $('bestLine').hidden = !stars && !best;
+  $('bestLine').textContent = [stars ? '★'.repeat(stars) + '☆'.repeat(3 - stars) : '', best ? 'Best escape ' + fmtTime(best) : ''].filter(Boolean).join('  ·  ');
 }
 function showHint(){
   const ri = roomAt(me.pos.z), R = ROOMS[ri];
@@ -1970,6 +2001,7 @@ function updateHud(dt){
   $('frost').classList.toggle('on', myFrozen());
   $('sightFx').classList.toggle('on', me.sight > 0);
   if (toastT > 0){ toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
+  if (storyT > 0 && storyT < 6.5 && me.moving) storyT = Math.min(storyT, .01);   // once you're on the move, the intro card gets out of the way
   if (storyT > 0){ storyT -= dt; if (storyT <= 0) $('story').classList.remove('show'); }
   if (otherChar.group.visible && other.seen && phase === 'play'){
     const v = otherChar.group.position.clone(); v.y = 1; v.project(camera);
@@ -2046,6 +2078,7 @@ function controlsHTML(){
   r('H', '💡', 'Hint (after 40 s in a room)');
   r('T', '↺', 'Back to the start of this room');
   r('Esc / P', '☰ Menu', 'This menu');
+  if (!isTouch) r('🎮 Gamepad', '', 'Left stick move · right stick camera · A dash · X lantern · RT run · Y ping · Back room start · Start menu');
   return rows.join('');
 }
 const OPT_INPUTS = { oVol: 'vol', oSfx: 'sfx', oAmb: 'amb', oSens: 'sens', oInv: 'inv', oShake: 'shake', oDread: 'dread', oQual: 'qual' };
@@ -2062,7 +2095,19 @@ $('pResume').onclick = () => setPaused(false);
 $('pHint').onclick = () => { setPaused(false); showHint(); if (hintT <= 0) toast('No hint for this room.'); };
 $('pRespawn').onclick = () => { setPaused(false); respawnRoom(); };
 $('pSkip').onclick = () => { setPaused(false); skipRoom(); };
-$('pReset').onclick = () => { Object.assign(OPT, OPT_DEF); syncOptInputs(); applyOpts(); toast('Options reset.'); };
+{
+  const de = document.documentElement, fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const label = () => { $('pFull').textContent = fsOn() ? '⛶ Exit fullscreen' : '⛶ Fullscreen'; };
+  $('fsRow').hidden = !(de.requestFullscreen || de.webkitRequestFullscreen);
+  $('pFull').onclick = () => {
+    try {
+      if (fsOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else { const p = (de.requestFullscreen || de.webkitRequestFullscreen).call(de); if (p && p.catch) p.catch(() => toast('Fullscreen isn\'t allowed here.')); }
+    } catch {}
+  };
+  document.addEventListener('fullscreenchange', label); document.addEventListener('webkitfullscreenchange', label);
+}
+$('pReset').onclick =() => { Object.assign(OPT, OPT_DEF); syncOptInputs(); applyOpts(); toast('Options reset.'); };
 $('pLeave').onclick = () => { if (role !== 'solo' && !confirm('Leave the game? Your partner will be left on their own.')) return; setPaused(false); sess.clear(); toMenu(); };
 {
   const s = sess.get();
@@ -2124,8 +2169,11 @@ $('btnNext').onclick = () => {
 };
 try {
   const q = new URLSearchParams(location.search), jc = q.get('join');
-  if (jc){ $('code').value = jc.toUpperCase(); if (myName){ status('Joining ' + jc + '… tap Join if nothing happens.'); setTimeout(() => $('btnJoin').click(), 400); } else status('Type your name and tap Join.'); }
-  else if (q.get('host') && myName) status('Tap Create game — your partner will be sent here when they join your new code.');
+  // sent on by "Next level": the host reopens the same code here and the guest keeps trying it until it's up
+  const hc = (q.get('host') || '').toUpperCase();
+  if (jc){ $('code').value = jc.toUpperCase(); if (myName){ status('Joining ' + jc + '…'); rejoinCode = jc.toUpperCase(); rejoinTries = 0; setTimeout(tryRejoin, 600); } else status('Type your name and tap Join.'); }
+  else if (/^[A-Z]{4}$/.test(hc) && myName) setTimeout(() => { if (phase === 'menu' && !role) hostGame(hc); }, 200);
+  else if (hc && myName) status('Tap Create game — your partner will be sent here when they join your new code.');
   if (jc || q.get('host')) history.replaceState(null, '', location.pathname);
 } catch {}
 
@@ -2253,7 +2301,7 @@ let last = performance.now(), clockT = 0, netT = 0, histT = 0;
 const camPos = new THREE.Vector3(0, 16, 20), camLook = new THREE.Vector3();
 camera.position.copy(camPos);
 function tick(dt){
-  clockT += dt; fallCD -= dt;
+  clockT += dt; fallCD -= dt; pollPad(dt);
   me.dashCD = Math.max(0, me.dashCD - dt); swapCD = Math.max(0, swapCD - dt); me.powCD = Math.max(0, me.powCD - dt); me.rewCD = Math.max(0, me.rewCD - dt); me.decoyCD = Math.max(0, me.decoyCD - dt);
   if (btn.dash){ btn.dashT += dt; if (has('decoy') && !btn.dashUsed && btn.dashT > .65 && !carrying(myIdx())){ btn.dashUsed = true; actDash(true); } }
   if (btn.pow){ btn.powT += dt; if (has('sight') && btn.powT > .3 && phase === 'play'){ btn.powUsed = true; if (me.sightE > 0){ me.sight = 1; me.sightE = Math.max(0, me.sightE - dt / 5); } else me.sight = 0; } }
@@ -2339,6 +2387,14 @@ function loop(now){
   tick(dt); if (composer) composer.render(); else renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
+// A background tab gets no animation frames, which would freeze a co-op game for both players. While hidden and linked,
+// keep simulating (and talking to your partner) on a timer; browsers slow timers to about once a second, so catch up in steps.
+let bgT = 0;
+setInterval(() => {
+  if (!document.hidden || !(conn && conn.open)){ bgT = 0; return; }
+  const now = performance.now(); let dt = bgT ? Math.min(2, (now - bgT) / 1000) : 0; bgT = now;
+  while (dt > 1e-3){ const s = Math.min(.05, dt); tick(s); dt -= s; }
+}, 250);
 // fade in once the first frame is drawn, and quietly fetch the next level so "Next level" opens fast
 requestAnimationFrame(() => requestAnimationFrame(() => $('fade').classList.add('out')));
 setTimeout(() => $('fade').classList.add('out'), 1500);   // in case frames are paused (background tab)
@@ -2347,10 +2403,12 @@ if (LEVELS.some(l => l.n === LEVEL + 1)){
   for (const u of [next, next + 'rooms.js' + (v ? '?v=' + v : '')]){ const l = document.createElement('link'); l.rel = 'prefetch'; l.href = u; document.head.appendChild(l); }
 }
 
-// handle for automated tests
-return {
+// handle for automated tests (also window.G with ?dev)
+const handle = {
   S, me, other, tick, startGame, solveUpTo, resetWorld, ROOMS, GHOSTS, PLATES, DOORS, colliders, keys, E, roomAt, HOOKS, requestSwap, getAnchor: () => soloAnchor,
   setRole: r => { role = r; }, setConn: c => { conn = c; }, getPhase: () => phase, WIN_Z, setRemote: n => { remoteName = n; },
   pressDash, releaseDash, pressPow, releasePow, hostAbility, doRewind, respawnRoom, skipRoom, btn, carrying, doPing, hostPing
 };
+if (DEV){ window.G = handle; handle.step = (n = 1, dt = 1 / 30) => { for (let i = 0; i < n; i++) tick(dt); if (composer) composer.render(); else renderer.render(scene, camera); }; }
+return handle;
 }
