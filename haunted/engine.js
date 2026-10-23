@@ -261,7 +261,7 @@ function unlockAudio(){
       noiseBuf = buf; brownBuf = actx.createBuffer(1, len, actx.sampleRate);
       { const b = brownBuf.getChannelData(0); let v = 0; for (let i = 0; i < len; i++){ v = (v + .02 * (Math.random() * 2 - 1)) / 1.02; b[i] = v * 3.5; } }
       themeGain = actx.createGain(); themeGain.connect(ambBus);
-      try { THEME.build && THEME.build(); } catch (e) { console.warn('soundscape', e); }
+      loadScape();
     }
     if (actx.state === 'suspended') actx.resume();
   } catch {}
@@ -432,10 +432,36 @@ const THEMES = {
         ev: [[A.creak, 1], [A.whisper, .8], [p => A.choir(rnd(73, 98), p), .6], [p => A.bell(rnd(98, 123), p, .02), .4]], every: [6, 12] },   // Heart of Hollow Manor
 };
 const THEME = THEMES[LEVEL] || { ev: [[A.creak, 1], [A.gust, .5]], every: [9, 23] };
-let ambEvT = 3, pulseT = 0, pulseK = 0;
+// Pre-rendered soundscape (audio/levelN_bed.mp3 = seamless loop, levelN_fx.mp3 = one-shots in 5 s slots; made by
+// soundscape/render.py). Until it loads nothing plays; if it can't load, the synthesized THEME above is used instead.
+const AUDIO_VER = 1, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 5;
+let scape = 'loading', ambEvT = 3, pulseT = 0, pulseK = 0;
+async function loadScape(){
+  try {
+    const get = s => fetch((LEVEL === 1 ? './' : '../') + 'audio/level' + LEVEL + s + '.mp3?v=' + AUDIO_VER)
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then(a => new Promise((ok, no) => actx.decodeAudioData(a, ok, no)));
+    const [bed, fx] = await Promise.all([get('_bed'), get('_fx')]);
+    const s = actx.createBufferSource(), g = actx.createGain(); g.gain.value = BED_GAIN;
+    s.buffer = bed; s.loop = true; s.loopStart = .1; s.loopEnd = bed.duration - .1;   // the files carry .1 s of wrap-around padding at each end
+    s.connect(g).connect(themeGain); s.start(0, .1);
+    scape = { fx, slots: Math.max(1, Math.round(fx.duration / FX_SLOT)) };
+  } catch (e){
+    scape = null;
+    try { THEME.build && THEME.build(); } catch (e2){ console.warn('soundscape', e2); }
+  }
+}
+function scapeFx(){
+  const src = actx.createBufferSource(), g = actx.createGain(), k = Math.floor(Math.random() * scape.slots);
+  src.buffer = scape.fx; g.gain.value = FX_GAIN * rnd(.5, 1);
+  let node = g; if (actx.createStereoPanner){ const p = actx.createStereoPanner(); p.pan.value = rpan(); g.connect(p); node = p; }
+  node.connect(themeGain); src.connect(g); src.start(0, k * FX_SLOT, FX_SLOT);
+}
 function themeTick(dt){
   if (!actx || !themeGain) return;
   themeGain.gain.value = phase === 'play' ? 1 : .6;   // the menu gets the same soundscape, a little quieter
+  if (scape === 'loading') return;
+  if (scape){ ambEvT -= dt; if (ambEvT <= 0){ const [a, b] = THEME.every; ambEvT = rnd(a, b) * 1.4; scapeFx(); } return; }
   if (THEME.pulse){ pulseT -= dt; if (pulseT <= 0){ pulseT += THEME.pulse[0]; if (pulseT < 0) pulseT = THEME.pulse[0]; asAmb(() => THEME.pulse[1](pulseK++)); } }
   ambEvT -= dt;
   if (ambEvT <= 0 && THEME.ev){
