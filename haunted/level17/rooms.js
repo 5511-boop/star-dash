@@ -40,29 +40,43 @@ const bell = {
 /* =============================================================== */
 const CUR2 = [[-10, 4.5, 10, 7, -3.2, 0], [-10, 10, 10, 12.5, 3.2, 0], [-10, 15.5, 10, 18, -3.2, 0]];
 const KELP2 = [[-9, 7.4, -6, 9.6], [-1.5, 7.4, 1.5, 9.6], [6, 12.9, 9, 15.1], [-4, 12.9, -1, 15.1], [3, 18.4, 6.5, 20.6]];
-const PRL2 = [[8.5, 5.5], [-8.5, 11], [0, 17]];
+// each pearl sits in a giant clam just outside a kelp thicket; a clam snaps shut on any diver it can SEE
+const PRL2 = [[-5.3, 8.5], [7.5, 15.75], [2.3, 19.5]];
 const kelp = {
   name: 'The Kelp Forest',
   floor: seabed,
   dark: .75,
   notes: [[3, 1.4, '“The currents will carry you whether you like it or not. The kelp will hide you.”', 1.5]],
-  hint: 'The three bands of glittering water are currents: they shove you sideways (left, right, left). The kelp thickets between them are shadows — the hunting eels can\'t see you in there. Grab the three pearls.',
+  get hint(){ return 'The giant clams snap shut on anyone they can see — you can only take a pearl while you\'re HIDDEN: reach in from the edge of the kelp next to it' + (solo() ? '' : ', or stand right behind your partner\'s back while they shield you') + '. The currents shove you sideways (left, right, left), so line up before you drift in. The kelp hides you from the eels too.'; },
   build(R, E){
     EE = E; const T = E.THREE;
     this.sm = shadeMeshes(E, R, KELP2);
     KELP2.forEach(([a, b, c, d]) => { for (let i = 0; i < 6; i++){ const k = new T.Mesh(new T.CylinderGeometry(.05, .08, 2.6 + Math.random(), 4), E.mat(0x2a6a2a)); R.place(k, a + Math.random() * (c - a), b + Math.random() * (d - b), 1.3); } });
     this.parts = CUR2.map(([a, b, c, d]) => Array.from({ length: 16 }, () => { const m = new T.Mesh(new T.SphereGeometry(.05, 4, 3), new T.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: .7 })); m.userData = { u: Math.random(), v: Math.random() }; E.scene.add(m); return m; }));
     this.pm = PRL2.map(([x, lz]) => { const m = pearlMesh(E); R.place(m, x, lz, .4); return m; });
+    // the clam: two shells that gape open only while no visible diver is close
+    this.clams = PRL2.map(([x, lz]) => { const g = new T.Group(), sm = E.mat(0x8a7a9a, { roughness: .6 }); const lo = new T.Mesh(new T.SphereGeometry(.75, 14, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), sm); lo.scale.y = .45; g.add(lo); const hi = new T.Group(); hi.position.set(0, .05, -.6); const top = new T.Mesh(new T.SphereGeometry(.75, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), sm); top.scale.y = .45; top.position.z = .6; hi.add(top); g.add(hi); g.userData.hi = hi; R.place(g, x, lz, .15); return g; });
     R.ghost({ home: [0, 9], look: 'wisp', tint: 0x2a6a5a, sp: 2.6, radius: 8, label: 'a hunting eel' }); R.ghost({ home: [0, 15], look: 'wisp', tint: 0x2a6a5a, sp: 2.4, radius: 8, label: 'a hunting eel' });
     this.orbs = orbRow(E, R, 3, -1.3, 21.4, 1.3, 2.4);
   },
-  init(){ return { got: [0, 0, 0] }; },
+  init(){ return { got: [0, 0, 0], shut: [0, 0, 0], msg: 0 }; },
   solve(st){ st.got = [1, 1, 1]; },
   shadows(st, R){ return shadeRects(R, KELP2); },
   push(st, R, E, pos){ const lz = R.lz(pos.z), c = CUR2.find(([a, b, cc, d]) => pos.x > a && pos.x < cc && lz > b && lz < d); return c ? [c[4], -c[5]] : null; },
-  host(dt, st, R, E){ pick(R, E, st, PRL2, 'got', 'A pearl!', 3); if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three pearls — the door opens!'); } },
-  visual(dt, t, st, R){ this.parts.forEach((ps, k) => { const [a, b, c, d, dx] = CUR2[k]; ps.forEach(m => { const u = m.userData; u.u = (u.u + dt * .2 * Math.sign(dx) + 1) % 1; m.position.set(a + (c - a) * u.u, .5 + Math.sin(t * 2 + u.v * 9) * .3, R.Z(b + (d - b) * u.v)); }); }); this.pm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 pearls. <b>Currents</b> push you sideways; the <b>kelp</b> hides you from the eels. (${st.got.filter(Boolean).length}/3)`; }
+  host(dt, st, R, E){
+    st.msg = Math.max(0, st.msg - dt);
+    PRL2.forEach(([x, lz], i) => {
+      if (st.got[i]) return;
+      const close = E.P.filter(p => !p.frozen && R.inside(p.pos) && near(R, p, x, lz, 2.6));
+      st.shut[i] = close.some(p => !p.hidden) ? 1 : 0;   // any diver it can see makes it clamp shut
+      const taker = close.find(p => p.hidden && near(R, p, x, lz, 1.25));
+      if (taker && !st.shut[i]){ st.got[i] = 1; E.ev('pick', `A pearl! (${st.got.filter(Boolean).length}/3)`); }
+      else if (!st.msg && close.some(p => !p.hidden && near(R, p, x, lz, 1.25))){ st.msg = 4; E.ev('thud', 'The clam snaps shut — it can see you! Reach in while you\'re hidden.'); }
+    });
+    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three pearls — the door opens!'); }
+  },
+  visual(dt, t, st, R){ this.parts.forEach((ps, k) => { const [a, b, c, d, dx] = CUR2[k]; ps.forEach(m => { const u = m.userData; u.u = (u.u + dt * .2 * Math.sign(dx) + 1) % 1; m.position.set(a + (c - a) * u.u, .5 + Math.sin(t * 2 + u.v * 9) * .3, R.Z(b + (d - b) * u.v)); }); }); this.pm.forEach((m, i) => m.visible = !st.got[i]); this.clams.forEach((g, i) => { const hi = g.userData.hi, want = st.got[i] ? -.9 : st.shut[i] ? 0 : -.75 - Math.sin(t * 1.5 + i) * .08; hi.rotation.x += (want - hi.rotation.x) * Math.min(1, dt * (st.shut[i] ? 18 : 3)); }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 pearls. The <b>clams snap shut</b> on anyone they can see — reach in while <b>hidden</b> (kelp edge${E.solo() ? '' : ' or your partner\'s back'}). Currents push you sideways. (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */
@@ -106,11 +120,12 @@ const jelly = {
   floor: seabed,
   dark: .85,
   notes: [[0, 1.6, '“Jellyfish have no eyes. Hiding won\'t help you here.”', 1.5]],
-  hint: 'The jellyfish drift in slow loops and sting anything they bump into — they\'re blind, so hiding is useless. A freeze bolt stops one in place for a few seconds (and frozen ones don\'t sting). Collect the three starfish.',
+  get hint(){ return 'The jellyfish drift in slow loops and sting anything they bump into — they\'re blind, so hiding is useless. Each starfish is the colour of one kind of jellyfish and clings tight unless a jellyfish of ITS colour is frozen. Freeze one with a bolt (6 seconds) and grab the matching starfish before it thaws' + (solo() ? '.' : ' — easiest if one of you bolts while the other waits by the starfish.'); },
   build(R, E){
     EE = E; const T = E.THREE;
     this.jm = JF4.map((_, i) => { const g = new T.Group(); const bell = new T.Mesh(new T.SphereGeometry(.6, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), new T.MeshStandardMaterial({ color: [0xff8ad8, 0x8ad8ff, 0xd8ff8a][i % 3], emissive: [0xff4aa8, 0x4aa8ff, 0xa8ff4a][i % 3], emissiveIntensity: .6, transparent: true, opacity: .7 })); bell.position.y = 1.4; g.add(bell); const ten = []; for (let k = 0; k < 6; k++){ const tt = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 3), bell.material); tt.position.set(Math.cos(k) * .35, .8, Math.sin(k) * .35); g.add(tt); ten.push(tt); } const ice = new T.Mesh(new T.SphereGeometry(.8, 10, 8), new T.MeshStandardMaterial({ color: 0xbfeaff, transparent: true, opacity: .4 })); ice.position.y = 1.2; ice.visible = false; g.add(ice); g.userData = { ten, ice }; E.scene.add(g); return g; });
-    this.sm = STAR4.map(([x, lz]) => { const m = new T.Mesh(new T.CylinderGeometry(.4, .4, .08, 5), E.glow(0xffa04a, .7)); R.place(m, x, lz, .1); return m; });
+    // starfish i matches jellyfish colour i (pink, blue, green): it only lets go while one of those is frozen
+    this.sm = STAR4.map(([x, lz], i) => { const m = new T.Mesh(new T.CylinderGeometry(.45, .45, .08, 5), E.glow([0xff4aa8, 0x4aa8ff, 0xa8ff4a][i], .3)); R.place(m, x, lz, .1); return m; });
     this.orbs = orbRow(E, R, 3, -1.3, 21.4, 1.3, 2.4);
   },
   init(){ return { t: 0, fz: JF4.map(() => 0), ft: JF4.map(() => 0), got: [0, 0, 0] }; },
@@ -121,11 +136,19 @@ const jelly = {
   host(dt, st, R, E){
     st.t += dt; JF4.forEach((j, i) => { if (st.fz[i] > 0) st.fz[i] = Math.max(0, st.fz[i] - dt); else st.ft[i] += dt * E.GMULT; });
     for (const p of E.P){ if (p.frozen || p.dashing || !R.inside(p.pos)) continue; JF4.forEach((j, i) => { if (st.fz[i] > 0) return; const [x, lz] = this.pos(st, i); if (Math.hypot(p.pos.x - x, R.lz(p.pos.z) - lz) < .95) E.freeze(p.idx, E.FREEZE, `${E.names()[p.idx]} was stung by a jellyfish!`); }); }
-    pick(R, E, st, STAR4, 'got', 'A starfish!', 3);
+    st.loose = STAR4.map((_, c) => JF4.some((j, i) => i % 3 === c && st.fz[i] > 0) ? 1 : 0);
+    st.msg = Math.max(0, (st.msg || 0) - dt);
+    STAR4.forEach(([x, lz], c) => {
+      if (st.got[c]) return;
+      const p = E.P.find(q => !q.frozen && near(R, q, x, lz, 1));
+      if (!p) return;
+      if (st.loose[c]){ st.got[c] = 1; E.ev('pick', `A starfish! (${st.got.filter(Boolean).length}/3)`); }
+      else if (!st.msg){ st.msg = 4; E.ev('thud', `It clings to the rock — freeze a ${['pink', 'blue', 'green'][c]} jellyfish to make it let go!`); }
+    });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three starfish — the door opens!'); }
   },
-  visual(dt, t, st, R){ this.jm.forEach((g, i) => { const [x, lz] = this.pos(st, i); g.position.set(x, Math.sin(t * 2 + i) * .15, R.Z(lz)); g.userData.ice.visible = st.fz[i] > 0; g.userData.ten.forEach((tt, k) => tt.rotation.z = Math.sin(t * 3 + k + i) * .3); }); this.sm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 starfish. <b>Jellyfish</b> are blind (hiding won't help) and sting on touch — <b>freeze bolts</b> stop them for a few seconds. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R){ this.jm.forEach((g, i) => { const [x, lz] = this.pos(st, i); g.position.set(x, Math.sin(t * 2 + i) * .15, R.Z(lz)); g.userData.ice.visible = st.fz[i] > 0; g.userData.ten.forEach((tt, k) => tt.rotation.z = Math.sin(t * 3 + k + i) * .3); }); this.sm.forEach((m, i) => { m.visible = !st.got[i]; m.material.emissiveIntensity = st.loose && st.loose[i] ? 1.4 + Math.sin(t * 10) * .4 : .3; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 starfish. Each one only lets go while a <b>jellyfish of its colour is frozen</b> — freeze bolts hold one for 6 seconds. Jellyfish are blind and sting on touch. (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */

@@ -1,5 +1,5 @@
 // Level 5 — The Frozen Monastery. New power: LANTERN FLASH (stuns ghosts). Local coords: x -10..10, lz 0..22.
-import { arrivals, orbRow, setOrbs, near, inRect } from '../lib.js';
+import { arrivals, orbRow, setOrbs, near, inRect, textPlane, redraw } from '../lib.js';
 
 const snowFloor = E => E.mat(0xffffff, { map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#dfe8f2'; x.fillRect(0, 0, w, h); for (let i = 0; i < 90; i++){ x.fillStyle = `rgba(160,180,210,${Math.random() * .25})`; x.beginPath(); x.arc(Math.random() * w, Math.random() * h, 2 + Math.random() * 5, 0, 7); x.fill(); } }, 5, 5) });
 const stoneFloor = E => E.mat(0xffffff, { map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#5a5e6a'; x.fillRect(0, 0, w, h); x.strokeStyle = '#3a3e48'; x.lineWidth = 3; for (let j = 0; j < 4; j++) for (let i = 0; i < 2; i++) x.strokeRect(i * 64 + (j % 2) * 32, j * 32, 64, 32); }, 6, 6) });
@@ -57,12 +57,13 @@ const crevasse = {
 };
 
 /* =============================================================== */
-const FLAGS = [[-8, 4.5], [8, 4.5], [-8, 18.5], [8, 18.5]];
+const FLAGS = [[-8, 4.5], [8, 4.5], [-8, 18.5], [8, 18.5]], WHEEL2 = [0, 20], FCOL = ['#ff5a5a', '#5ad1ff', '#ffd84d', '#8aff7a'], FNAME = ['RED', 'BLUE', 'YELLOW', 'GREEN'];
+let E5 = null;
 const flags = {
   name: 'The Prayer Flags',
   floor: stoneFloor,
-  notes: [[0, 1.8, '“Raise the four prayer flags. The wraiths will not like it.”', 1.5]],
-  hint: 'Each flag needs someone standing on its plate for a couple of seconds. When a wraith gets close, flash it (☀/F) — it\'s stunned for a few seconds. Cover each other!',
+  notes: [[0, 1.8, '“Raise the four prayer flags — in the order the wheel speaks them. The wraiths will not like it.”', 1.5]],
+  get hint(){ return 'The flags must go up in a set order, and only the prayer wheel (north, middle) shows it — while someone stands on it. Raise a flag out of turn and every flag drops. ' + (E5 && E5.solo() ? 'Read the order, remember it, then go — flash the wraiths (☀/F) when they close in.' : 'One of you reads the order from the wheel while the other raises flags (a couple of seconds on each plate). Flash the wraiths (☀/F) to cover each other.'); },
   build(R, E){
     const T = E.THREE;
     this.flags = FLAGS.map(([x, lz], i) => {
@@ -72,22 +73,39 @@ const flags = {
       R.place(cloth, x + (x < 0 ? -.75 : 1.85), lz, .4); return cloth;
     });
     for (const [x, lz] of [[-3, 9], [3, 9], [-3, 14], [3, 14]]) R.block(x - .6, lz - .6, x + .6, lz + .6, 2.6, E.mat(0x7a7e8a));
+    // the prayer wheel: shows the flag order only while someone stands on it
+    E5 = E; R.plate('wh', WHEEL2[0], WHEEL2[1], 0xd8a8ff, 1.6, '☸');
+    this.wheel = new T.Mesh(new T.CylinderGeometry(.55, .55, 1.2, 16), E.mat(0xc9a24a, { metalness: .6, roughness: .35 })); R.place(this.wheel, WHEEL2[0] + 1.4, WHEEL2[1], 1.1);
+    this.sign = textPlane(E, 4.2, 1, 1); R.place(this.sign, WHEEL2[0], WHEEL2[1] + 1.4, 2.5);
     wraith(R, [0, 11.5]); wraith(R, [-6, 11.5], { sp: 3.1 }); wraith(R, [6, 11.5], { sp: 3.5 });
   },
-  init(){ return { p: [0, 0, 0, 0], done: 0 }; },
+  init(R, E){ return { p: [0, 0, 0, 0], done: 0, ord: E.shuffle([0, 1, 2, 3]), k: 0 }; },
   solve(st){ st.p = [1, 1, 1, 1]; st.done = 1; },
   host(dt, st, R, E){
     if (st.done) return;
     for (let i = 0; i < 4; i++){
       if (st.p[i] >= 1) continue;
-      if (R.on('f' + i)){ st.p[i] = Math.min(1, st.p[i] + dt / 2); if (st.p[i] >= 1) E.ev('chime', `Flag raised! (${st.p.filter(v => v >= 1).length}/4)`, i + 1); }
+      if (R.on('f' + i)){
+        if (i !== st.ord[st.k]){   // out of turn: the wind tears every flag down
+          if (st.p.some(v => v > 0) || R.edge('f' + i)){ st.p = [0, 0, 0, 0]; st.k = 0; E.ev('wrong', `The ${FNAME[i].toLowerCase()} flag isn't next — the wind tears every flag down! Check the prayer wheel.`); }
+          continue;
+        }
+        st.p[i] = Math.min(1, st.p[i] + dt / 2); if (st.p[i] >= 1){ st.k++; E.ev('chime', `Flag raised! (${st.k}/4)`, i + 1); }
+      }
       else st.p[i] = Math.max(0, st.p[i] - dt / 6);
     }
     if (st.p.every(v => v >= 1)){ st.done = 1; R.open('exit'); E.ev('door', 'All four flags fly! The cloister door opens.'); }
   },
-  visual(dt, t, st, R, E){ this.flags.forEach((f, i) => { f.position.y += ((.4 + st.p[i] * 2.4) - f.position.y) * E.damp(6, dt); f.rotation.y = Math.sin(t * 3 + i) * .3; }); },
+  visual(dt, t, st, R, E){
+    this.flags.forEach((f, i) => { f.position.y += ((.4 + st.p[i] * 2.4) - f.position.y) * E.damp(6, dt); f.rotation.y = Math.sin(t * 3 + i) * .3; });
+    const read = R.on('wh') && !st.done; if (read) this.wheel.rotation.y += dt * 4;
+    const key = read + ':' + st.ord.join('') + st.k + st.done;
+    if (key !== this.sk){ this.sk = key; redraw(this.sign, (c, W, H) => { c.fillStyle = '#1a1424'; c.fillRect(0, 0, W, H); c.textAlign = 'center'; c.textBaseline = 'middle';
+      if (!read && !st.done){ c.fillStyle = '#8a7aa8'; c.font = 'bold 26px Georgia'; c.fillText('☸ stand on the wheel to read', W / 2, H / 2); return; }
+      st.ord.forEach((f, j) => { const x = W * (j + .5) / 4; c.fillStyle = FCOL[f]; c.globalAlpha = j < st.k || st.done ? .35 : 1; c.beginPath(); c.arc(x, H / 2, 20, 0, 7); c.fill(); c.globalAlpha = 1; c.fillStyle = '#ece6ff'; c.font = 'bold 14px system-ui'; c.fillText(String(j + 1), x, H / 2 + 34 > H ? H - 6 : H / 2 + 34); }); }); }
+  },
   bar(st, R, E){ const i = [0, 1, 2, 3].find(k => R.at('f' + k, E.me.pos)); if (i === undefined || st.p[i] >= 1) return null; return { frac: st.p[i], label: 'Raising the flag…', color: '#ffd84d' }; },
-  objective(st, R, E){ return st.done ? 'The flags fly — onward!' : `Raise all four prayer flags by standing on their plates. Frost wraiths hunt you — <b>FLASH (☀/F)</b> to stun them. (${st.p.filter(v => v >= 1).length}/4)`; }
+  objective(st, R, E){ if (st.done) return 'The flags fly — onward!'; const next = R.on('wh') ? ` Next: <b style="color:${FCOL[st.ord[st.k]]}">${FNAME[st.ord[st.k]]}</b>.` : ''; return `Raise the four prayer flags <b>in the order the prayer wheel shows</b> (stand on ☸, north) — out of order, they all drop.${next} Frost wraiths hunt you: <b>FLASH (☀/F)</b>. (${st.k}/4)`; }
 };
 
 /* =============================================================== */

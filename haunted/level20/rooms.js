@@ -170,22 +170,23 @@ const letters = {
   floor: heartF,
   dark: .5,
   notes: [[0, 1.6, '“Say its name and it will let you pass. Spell it with your feet.”', 1.5]],
-  hint: 'Step on the letter tiles to spell H-O-L-L-O-W, in order. Stepping on a wrong letter starts the word over (and the tiles shuffle). You can use the same tile twice — just step off and back on. The ghosts are drawn to the word; a Soul Blast will scatter them for a long time.',
+  get hint(){ return 'The letters are written in the dark — hold ☀ for Ghost Sight to read them. Spell H-O-L-L-O-W by stepping on them in order; a wrong letter starts the word over. ' + (solo() ? 'Read, remember, then walk (the tiles only shuffle when you get one wrong).' : 'The tiles SHUFFLE after every letter: one of you keeps looking and calls out where the next letter is, the other steps. Swap when the sight runs dry.') + ' A Soul Blast scatters the ghosts for a long time.'; },
   build(R, E){
     EE = E; const T = E.THREE;
     this.tiles = []; for (let r = 0; r < LG6.r; r++) for (let c = 0; c < LG6.c; c++){ const i = r * LG6.c + c; R.zone('t' + i, LG6.x(c), LG6.l(r), 2.4); const m = textPlane(E, 2.3, 2.3, 1); m.rotation.x = -Math.PI / 2; R.place(m, LG6.x(c), LG6.l(r), .04); this.tiles.push(m); }
     this.word = textPlane(E, 6, 1.2, 1); R.place(this.word, 0, 19.5, 2.6);
     this.g = [R.ghost({ home: [-8, 18], look: 'hood', sp: 2.1, radius: 9 }), R.ghost({ home: [8, 18], look: 'hat', sp: 2.1, radius: 9 }), R.ghost({ home: [0, 3], look: 'normal', sp: 1.9, radius: 9 })];
   },
-  init(){ return { lay: POOL6.slice(), n: 0, done: 0 }; },
+  init(){ const st = { lay: POOL6.slice(), n: 0, done: 0 }; this.shuffle(st); return st; },
   solve(st){ st.done = 1; st.n = 6; },
   shuffle(st){ const a = st.lay; for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } },
   host(dt, st, R, E){
     if (st.done) return;
-    for (let i = 0; i < LG6.c * LG6.r; i++){ if (!R.edge('t' + i)) continue; if (st.lay[i] === WORD6[st.n]){ st.n++; E.ev('chime', '', st.n % 4); if (st.n >= 6){ st.done = 1; R.open('exit'); E.ev('door', '"HOLLOW." The manor hears its name — the door opens!'); } } else { st.n = 0; this.shuffle(st); E.ev('wrong', `"${st.lay[i]}"? Wrong letter — the tiles shuffle and the word starts over.`); } break; }
+    for (let i = 0; i < LG6.c * LG6.r; i++){ if (!R.edge('t' + i)) continue; if (st.lay[i] === WORD6[st.n]){ st.n++; E.ev('chime', '', st.n % 4); if (st.n >= 6){ st.done = 1; R.open('exit'); E.ev('door', '"HOLLOW." The manor hears its name — the door opens!'); } else if (!E.solo()) this.shuffle(st); } else { st.n = 0; this.shuffle(st); E.ev('wrong', `"${st.lay[i]}"? Wrong letter — the tiles shuffle and the word starts over.`); } break; }
   },
-  visual(dt, t, st){ const key = st.lay.join('') + st.n; if (key !== this.k){ this.k = key; this.tiles.forEach((m, i) => redraw(m, (c, W, H) => { c.fillStyle = '#3a1020'; c.fillRect(0, 0, W, H); c.strokeStyle = '#ffd38a'; c.lineWidth = 6; c.strokeRect(6, 6, W - 12, H - 12); c.fillStyle = '#ffd38a'; c.font = 'bold 170px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(st.lay[i], W / 2, H / 2 + 10); })); redraw(this.word, (c, W, H) => { c.fillStyle = '#1a0a10'; c.fillRect(0, 0, W, H); c.font = 'bold 40px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; const s = WORD6.split('').map((ch, i) => i < st.n ? ch : '_').join(' '); c.fillStyle = '#ffd38a'; c.fillText(s, W / 2, H / 2); }); } },
-  objective(st, R, E){ return st.done ? 'The door is open!' : `Spell <b>H-O-L-L-O-W</b> by stepping on the letter tiles in order. A wrong letter starts over and shuffles the tiles. (${WORD6.slice(0, st.n) || '—'})`; }
+  // letters are drawn only while you're using Ghost Sight (or once the word is spelled)
+  visual(dt, t, st, R, E){ const see = E.sight || st.done, key = st.lay.join('') + st.n + see; if (key !== this.k){ this.k = key; this.tiles.forEach((m, i) => redraw(m, (c, W, H) => { c.fillStyle = '#3a1020'; c.fillRect(0, 0, W, H); c.strokeStyle = see ? '#ffd38a' : '#6a2a3a'; c.lineWidth = 6; c.strokeRect(6, 6, W - 12, H - 12); c.fillStyle = '#ffd38a'; c.font = 'bold 170px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; if (see) c.fillText(st.lay[i], W / 2, H / 2 + 10); })); redraw(this.word, (c, W, H) => { c.fillStyle = '#1a0a10'; c.fillRect(0, 0, W, H); c.font = 'bold 40px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; const s = WORD6.split('').map((ch, i) => i < st.n ? ch : '_').join(' '); c.fillStyle = '#ffd38a'; c.fillText(s, W / 2, H / 2); }); } },
+  objective(st, R, E){ return st.done ? 'The door is open!' : `Spell <b>H-O-L-L-O-W</b> on the letter tiles. The letters only show in <b>Ghost Sight</b> (hold ☀)${E.solo() ? '' : ' — and they shuffle after every letter, so one looks while the other steps'}. A wrong letter starts over. (${WORD6.slice(0, st.n) || '—'})`; }
 };
 
 /* =============================================================== */

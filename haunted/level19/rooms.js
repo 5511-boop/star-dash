@@ -54,7 +54,7 @@ const hallway = {
   name: 'The Endless Hallway',
   floor: cloudF,
   notes: [[0, 1.6, '“Have you been here before? You have. Look closer at the paintings.”', 1.5]],
-  hint: 'Three archways, three paintings above them. Two paintings are the same — walk through the archway under the ODD one. The wrong archway loops you back to the start and the paintings change. Three right in a row and you wake up.',
+  hint: 'The hallway changes its rule each time you get it right: first walk under the ODD painting; then under the painting showing the symbol you just walked under; then under the one painting that never flickers. A wrong archway loops you back to the very first rule. Talk it through before you commit — the nightmares won\'t wait.',
   build(R, E){
     EE = E; const T = E.THREE;
     R.wall(-10, 18.6, -7.5, 19.4); R.wall(-4.5, 18.6, -1.5, 19.4); R.wall(1.5, 18.6, 4.5, 19.4); R.wall(7.5, 18.6, 10, 19.4);
@@ -62,22 +62,39 @@ const hallway = {
     this.n = [nightmare(R, E, [-8, 10], { sp: 2.1, b: [-9.6, 9.6, .6, 18.4] }), nightmare(R, E, [8, 6], { sp: 2.1, b: [-9.6, 9.6, .6, 18.4] })];
     this.orbs = orbRow(E, R, 3, -1.3, 2, 1.3, 2.4);
   },
-  init(){ return { loop: 0, odd: 1, a: 0, b: 1, right: 0, cd: 0 }; },
+  init(){ const st = { loop: 0, odd: 1, pic: [], mem: 0, right: 0, cd: 0 }; this.roll(st); return st; },
   solve(st){ st.right = 3; },
-  roll(st){ st.odd = Math.floor(Math.random() * 3); st.a = Math.floor(Math.random() * 6); st.b = (st.a + 1 + Math.floor(Math.random() * 5)) % 6; },
+  // st.pic[arch] = [symbol, symbol-on-alternate-beats]; the rule depends on how many you've got right so far:
+  // 0: two paintings match, walk under the odd one · 1: walk under the symbol you just walked under (st.mem)
+  // 2: two paintings flicker between symbols, walk under the one that holds still
+  roll(st){
+    const pick = n => E6().slice(0, n), E6 = () => { const a = [0, 1, 2, 3, 4, 5]; for (let i = 5; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    st.odd = Math.floor(Math.random() * 3);
+    if (st.right === 0){ const [a, b] = pick(2); st.pic = [0, 1, 2].map(i => i === st.odd ? [b, b] : [a, a]); }
+    else if (st.right === 1){ const others = E6().filter(s => s !== st.mem); st.pic = [0, 1, 2].map(i => { const s = i === st.odd ? st.mem : others.pop(); return [s, s]; }); }
+    else { const s = E6(), flick = [[s[1], s[2]], [s[3], s[4]]]; st.pic = [0, 1, 2].map(i => i === st.odd ? [s[0], s[0]] : flick.pop()); }
+  },
   host(dt, st, R, E){
     st.cd = Math.max(0, st.cd - dt);
     if (st.right >= 3){ R.open('exit'); return; }
     if (st.cd > 0) return;
     for (const p of E.P){ const lz = R.lz(p.pos.z); if (!R.inside(p.pos) || lz < 19.5 || lz > 21.8) continue; const arch = ARCH2.findIndex(x => Math.abs(p.pos.x - x) < 1.6); if (arch < 0) continue;
-      st.cd = 1; if (arch === st.odd){ st.right++; E.ev('chime', st.right < 3 ? `Right! (${st.right}/3) …but the hallway goes on.` : 'You wake up — the hallway ends!', st.right); }
-      else { st.right = 0; E.ev('boo', 'Wrong archway — you\'re back at the start of the hallway…'); }
+      st.cd = 1; if (arch === st.odd){ st.mem = st.pic[arch][0]; st.right++; E.ev('chime', st.right < 3 ? `Right! (${st.right}/3) …but the hallway goes on — and its rule has changed.` : 'You wake up — the hallway ends!', st.right); }
+      else { st.right = 0; E.ev('boo', 'Wrong archway — you\'re back at the start of the hallway, and the first rule again…'); }
       if (st.right < 3){ st.loop++; this.roll(st); for (const q of E.P){ if (!R.inside(q.pos)) continue; const sp = R.spawnW[q.idx]; E.teleport(q.idx, sp[0], sp[1]); } }
       else { R.open('exit'); for (const q of E.P){ if (R.inside(q.pos) && R.lz(q.pos.z) < 19.5){ E.teleport(q.idx, ARCH2[st.odd], R.Z(20.5)); } } }
       break; }
   },
-  visual(dt, t, st){ const key = st.loop + ':' + st.odd + st.a + st.b; if (key !== this.k){ this.k = key; this.pics.forEach((m, i) => redraw(m, (c, W, H) => { c.fillStyle = '#2a1a3a'; c.fillRect(0, 0, W, H); c.font = '120px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(SYM2[i === st.odd ? st.b : st.a], W / 2, H / 2 + 8); })); } setOrbs(this.orbs, st.right); },
-  objective(st, R, E){ return st.right >= 3 ? 'The way out is open!' : `Walk through the archway under the <b>odd painting</b>. Wrong archway = back to the start. Three right in a row! (${st.right}/3)`; }
+  visual(dt, t, st){
+    const ph = Math.floor(t / 1.1) % 2, key = st.loop + ':' + ph + ':' + JSON.stringify(st.pic);
+    if (key !== this.k){ this.k = key; this.pics.forEach((m, i) => redraw(m, (c, W, H) => { const p = st.pic[i] || [0, 0]; c.fillStyle = '#2a1a3a'; c.fillRect(0, 0, W, H); c.font = '120px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(SYM2[p[ph]], W / 2, H / 2 + 8); })); }
+    setOrbs(this.orbs, st.right);
+  },
+  objective(st, R, E){
+    if (st.right >= 3) return 'The way out is open!';
+    const rule = ['walk under the <b>odd painting</b> (two are the same)', 'walk under the painting showing the symbol <b>you just walked under</b>', 'two paintings keep <b>flickering</b> — walk under the one that never changes'][st.right];
+    return `Rule ${st.right + 1} of 3: ${rule}. A wrong archway sends you back to rule 1. (${st.right}/3)`;
+  }
 };
 
 /* =============================================================== */

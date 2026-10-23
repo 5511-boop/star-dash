@@ -190,13 +190,26 @@ const blades = {
 };
 
 /* =============================================================== */
-const ANS7 = [['RIVER', -6, 9], ['SUN', -2, 9], ['SCARAB', 2, 9], ['SPHINX', 6, 9]];
-const RID7 = [['I have a mouth but never eat, a bed but never sleep, and I run though I have no feet.', 0], ['Born each dawn in the east, I die each dusk in the west — and a beetle rolls me across the sky.', 1], ['A lion\'s body, a man\'s face, and I am the one asking the questions here.', 3]];
+const ANS7 = [['RIVER', -7.5, 9], ['SUN', -4.5, 9], ['SCARAB', -1.5, 9], ['SPHINX', 1.5, 9], ['PYRAMID', 4.5, 9], ['MUMMY', 7.5, 9]];
+// Each riddle comes in two halves. In co-op each player hears only one half, and a half on its own fits more than one
+// answer — you have to put them together. [half A, half B, answer index into ANS7]
+const RID7 = [
+  ['I have a mouth, yet I never eat.', 'I have a bed, yet I never sleep — and I run without feet.', 0],
+  ['Every year I flood, and the fields grow fat.', 'Boats ride my back all the way to the sea.', 0],
+  ['Born each dawn, I die each dusk.', 'The old priests said a beetle pushes me across the sky.', 1],
+  ['I am the eye of Ra.', 'Stare at me too long and I will blind you.', 1],
+  ['I wear a jewelled shell and roll my treasure before me.', 'Carved on rings and amulets, I am a lucky little beetle.', 2],
+  ['A lion\'s body, a man\'s face.', 'And here, I am the one who asks the questions.', 3],
+  ['Built of stone for a king who never leaves.', 'Four faces, no eyes, and a point I never make.', 4],
+  ['Square at my feet, a single point above.', 'My tip once wore gold to catch the morning light.', 4],
+  ['Wrapped from head to toe — and yet no gift am I.', 'I walk the halls, though I died a thousand years ago.', 5],
+  ['Seventy days of salt made me what I am.', 'My heart stays, but my other organs wait in four jars.', 5],
+];
 const sphinx = {
   name: 'The Sphinx\'s Riddles',
   floor: sandstone,
   notes: [[0, 1.6, '“Answer well and pass. Answer badly and the dead will wake.”', 1.5]],
-  hint: 'Read the riddle in the objective and step on the answer. Wrong answers wake a mummy (freeze it with bolts!). The answers are things you\'d find in Egypt.',
+  get hint(){ return solo() ? 'Read both halves of the riddle and step on the answer. Three right answers opens the door; a wrong one wakes a mummy, costs you a right answer and the Sphinx asks something new.' : 'You each hear only HALF of every riddle — and each half fits more than one answer. Tell each other your half, then step on the answer. A wrong answer wakes a mummy, costs you a right answer, and the Sphinx asks something new.'; },
   build(R, E){
     EE = E; const T = E.THREE;
     const body = new T.Mesh(new T.BoxGeometry(6, 2.2, 3), blockMat(E)); R.place(body, 0, 17.5, 1.1); const head = new T.Mesh(new T.BoxGeometry(1.8, 2, 1.6), blockMat(E)); R.place(head, 0, 15.6, 2.6); const nem = new T.Mesh(new T.BoxGeometry(2.6, 1.6, .4), E.mat(0x2a4a8a)); R.place(nem, 0, 16.3, 2.6);
@@ -206,15 +219,28 @@ const sphinx = {
     this.m = [0, 1, 2].map(k => mummy(R, E, [k === 1 ? 8.5 : -8.5, k === 2 ? 20 : 4], { gone: st => st.wrong <= k || st.n >= 3 }));
     this.orbs = orbRow(E, R, 3, -1.3, 20.5, 1.3, 2.6);
   },
-  init(){ return { n: 0, wrong: 0, cd: 0 }; },
+  init(R, E){ return { n: 0, wrong: 0, cd: 0, q: E.shuffle(RID7.map((_, i) => i)), k: 0 }; },
   solve(st){ st.n = 3; },
+  riddle(st){ return RID7[st.q[st.k % st.q.length]]; },
   host(dt, st, R, E){
     st.cd = Math.max(0, st.cd - dt);
     if (st.n >= 3) return;
-    ANS7.forEach((a, i) => { if (st.cd > 0 || !R.edge('a' + i)) return; st.cd = 1.2; if (i === RID7[st.n][1]){ st.n++; E.ev('gong', st.n < 3 ? `"Correct." (${st.n}/3) The Sphinx asks again…` : '', 70); if (st.n >= 3){ R.open('exit'); E.ev('door', '"You may pass." The Sphinx bows its head — the door opens!'); } } else { st.wrong = Math.min(3, st.wrong + 1); E.ev('boo', `"WRONG." A sarcophagus creaks open — a mummy wakes!`); } });
+    ANS7.forEach((a, i) => {
+      if (st.cd > 0 || !R.edge('a' + i)) return;
+      st.cd = 1.2; st.k++;   // right or wrong, the next riddle is a new one
+      if (i === this.riddle({ ...st, k: st.k - 1 })[2]){
+        st.n++; E.ev('gong', st.n < 3 ? `"Correct." (${st.n}/3) The Sphinx asks again…` : '', 70);
+        if (st.n >= 3){ R.open('exit'); E.ev('door', '"You may pass." The Sphinx bows its head — the door opens!'); }
+      } else { st.wrong = Math.min(3, st.wrong + 1); st.n = Math.max(0, st.n - 1); E.ev('boo', `"WRONG." A sarcophagus creaks open — a mummy wakes! (${st.n}/3)`); }
+    });
   },
   visual(dt, t, st, R, E){ setOrbs(this.orbs, st.n); this.eyes.forEach(e => e.material.emissiveIntensity = st.cd > 0 ? 3 : 1); iceShow(this.m, E); },
-  objective(st, R, E){ return st.n >= 3 ? 'The Sphinx lets you pass — door open!' : `<b>The Sphinx asks (${st.n + 1}/3):</b> <i>“${RID7[st.n][0]}”</i> — step on your answer.`; }
+  objective(st, R, E){
+    if (st.n >= 3) return 'The Sphinx lets you pass — door open!';
+    const r = this.riddle(st);
+    if (E.solo()) return `<b>The Sphinx asks (${st.n + 1}/3):</b> <i>“${r[0]} ${r[1]}”</i> — step on your answer.`;
+    return `<b>The Sphinx whispers to you (${st.n}/3 right):</b> <i>“${r[E.myIdx()]}”</i> Your partner heard the other half — put them together, then step on the answer.`;
+  }
 };
 
 /* =============================================================== */
