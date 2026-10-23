@@ -11,7 +11,7 @@ const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -
 const home = it => { it.s = 0; it.x = it.hx; it.lz = it.hlz; it.w = -1; it.y = 0; };
 const oilCans = (list) => list.map(([x, lz], i) => mkItem('oil', x, lz, { n: 100 + i }));
 const glowOre = (E, col = 0xffc84a) => { const T = E.THREE, m = new T.Mesh(new T.DodecahedronGeometry(.3), new T.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: .9, metalness: .6, roughness: .3 })); return m; };
-const timber = (R, E, x, lz) => { const T = E.THREE, m = E.mat(0x5a3a1a); for (const s of [-1, 1]){ const p = new T.Mesh(new T.BoxGeometry(.3, 2.8, .3), m); R.place(p, x + s * 1.6, lz, 1.4); } const b = new T.Mesh(new T.BoxGeometry(3.5, .3, .35), m); R.place(b, x, lz, 2.8); };
+const timber = (R, E, x, lz) => { const T = E.THREE, m = E.tex('oil_planks', { color: 0x5a3a1a, tile: 1.2 }); for (const s of [-1, 1]){ const p = new T.Mesh(new T.BoxGeometry(.3, 2.8, .3), m); R.place(p, x + s * 1.6, lz, 1.4); } const b = new T.Mesh(new T.BoxGeometry(3.5, .3, .35), m); R.place(b, x, lz, 2.8); };
 
 /* ---------- Tommyknocker: hunts the brightest light it can see ---------- */
 function knocker(R, E, home, opt = {}){
@@ -102,10 +102,10 @@ const carts = {
   build(R, E){
     EE = E; const T = E.THREE;
     R.floor(CH3[0], CH3[1], CH3[2], CH3[3], voidMat(E), .015);
-    const rail = E.mat(0x6a6a72, { metalness: .8 });
+    const rail = E.tex('rail_iron', { color: 0x6a6a72, metalness: .6, roughness: .55, tile: 1 });
     const lay = (a, b) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]); for (const o of [-.45, .45]){ const r = new T.Mesh(new T.BoxGeometry(.08, .08, len), rail); const ang = Math.atan2(b[0] - a[0], -(b[1] - a[1])); r.rotation.y = ang; R.place(r, (a[0] + b[0]) / 2 + Math.cos(ang) * o, (a[1] + b[1]) / 2 + Math.sin(ang) * o, .1); } };
     [[LOOPB[0], LOOPB[1]], [LOOPB[1], LOOPB[2]], [LOOPB[2], LOOPB[3]], [LOOPB[3], LOOPB[0]], [[7, 5.5], [-7, 5.5]]].forEach(([a, b]) => lay(a, b));
-    this.cart = new T.Group(); const box = new T.Mesh(new T.BoxGeometry(1.6, .8, 1.2), E.mat(0x5a4a3a, { metalness: .4 })); box.position.y = .55; this.cart.add(box); for (const sx of [-.6, .6]) for (const sz of [-.45, .45]){ const w = new T.Mesh(new T.CylinderGeometry(.2, .2, .1, 10), E.mat(0x2a2a2a)); w.rotation.z = Math.PI / 2; w.position.set(sx, .2, sz); this.cart.add(w); } const lamp = new T.PointLight(0xffb36b, 4, 9, 1.4); lamp.position.y = 1.5; this.cart.add(lamp); E.scene.add(this.cart);
+    this.cart = new T.Group(); const box = new T.Mesh(new T.BoxGeometry(1.6, .8, 1.2), E.tex('rail_iron', { color: 0x5a4a3a, metalness: .4, roughness: .6, tile: 1.2 })); box.position.y = .55; this.cart.add(box); for (const sx of [-.6, .6]) for (const sz of [-.45, .45]){ const w = new T.Mesh(new T.CylinderGeometry(.2, .2, .1, 10), E.mat(0x2a2a2a)); w.rotation.z = Math.PI / 2; w.position.set(sx, .2, sz); this.cart.add(w); } const lamp = new T.PointLight(0xffb36b, 4, 9, 1.4); lamp.position.y = 1.5; this.cart.add(lamp); E.scene.add(this.cart);
     R.plate('lever', 9, 4.2, 0xffd34a, 1.2, '⇄');
     this.sign = textPlane(E, 1.6, .8, 1); R.place(this.sign, 9, 5.6, 1.6);
     const cr = new T.Mesh(new T.CylinderGeometry(1, .7, 1.2, 10, 1, true), new T.MeshStandardMaterial({ color: 0x6a6a72, metalness: .7, side: T.DoubleSide })); R.place(cr, CRUSH3[0], CRUSH3[1], .6);
@@ -346,7 +346,7 @@ const oldKnocker = {
   hint: 'The Old Knocker chases the brightest lantern (and decoys). Three ore buckets hang over the X marks. Lure him onto an X, then step on that bucket\'s lever: the bucket drops on his head. Each lever is far from its X — so one of you lures and one pulls, or drop a decoy on the X and run.',
   build(R, E){
     EE = E; const T = E.THREE;
-    this.bk = X10.map(([x, lz], i) => { const mk = new T.Mesh(new T.RingGeometry(1.1, 1.4, 24), new T.MeshBasicMaterial({ color: 0xff5050, side: T.DoubleSide, transparent: true, opacity: .6 })); mk.rotation.x = -Math.PI / 2; R.place(mk, x, lz, .04); const b = new T.Group(); const pail = new T.Mesh(new T.CylinderGeometry(.9, .7, 1.2, 12), E.mat(0x5a4a3a, { metalness: .5 })); b.add(pail); const ore = glowOre(E); ore.scale.setScalar(2.4); ore.position.y = .7; b.add(ore); const rope = new T.Mesh(new T.CylinderGeometry(.04, .04, 4, 4), E.mat(0x8a7a5a)); rope.position.y = 2.6; b.add(rope); R.place(b, x, lz, 4); R.plate('l' + i, LEV10[i][0], LEV10[i][1], 0xffd34a, 1.3, ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]); const sg = textPlane(E, .9, .9, 1); R.place(sg, x, lz, .05); sg.rotation.x = -Math.PI / 2; redraw(sg, (c, W, H) => { c.fillStyle = '#ffd34a'; c.font = 'bold 150px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(['Ⅰ', 'Ⅱ', 'Ⅲ'][i], W / 2, H / 2); }); return b; });
+    this.bk = X10.map(([x, lz], i) => { const mk = new T.Mesh(new T.RingGeometry(1.1, 1.4, 24), new T.MeshBasicMaterial({ color: 0xff5050, side: T.DoubleSide, transparent: true, opacity: .6 })); mk.rotation.x = -Math.PI / 2; R.place(mk, x, lz, .04); const b = new T.Group(); const pail = new T.Mesh(new T.CylinderGeometry(.9, .7, 1.2, 12), E.tex('rail_iron', { color: 0x5a4a3a, metalness: .5, roughness: .6, tile: 1.2 })); b.add(pail); const ore = glowOre(E); ore.scale.setScalar(2.4); ore.position.y = .7; b.add(ore); const rope = new T.Mesh(new T.CylinderGeometry(.04, .04, 4, 4), E.mat(0x8a7a5a)); rope.position.y = 2.6; b.add(rope); R.place(b, x, lz, 4); R.plate('l' + i, LEV10[i][0], LEV10[i][1], 0xffd34a, 1.3, ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]); const sg = textPlane(E, .9, .9, 1); R.place(sg, x, lz, .05); sg.rotation.x = -Math.PI / 2; redraw(sg, (c, W, H) => { c.fillStyle = '#ffd34a'; c.font = 'bold 150px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(['Ⅰ', 'Ⅱ', 'Ⅲ'][i], W / 2, H / 2); }); return b; });
     this.boss = knocker(R, E, [0, 19], { scale: 2, label: 'the Old Knocker', tint: 0x6a5030, reach: 14, sp: st => st.stun > 0 ? 0 : 2.3 + st.hits * .35, gone: st => st.done });
     this.kids = [0, 1].map(k => knocker(R, E, [k ? 8 : -8, 20], { gone: st => st.hits <= k || st.done }));
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 3);

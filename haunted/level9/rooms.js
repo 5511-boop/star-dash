@@ -69,11 +69,11 @@ const gallery = {
   hint: 'When a red circle appears under you, a gargoyle is diving there — move or dash out of it! A flash makes a diving gargoyle pull up. Carry the three relic shards to the altar.',
   build(R, E){
     const T = E.THREE;
-    PERCH2.forEach(([x, lz]) => { const ledge = new T.Mesh(new T.BoxGeometry(1.4, .3, 1.6), E.mat(0x5a5662)); R.place(ledge, x, lz, 2.2); });
+    PERCH2.forEach(([x, lz]) => { const ledge = new T.Mesh(new T.BoxGeometry(1.4, .3, 1.6), E.tex('plain_flags', { color: 0x5a5662, tile: 1.6 })); R.place(ledge, x, lz, 2.2); });
     this.gs = PERCH2.map((p, i) => gargoyle(R, E, 'g' + i, p));
     this.marks = diveMarks(E);
     const alt = new T.Mesh(new T.BoxGeometry(2.4, 1, 1.2), E.mat(0xd8d0c4)); R.place(alt, ALT2[0], ALT2[1] + .9, .5);
-    for (const [x, lz] of [[-3, 9], [3, 15]]){ const c = new T.Mesh(new T.CylinderGeometry(.6, .7, 3.2, 12), E.mat(0x6a6672)); R.place(c, x, lz, 1.6); R.block(x - .6, lz - .6, x + .6, lz + .6, .01, E.mat(0)); }
+    for (const [x, lz] of [[-3, 9], [3, 15]]){ const c = new T.Mesh(new T.CylinderGeometry(.6, .7, 3.2, 12), E.tex('plain_flags', { color: 0x6a6672, tile: 1.4 })); R.place(c, x, lz, 1.6); R.block(x - .6, lz - .6, x + .6, lz + .6, .01, E.mat(0)); }
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
   },
   init(){ return { got: 0, dv: {}, items: SHARDS.map(([x, lz]) => mkItem('shard', x, lz)) }; },
@@ -235,7 +235,7 @@ const reliquary = {
   hint: 'The three ring walls keep turning, each with one gap. The levers in the corners STOP a ring while someone stands on them. One holds rings still when their gaps line up; the other slips through to the relic in the middle and carries it back out to the altar (top-right corner).',
   build(R, E){
     const T = E.THREE;
-    this.pillars = RINGS.map(([r]) => { const n = Math.round(Math.PI * 2 * r / .75); return Array.from({ length: n }, () => { const m = new T.Mesh(new T.BoxGeometry(.7, 2, .7), E.mat(0x6a6672)); E.scene.add(m); return m; }); });
+    this.pillars = RINGS.map(([r]) => { const n = Math.round(Math.PI * 2 * r / .75); return Array.from({ length: n }, () => { const m = new T.Mesh(new T.BoxGeometry(.7, 2, .7), E.tex('plain_flags', { color: 0x6a6672, tile: 1.4 })); E.scene.add(m); return m; }); });
     LEV7.forEach(([x, lz], i) => R.plate('L' + i, x, lz, [0xff9a3d, 0x5ad1ff, 0xd8a8ff][i], 1.4, ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]));
     const alt = new T.Mesh(new T.BoxGeometry(1.6, .9, 1.2), E.mat(0xd8d0c4)); R.place(alt, 8.6, 20.8, .45);
   },
@@ -267,7 +267,7 @@ const aisle = {
   build(R, E){
     const T = E.THREE;
     GAPS8.forEach(([a, b]) => R.floor(-10, a, 10, b, voidMat(E), .015));
-    for (const [x1, l1, x2, l2] of [[-10, 3.5, -2, 4.3], [2, 11, 10, 11.8], [-10, 18.2, -3, 19]]) R.block(x1, l1, x2, l2, 2.2, E.mat(0x5a5662));
+    for (const [x1, l1, x2, l2] of [[-10, 3.5, -2, 4.3], [2, 11, 10, 11.8], [-10, 18.2, -3, 19]]) R.block(x1, l1, x2, l2, 2.2, E.tex('plain_flags', { color: 0x5a5662, tile: 1.6 }));
     R.hook(-5, 18); R.hook(5, 17.6);
     this.front = R.floor(-10, 0, 10, 1, voidMat(E), .02);
     this.dust = new T.Mesh(new T.BoxGeometry(20, 2, .3), new T.MeshBasicMaterial({ color: 0x8a8090, transparent: true, opacity: .35 })); E.scene.add(this.dust);
@@ -373,7 +373,7 @@ export default {
   level: 9,
   // texture pack in tex/level9/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
   decor: { kind: 'panel', tex: 'stained_glass', w: 1.1, h: 1.8, y: 1.45, every: 5, glow: .55, frame: true, mullion: true, color: 0x8a6a3a },   // wall dressing: stained-glass windows (engine wallDecor)
-  wallImg: 'cathedral_wall', trimImg: 'wrought_iron', texVer: 1,
+  doorImg: 'pew_oak', wallImg: 'cathedral_wall', trimImg: 'wrought_iron', texVer: 1,
   texFloors: {
     "The Collapsed Nave": "nave_flags",
     "The Gargoyle Gallery": "gallery_cobble",

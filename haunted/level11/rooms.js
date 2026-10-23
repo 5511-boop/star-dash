@@ -45,7 +45,7 @@ const catalogue = {
     R.spectral(-10, 2.3, 10, 2.7);
     R.spectral(-3.7, 2.7, -3.3, 21.5); R.spectral(3.3, 2.7, 3.7, 21.5);
     R.spectral(-10, 10.8, -3.7, 11.2); R.spectral(3.7, 10.8, 10, 11.2);
-    const cab = new T.Mesh(new T.BoxGeometry(2.2, 1.4, 1), E.mat(0x5a3a22)); R.place(cab, DRAWER2[0], DRAWER2[1], .7); R.block(DRAWER2[0] - 1.1, DRAWER2[1] - .5, DRAWER2[0] + 1.1, DRAWER2[1] + .5, .01, E.mat(0));
+    const cab = new T.Mesh(new T.BoxGeometry(2.2, 1.4, 1), E.texFrom(20, 'manor_oak', { color: 0x5a3a22, tile: 1.4 })); R.place(cab, DRAWER2[0], DRAWER2[1], .7); R.block(DRAWER2[0] - 1.1, DRAWER2[1] - .5, DRAWER2[0] + 1.1, DRAWER2[1] + .5, .01, E.mat(0));
     for (let i = 0; i < 6; i++){ const d = new T.Mesh(new T.BoxGeometry(.6, .35, .05), E.mat(0x8a6a42)); R.place(d, -.7 + (i % 3) * .7, DRAWER2[1] - .52, .35 + Math.floor(i / 3) * .5); }
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
     this.k = knight(R, E, [0, 17], { sp: 2.6, gone: st => st.got >= 3 });
@@ -72,14 +72,14 @@ const lending = {
   hint: 'While you hold a book you are SOLID — no phasing. Throw the book through the purple wall into its alcove, phase in after it with empty hands, pick it up and put it on the glowing shelf at the back. Red goes left, green right, blue at the top.',
   build(R, E){
     EE = E; const T = E.THREE;
-    const desk = new T.Mesh(new T.BoxGeometry(5, 1, .8), E.mat(0x5a3a22)); R.place(desk, 0, 2.6, .5); R.block(-2.5, 2.2, 2.5, 3, .01, E.mat(0));
+    const desk = new T.Mesh(new T.BoxGeometry(5, 1, .8), E.texFrom(20, 'manor_oak', { color: 0x5a3a22, tile: 1.4 })); R.place(desk, 0, 2.6, .5); R.block(-2.5, 2.2, 2.5, 3, .01, E.mat(0));
     // red alcove (west)
     R.wall(-10, 6.8, -5, 7.2); R.wall(-10, 11.8, -5, 12.2); R.spectral(-5.2, 7.2, -4.8, 11.8);
     // green alcove (east)
     R.wall(5, 11.8, 10, 12.2); R.wall(5, 16.8, 10, 17.2); R.spectral(4.8, 12.2, 5.2, 16.8);
     // blue alcove (north) — the exit is at its back
     R.wall(-3.2, 17.5, -2.8, 22); R.wall(2.8, 17.5, 3.2, 22); R.spectral(-2.8, 17.3, 2.8, 17.7);
-    this.slots = SLOT3.map(([x, lz], i) => { const s = new T.Mesh(new T.BoxGeometry(i === 2 ? 1.6 : .5, 1.6, i === 2 ? .5 : 1.6), E.mat(0x3a2416)); R.place(s, x + (i === 0 ? -.5 : i === 1 ? .5 : 0), lz + (i === 2 ? .6 : 0), .8); const g = new T.Mesh(new T.BoxGeometry(.9, .06, .9), E.glow(BOOKS3[i][2], .8)); R.place(g, x, lz, .04); const b = bookMesh(E, BOOKS3[i][2]); b.visible = false; R.place(b, x, lz, 1.2); return b; });
+    this.slots = SLOT3.map(([x, lz], i) => { const s = new T.Mesh(new T.BoxGeometry(i === 2 ? 1.6 : .5, 1.6, i === 2 ? .5 : 1.6), E.texFrom(20, 'manor_oak', { color: 0x3a2416, tint: 0xb8a090, tile: 1.4 })); R.place(s, x + (i === 0 ? -.5 : i === 1 ? .5 : 0), lz + (i === 2 ? .6 : 0), .8); const g = new T.Mesh(new T.BoxGeometry(.9, .06, .9), E.glow(BOOKS3[i][2], .8)); R.place(g, x, lz, .04); const b = bookMesh(E, BOOKS3[i][2]); b.visible = false; R.place(b, x, lz, 1.2); return b; });
     this.orbs = orbRow(E, R, 3, -1.3, 3.4, 1.3, 1.5);
     knight(R, E, [0, 10], { sp: 2.4, label: 'the Librarian Knight', gone: st => st.put.every(Boolean) });
   },
@@ -134,7 +134,7 @@ const booths = {
     R.wall(-2.4, 16.8, -2, 21.6); R.wall(2, 16.8, 2.4, 21.6); R.spectral(-2, 16.8, 2, 17.2);
     this.gly = BOOTH5.map(([x1, l1, x2, l2]) => { const m = textPlane(E, 1.4, 1.4, 1.2); m.visible = false; R.place(m, (x1 + x2) / 2, (l1 + l2) / 2, 1.9); return m; });
     this.dials = DIAL5.map(([x, lz], i) => { R.plate('d' + i, x, lz, 0xffd38a, 1.3, ['←', '↑', '→'][i]); const m = textPlane(E, 1, 1, 1); R.place(m, x, lz + .9, 1.6); return m; });
-    const desk = new T.Mesh(new T.BoxGeometry(7.6, .8, .5), E.mat(0x5a3a22)); R.place(desk, 0, 8.2, .4); R.block(-3.8, 7.95, 3.8, 8.45, .01, E.mat(0));
+    const desk = new T.Mesh(new T.BoxGeometry(7.6, .8, .5), E.texFrom(20, 'manor_oak', { color: 0x5a3a22, tile: 1.4 })); R.place(desk, 0, 8.2, .4); R.block(-3.8, 7.95, 3.8, 8.45, .01, E.mat(0));
     this.k = knight(R, E, [0, 13], { sp: 2.5, gone: st => st.done });
     this.last = null;
   },
@@ -201,9 +201,9 @@ const restricted = {
   hint: 'The sentry knights stand still until their lantern cone catches you — their gaze goes right through ghost-walls. Once they chase, phase through a wall to lose them. With the Tome in your hands you can\'t phase: use the gaps in the walls, or throw the Tome through a wall and phase after it.',
   build(R, E){
     EE = E; const T = E.THREE;
-    [6.5, 12, 17].forEach((lz, i) => { const g = GAPS7[i][0]; R.spectral(-10, lz - .25, g - 1.1, lz + .25); R.spectral(g + 1.1, lz - .25, 10, lz + .25); const a = new T.Mesh(new T.BoxGeometry(2.2, .2, .6), E.mat(0x3a2416)); R.place(a, g, lz, 2.5); });
-    const lect = new T.Mesh(new T.BoxGeometry(1, 1.1, .8), E.mat(0x3a2416)); R.place(lect, TOME7[0], TOME7[1] + .9, .55);
-    const desk = new T.Mesh(new T.BoxGeometry(2, .9, 1), E.mat(0x5a3a22)); R.place(desk, DESK7[0], DESK7[1] - .7, .45);
+    [6.5, 12, 17].forEach((lz, i) => { const g = GAPS7[i][0]; R.spectral(-10, lz - .25, g - 1.1, lz + .25); R.spectral(g + 1.1, lz - .25, 10, lz + .25); const a = new T.Mesh(new T.BoxGeometry(2.2, .2, .6), E.texFrom(20, 'manor_oak', { color: 0x3a2416, tint: 0xb8a090, tile: 1.4 })); R.place(a, g, lz, 2.5); });
+    const lect = new T.Mesh(new T.BoxGeometry(1, 1.1, .8), E.texFrom(20, 'manor_oak', { color: 0x3a2416, tint: 0xb8a090, tile: 1.4 })); R.place(lect, TOME7[0], TOME7[1] + .9, .55);
+    const desk = new T.Mesh(new T.BoxGeometry(2, .9, 1), E.texFrom(20, 'manor_oak', { color: 0x5a3a22, tile: 1.4 })); R.place(desk, DESK7[0], DESK7[1] - .7, .45);
     this.tomeOn = bookMesh(E, 0x4a0a2a); this.tomeOn.scale.setScalar(1.6); this.tomeOn.visible = false; R.place(this.tomeOn, DESK7[0], DESK7[1] - .7, 1);
     this.sent = POST7.map(([x, lz, ry], i) => {
       const g = knight(R, E, [x, lz], { sp: 3, tint: 0x6a6a86, label: 'a sentry knight', wants: (g, p, st) => st.alert[i] > 0, onStep: (g, dt, st, m, best) => { if (!(st.alert[i] > 0) && Math.hypot(g.x - g.home[0], g.z - g.home[1]) < .3){ g.ry = ry + Math.sin(E.elapsed * .6 + i * 2) * .9; } } });

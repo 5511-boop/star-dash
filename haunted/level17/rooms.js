@@ -178,7 +178,7 @@ const searchlight = {
   build(R, E){
     EE = E; const T = E.THREE;
     ROCK6.forEach(([a, b, c, d]) => R.block(a, b, c, d, 1.6, rockMat(E)));
-    this.sub = new T.Group(); const hull = new T.Mesh(new T.CapsuleGeometry(1, 4, 6, 12), E.mat(0x3a4a3a, { metalness: .6 })); hull.rotation.z = Math.PI / 2; hull.position.y = 1.3; this.sub.add(hull); const tower = new T.Mesh(new T.BoxGeometry(1.2, 1, 1), hull.material); tower.position.y = 2.4; this.sub.add(tower); this.lamp = new T.Mesh(new T.SphereGeometry(.3, 10, 8), E.glow(0xffffd8, 3)); this.lamp.position.set(0, 1.3, .9); this.sub.add(this.lamp); E.scene.add(this.sub);
+    this.sub = new T.Group(); const hull = new T.Mesh(new T.CapsuleGeometry(1, 4, 6, 12), E.tex('barnacle_iron', { color: 0x3a4a3a, metalness: .5, roughness: .6, tile: 1.6 })); hull.rotation.z = Math.PI / 2; hull.position.y = 1.3; this.sub.add(hull); const tower = new T.Mesh(new T.BoxGeometry(1.2, 1, 1), hull.material); tower.position.y = 2.4; this.sub.add(tower); this.lamp = new T.Mesh(new T.SphereGeometry(.3, 10, 8), E.glow(0xffffd8, 3)); this.lamp.position.set(0, 1.3, .9); this.sub.add(this.lamp); E.scene.add(this.sub);
     this.cone = E.sector(17, .3, 0xffffd8, .18); E.scene.add(this.cone);
     LEV6.forEach(([x, lz], i) => R.plate('l' + i, x, lz, 0xd4af37, 1.3, '⏚'));
   },

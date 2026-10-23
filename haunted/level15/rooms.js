@@ -5,7 +5,7 @@ import { orbRow, setOrbs, near, inRect, textPlane, redraw } from '../lib.js';
 let EE = null;
 const solo = () => EE && EE.solo();
 const sandstone = E => E.mat(0xffffff, { roughness: .9, map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#b8955a'; x.fillRect(0, 0, w, h); x.strokeStyle = '#8a6a3a'; x.lineWidth = 3; for (let j = 0; j < 4; j++) for (let i = 0; i < 2; i++) x.strokeRect(i * 64 + (j % 2) * 32, j * 32, 64, 32); for (let k = 0; k < 30; k++){ x.fillStyle = 'rgba(90,60,30,.25)'; x.fillRect(Math.random() * w, Math.random() * h, 3, 2); } }, 6, 6) });
-const blockMat = E => E.tex('ante_sandstone', { color: 0xc8a66a, roughness: .9, tile: 1.6 });
+const blockMat = E => E.tex('plain_sandstone', { color: 0xc8a66a, roughness: .9, tile: 1.8 });
 const goldMat = E => E.tex('tomb_gold', { color: 0xd4af37, metalness: .85, roughness: .25, emissive: 0x5a4210, emissiveIntensity: .4, tile: 1 });
 const voidMat = E => new E.THREE.MeshBasicMaterial({ color: 0x0a0604 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });

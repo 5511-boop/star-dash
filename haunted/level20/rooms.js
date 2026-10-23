@@ -25,7 +25,7 @@ const grand = {
   get hint(){ return solo() ? 'The soul seals only break in a Soul Blast. Solo: rewind (R), then tap ☀ standing right next to your dream echo. A blast also stuns every ghost nearby for a long time. Two blasts — one between each pair of seals.' : 'The soul seals only break in a Soul Blast: stand close together and BOTH tap ☀ at the same moment. The blast also stuns every ghost nearby for a long time. Two blasts — one between each pair of seals.'; },
   build(R, E){
     EE = E; const T = E.THREE;
-    this.sm = SEAL1.map(([x, lz]) => { const g = new T.Group(); const p = new T.Mesh(new T.CylinderGeometry(.5, .6, 2, 10), E.mat(0x3a2a3a)); p.position.y = 1; g.add(p); const f = new T.Mesh(new T.ConeGeometry(.35, .9, 8), new T.MeshBasicMaterial({ color: 0xb87aff })); f.position.y = 2.45; g.add(f); g.userData.f = f; R.place(g, x, lz); R.block(x - .5, lz - .5, x + .5, lz + .5, .01, E.mat(0)); return g; });
+    this.sm = SEAL1.map(([x, lz]) => { const g = new T.Group(); const p = new T.Mesh(new T.CylinderGeometry(.5, .6, 2, 10), E.tex('soul_slate', { color: 0x3a2a3a, tile: 1.2 })); p.position.y = 1; g.add(p); const f = new T.Mesh(new T.ConeGeometry(.35, .9, 8), new T.MeshBasicMaterial({ color: 0xb87aff })); f.position.y = 2.45; g.add(f); g.userData.f = f; R.place(g, x, lz); R.block(x - .5, lz - .5, x + .5, lz + .5, .01, E.mat(0)); return g; });
     R.wall(-10, 19.6, -1.5, 20.4); R.wall(1.5, 19.6, 10, 20.4); R.door('g', -1.5, 19.6, 1.5, 20.4, 'gate');
     this.g = [[-8, 11], [8, 11], [0, 18], [-3, 5], [3, 5], [0, 12]].map(h => R.ghost({ home: h, look: ['normal', 'hood', 'hat', 'wisp', 'blob', 'crown'][Math.abs(h[0] + h[1]) % 6], sp: 2, radius: 7 }));
     this.orbs = orbRow(E, R, 4, -1.95, 21.3, 1.3, 2.4);
@@ -83,7 +83,7 @@ const trials = {
     R.wall(-10, 17.6, -1.5, 18.2); R.wall(1.5, 17.6, 10, 18.2); R.door('s', -1.5, 17.6, 1.5, 18.2, 'gate');
     const seal = new T.Mesh(new T.TorusGeometry(.5, .1, 8, 20), E.glow(0x5ad1ff, 1.5)); R.place(seal, 0, 17.5, 1.6); this.seal = seal;
     R.wall(-10, 19.8, -1.5, 20.4); R.wall(1.5, 19.8, 10, 20.4); R.door('h', -1.5, 19.8, 1.5, 20.4, 'gate'); R.plate('p', -5, 19, 0xd8a8ff, 1.3, '☾');
-    const cr = new T.Mesh(new T.BoxGeometry(1.4, .5, 1), E.mat(0x5a3a1a)); R.place(cr, 7, 7, .25);
+    const cr = new T.Mesh(new T.BoxGeometry(1.4, .5, 1), E.tex('manor_oak', { color: 0x5a3a1a, tile: 1 })); R.place(cr, 7, 7, .25);
     for (const [lz, txt] of [[3.25, 'VAULT'], [5.25, 'PHASE'], [11.3, 'BOMB'], [15, 'GRAPPLE'], [17.9, 'BOLT'], [20.1, 'ECHO']]){ const m = textPlane(E, 2, .5, 1); R.place(m, -8.5, lz - .35, 2.4); redraw(m, (c, W, H) => { c.fillStyle = '#2a0a1a'; c.fillRect(0, 0, W, H); c.fillStyle = '#ffd38a'; c.font = 'bold 44px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, W / 2, H / 2 + 2); }); }
   },
   init(){ return { seal: 0, items: [mkItem('bomb', 6.6, 7, { n: 0 }), mkItem('bomb', 7.4, 7, { n: 1 })] }; },
@@ -141,9 +141,9 @@ const banquet = {
   hint: 'Read the three seating rules on the walls, then carry each place card to the right chair. Knives fly across the hall along the glowing lines — get off a line when it lights up.',
   build(R, E){
     EE = E; const T = E.THREE;
-    const tbl = new T.Mesh(new T.BoxGeometry(3.6, .9, 12), E.mat(0x4a2a1a)); R.place(tbl, 0, 11.5, .45); R.block(-1.8, 5.5, 1.8, 17.5, .01, E.mat(0)); const cloth = new T.Mesh(new T.BoxGeometry(3.8, .05, 12.2), E.mat(0xe8d8d8)); R.place(cloth, 0, 11.5, .92);
+    const tbl = new T.Mesh(new T.BoxGeometry(3.6, .9, 12), E.tex('manor_oak', { color: 0x4a2a1a, tile: 1.6 })); R.place(tbl, 0, 11.5, .45); R.block(-1.8, 5.5, 1.8, 17.5, .01, E.mat(0)); const cloth = new T.Mesh(new T.BoxGeometry(3.8, .05, 12.2), E.mat(0xe8d8d8)); R.place(cloth, 0, 11.5, .92);
     for (let i = 0; i < 7; i++){ const c = new T.Mesh(new T.CylinderGeometry(.08, .08, .5, 6), E.glow(0xffd38a, 1.2)); R.place(c, 0, 6.5 + i * 1.65, 1.2); }
-    this.chairs = SEATS5.map(([x, lz]) => { const c = new T.Mesh(new T.BoxGeometry(.9, 1.4, .9), E.mat(0x6a3a2a)); R.place(c, x + (x < 0 ? -.7 : .7), lz, .7); const card = textPlane(E, 1.1, .5, 1); card.visible = false; R.place(card, x * .45, lz, 1.05); card.rotation.x = -Math.PI / 2; return card; });
+    this.chairs = SEATS5.map(([x, lz]) => { const c = new T.Mesh(new T.BoxGeometry(.9, 1.4, .9), E.tex('manor_oak', { color: 0x6a3a2a, tile: 1 })); R.place(c, x + (x < 0 ? -.7 : .7), lz, .7); const card = textPlane(E, 1.1, .5, 1); card.visible = false; R.place(card, x * .45, lz, 1.05); card.rotation.x = -Math.PI / 2; return card; });
     [['The COUNT sits on the left side,', 'in the seat nearest the way out.'], ['The COOK takes the middle seat', 'on the right side.'], ['The CAT sits directly', 'opposite the COOK.']].forEach(([a, b], i) => { const m = textPlane(E, 3.6, 1, 1); m.rotation.y = i === 1 ? -Math.PI / 2 : Math.PI / 2; R.place(m, i === 1 ? 9.7 : -9.7, 6 + i * 5, 1.8); redraw(m, (c, W, H) => { c.fillStyle = '#2a0a14'; c.fillRect(0, 0, W, H); c.fillStyle = '#ffd38a'; c.font = 'italic 24px Georgia'; c.textAlign = 'center'; c.fillText(a, W / 2, H / 2 - 14); c.fillText(b, W / 2, H / 2 + 18); }); });
     this.lines = Array.from({ length: 2 }, () => { const m = new T.Mesh(new T.BoxGeometry(20, .03, .5), new T.MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0 })); E.scene.add(m); return m; });
     this.knives = Array.from({ length: 2 }, () => { const m = new T.Mesh(new T.BoxGeometry(.8, .05, .12), E.mat(0xe8e8f0, { metalness: .9 })); m.visible = false; E.scene.add(m); return m; });
@@ -315,7 +315,7 @@ export default {
   level: 20,
   // texture pack in tex/level20/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
   decor: { kind: 'panel', tex: 'flesh_wall', w: 1.6, h: 2, y: 1.2, every: 6, glow: .15, color: 0x5a0a14, skip: 3 },   // wall dressing: living flesh (engine wallDecor)
-  wallImg: 'manor_wall', trimImg: 'manor_gold', texVer: 1,
+  doorImg: 'manor_oak', wallImg: 'manor_wall', trimImg: 'manor_gold', texVer: 1,
   texFloors: {
     "The Grand Return": "return_checker",
     "The Heartbeat": "heartbeat_flesh",

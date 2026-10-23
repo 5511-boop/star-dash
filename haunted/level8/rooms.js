@@ -25,6 +25,7 @@ const lobby = {
   build(R, E){
     const T = E.THREE;
     for (const [x, lz] of [[-5, 6], [5, 6], [-5, 13], [5, 13]]){ const c = new T.Mesh(new T.CylinderGeometry(.6, .7, 3.2, 14), E.mat(0xe8e0d4)); R.place(c, x, lz, 1.6); R.block(x - .6, lz - .6, x + .6, lz + .6, .01, E.mat(0)); }
+    R.floor(-1.1, .8, 1.1, 18.8, E.tex('runner_floor', { rx: 1, ry: 8 }), .01);   // tex/level8/runner_floor
     const desk = new T.Mesh(new T.BoxGeometry(4, 1, 1), E.mat(0x5a2a1a)); R.place(desk, 0, 19.5, .5); R.block(-2, 19, 2, 20, .01, E.mat(0));
     phantom(R, { home: [0, 10] });
     this.orbs = orbRow(E, R, 4, -1.95, 21.3);
