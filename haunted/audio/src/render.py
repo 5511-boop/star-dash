@@ -7,7 +7,7 @@ import os, sys, glob, shutil, subprocess
 import numpy as np, scipy.signal as sg, soundfile as sf
 from pedalboard import Pedalboard, Reverb, Delay, Chorus
 
-SR = 44100; L = 42.0; N = int(SR * L); F = int(SR * 3); SLOT = 5.0
+SR = 44100; L = 42.0; N = int(SR * L); F = int(SR * 3); SLOT = 8.0   # engine.js FX_SLOT must match
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'star-dash', 'haunted', 'audio')
 TMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 FFMPEG = shutil.which('ffmpeg') or (glob.glob(os.path.expanduser('~/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg*/*/bin/ffmpeg.exe')) or ['ffmpeg'])[0]
@@ -258,7 +258,7 @@ def finish_bed(x, lufs_rms=-24.):
     if pk > .7: x = np.tanh(x / .7) * .7   # gentle soft-clip on rare peaks
     return x
 def fx_sheet(events, room=.8, wet=.3, echo=None):
-    """events: list of mono arrays; each goes in its own 5 s slot with its reverb tail, peak-normalised"""
+    """events: list of mono arrays; each goes in its own SLOT-second slot with its reverb tail, peak-normalised"""
     slots = []
     fx = [Reverb(room_size=room, damping=.5, wet_level=wet, dry_level=.85, width=1.)]
     if echo: fx.insert(0, Delay(delay_seconds=echo[0], feedback=echo[1], mix=echo[2]))
@@ -292,7 +292,7 @@ def write(name, x, wrap=False, kbps=96):
 # ---------------- the levels ----------------
 def wind(n, lo=300, hi=900, gust=.25):
     return bp(pink(n), lo, hi) * slow(n, gust, .25, 1)
-def lvl(n):
+def lvl_synth(n):   # first, fully synthesized version (kept for reference / no-samples fallback)
     lp_ = Loop(); X = N + F
     if n == 2:   # Grimwood Carnival: night wind, a far-off calliope going round, laughter, a creaking ride
         lp_.wide(lambda: wind(X, 200, 700, .2), .35)
@@ -402,6 +402,126 @@ def lvl(n):
         lp_.pulse(lambda k: thump(48) + np.pad(thump(44, .6), (int(SR * .28), 0))[:int(SR * .35)], 1.4)
         lp_.scatter(creak, 4, (.15, .3))
         return lp_.render(.85, .4), fx_sheet([creak(), creak(), whisper(), choir([st(73.4, s) for s in (0, 3, 7)], 4.5, 'oh'), bell(98, 5), laugh()])
+
+# ---------------- recorded samples (CC0 previews from freesound.org, see samples/CREDITS.txt) ----------------
+import librosa
+SAMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'samples'); _cache = {}
+def db(g): return 10 ** (g / 20)
+def S(name):
+    """stereo (n, 2) at SR, rumble-filtered, active part RMS-normalised to -20 dBFS"""
+    if name not in _cache:
+        y, _ = librosa.load(os.path.join(SAMP, name + '.mp3'), sr=SR, mono=False)
+        y = np.stack([y, y], 1) if y.ndim == 1 else y.T
+        y = sg.sosfilt(sg.butter(2, 25, 'hp', fs=SR, output='sos'), y, axis=0)
+        m = np.abs(y).mean(1); act = m > m.max() * .03
+        _cache[name] = y * (.1 / (np.sqrt(np.mean(y[act] ** 2)) + 1e-9))
+    return _cache[name]
+def E(name, a=None, d=None, fade=.12):
+    """mono one-shot: the whole sample trimmed of silence, or an excerpt from a seconds, d long"""
+    x = S(name).mean(1)
+    if a is None: x, _ = librosa.effects.trim(x, top_db=40)
+    else: x = x[int(SR * a):int(SR * (a + d))]
+    f = min(int(SR * fade), len(x) // 4); x = x.copy(); x[:f] *= np.linspace(0, 1, f); x[-f:] *= np.linspace(1, 0, f); return x
+def texture(name, n=None, xf=2.5):
+    """a texture n samples long built from a recording: random-offset stretches joined by equal-power crossfades"""
+    n = n or N + F; x = S(name); L0 = len(x); c = min(int(SR * xf), L0 // 3); out = np.zeros((n + c, 2)); pos = 0; first = True
+    while pos < n:
+        ln = min(L0, n + c - pos); a = int(rng.integers(0, L0 - ln + 1)); seg = x[a:a + ln].copy()
+        if not first: seg[:c] *= np.sin(np.linspace(0, np.pi / 2, c))[:, None]
+        if pos + ln < n + c: seg[-c:] *= np.cos(np.linspace(0, np.pi / 2, c))[:, None]
+        out[pos:pos + ln] += seg; pos += ln - c; first = False
+    return out[:n]
+def lvl(n):
+    lp_ = Loop(); X = N + F
+    T = lambda name, g, **k: lp_.layer(texture(name, **k), db(g))
+    if n == 2:   # Grimwood Carnival: a broken calliope and creepy circus tune drifting over the empty fair, a ride grinding, clowns
+        lp_.wide(lambda: wind(X, 200, 700, .2), .3)
+        T('l2_ride_mech', -14)
+        lp_.put(lp(E('l2_calliope', 4, 14), 3000), 3, db(-9), -.5)
+        lp_.put(lp(E('l2_circus', 10, 16), 2200), 22, db(-12), .5)
+        lp_.put(E('l2_clown_laugh2'), 18, db(-10), .7)
+        return lp_.render(.85, .4), fx_sheet([E('l2_clown_laugh1'), E('l2_clown_laugh2'), E('l2_laugh1'), E('l2_laugh2'), E('l2_clown_horn'),
+                                             E('l2_calliope', 24, 7), E('l2_circus', 30, 7), creak()])
+    if n == 3:   # Clocktower: real tick-tock, gears and levers, wind round the tower, distant bells
+        T('l3_ticktock', -6, xf=.03)
+        lp_.wide(lambda: wind(X, 300, 1000, .15), .15)
+        T('l3_levers', -16)
+        lp_.put(E('l3_bells_far'), 9, db(-6), -.4); lp_.put(bell(147, 6), 30, .15, .5)
+        return lp_.render(.75, .3), fx_sheet([E('l3_bells_far'), E('l3_levers', 0, 6), E('l3_levers', 7, 6), bell(rng.uniform(150, 220), 5), creak()])
+    if n == 4:   # Sunken Lighthouse: real surf on rocks, wind, gulls, the foghorn
+        T('l4_waves', 0); lp_.wide(lambda: wind(X, 400, 1200), .1)
+        lp_.put(E('l4_foghorn'), 15, db(-8), 0); lp_.put(E('l4_gulls', 0, 5), 31, db(-14), .6)
+        return lp_.render(.7, .2), fx_sheet([E('l4_gulls', 0, 5), E('l4_gulls', 5, 5), E('l4_gulls', 9, 4.5), E('l4_foghorn'), creak()])
+    if n == 5:   # Frozen Monastery: a nor'easter howling, monks chanting far below, an eerie choir, a cold bell
+        T('l5_storm', 0); T('l5_monks', -18)
+        lp_.put(E('l5_bell'), 21, db(-8), .3)
+        return lp_.render(.9, .4), fx_sheet([E('l5_chorus', 0, 7.4), E('l5_chorus', 14, 7.4), E('l5_chorus', 28, 7.4), E('l5_monks', 10, 7.4), E('l5_bell')])
+    if n == 6:   # Witch's Bog: frogs and insects at night, bubbling mud, crows
+        T('l6_frogs_night', 0); T('l6_mud', -12)
+        lp_.put(E('l6_crow'), 26, db(-10), -.6)
+        return lp_.render(.6, .2), fx_sheet([E('l6_crow'), E('l6_crow'), E('l6_mud', 0, 6), frog(), laugh()])
+    if n == 7:   # Ghost Train: a real carriage rumbling, wheels clacking on the rails, a distant steam train, the horn
+        T('l7_rumble', 0); T('l7_clack', -6)
+        lp_.put(E('l7_steam_far'), 20, db(-8), -.3)
+        return lp_.render(.5, .2), fx_sheet([E('l7_horn', 0, 7), E('l7_steam_far'), steam_whistle(), creak(), E('l7_clack', 10, 6)])
+    if n == 8:   # Opera House: a murmuring audience that isn't there, the orchestra tuning, a soprano, ghostly singing
+        T('l8_murmur', -6); T('l8_tuning', -14); lp_.layer(organ([65.4, 98, 130.8], X / SR, 5, 5) * slow(X, .07, .5, 1), .05)
+        lp_.put(E('l8_soprano', 0, 9), 12, db(-12), -.5)
+        return lp_.render(.92, .45), fx_sheet([E('l8_soprano', 0, 7.4), E('l8_soprano', 9, 7.4), E('l8_ghost_sing'), E('l8_remorse'), E('l8_tuning', 5, 7), E('l8_creak'), laugh()])
+    if n == 9:   # Ruined Cathedral: the organ, wind through broken windows, Gregorian chant, the bell, drips
+        lp_.layer(organ([55, 82.4, 110, 164.8], X / SR, 5, 5) * slow(X, .06, .5, 1), .05)
+        lp_.wide(lambda: wind(X, 300, 900), .15)
+        lp_.put(E('l9_organ', 0, 20), 4, db(-8), 0); lp_.put(E('l9_chant', 0, 12), 27, db(-12), .4)
+        lp_.scatter(drip, 8, (.1, .2))
+        return lp_.render(.95, .5), fx_sheet([E('l9_chant', 0, 7.4), E('l9_chant', 8, 7.4), E('l9_bell'), E('l9_organ', 20, 7.4), crow(), drip()])
+    if n == 10:   # Mirror Palace: singing glass, glass rings, a reversed breath, something cracking
+        T('l10_singing_glass', -10); lp_.wide(lambda: hp(pink(X), 5000), .008)
+        lp_.put(E('l10_glass_ring'), 17, db(-8), .5); lp_.scatter(shimmer, 3, (.1, .2))
+        return lp_.render(.95, .55), fx_sheet([E('l10_glass_ring'), E('l10_rev_breath'), E('l10_glass_break'), E('l10_singing_glass', 4, 7), whisper(), rise()])
+    if n == 11:   # Spectral Archive: hushed stacks, a slow clock, pages turning, a quill scratching, whispers
+        lp_.wide(lambda: lp(pink(X), 400), .1); lp_.pulse(lambda k: tick(1200) * .5, 2.0)
+        lp_.put(E('l11_quill'), 14, db(-8), -.4); lp_.put(E('l11_pages'), 30, db(-10), .5)
+        return lp_.render(.8, .35), fx_sheet([E('l11_pages'), E('l11_page'), E('l11_quill'), whisper(), whisper(), creak()])
+    if n == 12:   # Toy Factory: machinery, music boxes, a detuned toy piano, wind-up toys, squeaks
+        T('l12_machine', -12)
+        lp_.put(E('l12_vintage_box', 0, 14), 6, db(-12), -.4)
+        return lp_.render(.7, .3), fx_sheet([E('l12_musicbox', 0, 7.4), E('l12_vintage_box', 8, 7.4), E('l12_toy_piano', 0, 7.4), E('l12_toy_piano', 12, 7.4),
+                                             E('l12_windup'), E('l12_squeak'), laugh()])
+    if n == 13:   # Coal Mine: water dripping in a huge cave, a deep rumble, picks in far tunnels, the canary
+        T('l13_drips', 0); T('l13_rumble', -4)
+        lp_.put(E('l13_pick', 0, 4), 19, db(-10), .6)
+        return lp_.render(.8, .3, echo=(.37, .35, .3)), fx_sheet([E('l13_pick', 0, 4), E('l13_pick', 3.5, 4), canary(), rumble(), creak()], echo=(.37, .35, .3))
+    if n == 14:   # Sky Gardens: high wind, wind chimes, swallows
+        for lo, hi in ((400, 900), (800, 2000)): lp_.wide(lambda lo=lo, hi=hi: wind(X, lo, hi, .35), .3)
+        T('l14_chimes', -10); lp_.scatter(lambda: E('l14_swallows'), 3, (.1, .2))
+        return lp_.render(.7, .25), fx_sheet([E('l14_chimes', 0, 7.4), E('l14_chimes', 8, 7.4), E('l14_swallows'), birds(), wind(int(SR * 3), 600, 2000, 1) * env(int(SR * 3), .8, 1.2)])
+    if n == 15:   # Pharaoh's Tomb: Saharan wind, the tomb's breath, a ney flute somewhere in the dark, scarabs
+        T('l15_sahara', 0); T('l15_tomb', -6)
+        lp_.put(E('l15_ney', 0, 12), 14, db(-12), .4)
+        scarab = lambda: np.concatenate([tick(3000) * rng.uniform(.3, 1) for _ in range(6)])
+        return lp_.render(.8, .4), fx_sheet([E('l15_ney', 0, 7.4), E('l15_ney', 12, 7.4), E('l15_ney', 20, 7.4), oud_phrase(), scarab(), whisper()])
+    if n == 16:   # Wax Museum: a crackling record, guttering candles, an antique music box waltz, an old gramophone tune
+        T('l16_vinyl', -4); T('l16_candle', -14)
+        lp_.put(bp(E('l16_waltz_box', 0, 16), 200, 5000), 8, db(-10), -.3)
+        return lp_.render(.75, .3), fx_sheet([E('l16_waltz_box', 0, 7.4), E('l16_waltz_box', 16, 7.4), bp(E('l16_gramophone', 0, 7.4), 250, 4000), bp(E('l16_radio_box', 5, 7.4), 250, 4500),
+                                             creak(), drip()])
+    if n == 17:   # Abyssal Depths: an underwater cave, whale song, sonar, bubbles
+        T('l17_cave', 0); lp_.wide(lambda: lp(brown(X), 220) * slow(X, .08, .5, 1), .3)
+        lp_.put(E('l17_whale', 0, 10), 8, db(-8), -.5); lp_.scatter(bubbles, 5, (.1, .25))
+        return lp_.render(.95, .5, echo=(.5, .3, .25)), fx_sheet([E('l17_whale', 0, 7.4), E('l17_whale', 8, 7.4), E('l17_sonar'), E('l17_sonar'), whale(), bubbles()], echo=(.6, .35, .3))
+    if n == 18:   # Volcano Forge: roaring fire, bubbling lava, the anvil, bellows, steam
+        T('l18_fire', 0); T('l18_lava', -4)
+        lp_.put(E('l18_anvil', 0, 5), 12, db(-8), .5); lp_.put(E('l18_bellows', 0, 6), 29, db(-10), -.5)
+        return lp_.render(.7, .25), fx_sheet([E('l18_anvil', 0, 5), E('l18_anvil', 5, 5), E('l18_steam'), E('l18_bellows', 0, 7.4), clang(), bloop()])
+    if n == 19:   # Dream Realm: a drifting pad, an eerie music box played backwards, whispers, a reversed piano
+        T('l19_pad', -6); lp_.layer(drone_tone([261.6, 329.6, 392, 493.9], X, det=.006, cut=2000) * slow(X, .15, .3, 1), .015)
+        lp_.put(E('l19_musicbox', 10, 14)[::-1], 5, db(-10), .3)
+        return lp_.render(.95, .55), fx_sheet([E('l19_musicbox', 0, 7.4), E('l19_musicbox', 30, 7.4)[::-1], E('l19_whispers', 0, 7.4), E('l19_rev_piano'), shimmer(), rise()])
+    if n == 20:   # The Heart of Hollow Manor: the house's heartbeat, a ghastly presence, creaking floors, footsteps, whispers
+        T('l20_heart', -4, xf=.05); T('l20_presence', -10)
+        lp_.layer(organ([41.2, 61.7, 82.4], X / SR, 5, 5) * slow(X, .06, .5, 1), .03)
+        lp_.put(E('l20_floorboards'), 13, db(-10), -.5); lp_.put(E('l20_footsteps', 0, 7), 31, db(-12), .6)
+        return lp_.render(.85, .4), fx_sheet([E('l20_creak'), E('l20_floorboards'), E('l20_footsteps', 0, 7.4), whisper(), choir([st(73.4, s) for s in (0, 3, 7)], 7, 'oh'), laugh()])
 
 if __name__ == '__main__':
     levels = [int(a) for a in sys.argv[1:]] or list(range(2, 21))

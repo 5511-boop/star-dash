@@ -434,7 +434,7 @@ const THEMES = {
 const THEME = THEMES[LEVEL] || { ev: [[A.creak, 1], [A.gust, .5]], every: [9, 23] };
 // Pre-rendered soundscape (audio/levelN_bed.mp3 = seamless loop, levelN_fx.mp3 = one-shots in 5 s slots; made by
 // soundscape/render.py). Until it loads nothing plays; if it can't load, the synthesized THEME above is used instead.
-const AUDIO_VER = 1, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 5;
+const AUDIO_VER = 2, BED_GAIN = .5, FX_GAIN = .28, FX_SLOT = 8;   // FX_SLOT matches SLOT in render.py
 let scape = 'loading', ambEvT = 3, pulseT = 0, pulseK = 0;
 async function loadScape(){
   try {
