@@ -1706,6 +1706,7 @@ function onData(m){
     case 'skiproom': if (role === 'host' && phase === 'play') hostSkipRoom(m.r); break;
     case 'nextlv': if (role === 'guest'){ cleanupNet(); location.href = levelUrl(m.lv) + '?join=' + encodeURIComponent(m.code); } break;
     case 'tp': if (role === 'guest'){ me.pos.set(m.x, 0, m.z); me.slide = null; me.dash = null; me.grap = null; } break;
+    case 'unfz': if (role === 'host') S.frozen[1] = 0; break;
     case 'fell': if (role === 'host'){ const ri = roomAt(other.target.z), R = ROOMS[ri]; if (R && R.def.onFall) R.def.onFall(S.rs[ri], R, E, 1); } break;
     case 's':
       if (role !== 'guest') break;
@@ -1847,7 +1848,7 @@ function updateHud(dt){
   $('hintBtn').hidden = !(R && R.def.hint && roomTime > 40 && hintT <= 0);
   let obj = '';
   const showingHint = R && R.def.hint && hintT > 0;
-  if (myFrozen()) obj = `❄ You're frozen! ${SOLO() ? 'Wait for the ice to melt…' : `${esc(remoteName)} can touch you to break the ice.`}`;
+  if (myFrozen()) obj = `❄ You're frozen! ${SOLO() ? 'Wait for the ice to melt' : `${esc(remoteName)} can touch you to break the ice`} — or press ↺ Room start${isTouch ? '' : ' (T)'}.`;
   else if (showingHint) obj = '💡 ' + R.def.hint;
   else if (R){
     const note = R.def.notes && R.def.notes.find(n => Math.hypot(me.pos.x - n[0], me.pos.z - R.Z(n[1])) < (n[3] || 1.8));
@@ -2000,8 +2001,9 @@ function hostSkipRoom(ri){
 let respawnCD = 0;
 function respawnRoom(){
   if (phase !== 'play' || lockMove) return;
-  if (myFrozen()){ toast('You\'re frozen — wait to thaw (or for your partner) first.'); return; }
   if (S.elapsed < respawnCD){ toast('One moment…'); return; }
+  // frozen? going back to the room start breaks the ice (the host owns freeze state, so a guest asks it)
+  if (myFrozen()){ if (role === 'guest') send({ t: 'unfz' }); S.frozen[myIdx()] = 0; }
   const ri = roomAt(me.pos.z), R = ROOMS[ri]; if (!R) return;
   const sp = R.spawnW[myIdx()];
   me.pos.set(sp[0], 0, sp[1]); me.slide = null; me.dash = null; me.grap = null; me.hist = []; me.ry = Math.PI; fallCD = .5;
