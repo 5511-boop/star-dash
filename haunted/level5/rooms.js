@@ -199,31 +199,35 @@ const quiet = {
   name: 'The Silent Library',
   floor: E => E.mat(0x2e2420),
   notes: [[3, 1.8, '“Silence. The monks are sleeping. Running wakes them.”', 1.5]],
-  hint: 'Don\'t run or dash — it fills the noise meter. If it fills up, the monks wake and hunt you for a while (flash them to buy time). Walk the scrolls to the altar one at a time.',
+  hint: 'Don\'t run or dash — it fills the noise meter, and if it fills up the monks wake and hunt you for a while (flash them to buy time). A scroll RUSTLES while you carry it: walking it past a sleeping monk fills the meter fast, so find a route that stays well clear of them — or throw it over a shelf to your partner (the thud makes some noise too).',
   build(R, E){
     const T = E.THREE, shelf = E.mat(0x5a3a24);
     for (const lz of [5.5, 9.5, 13.5]){ R.block(-10, lz - .4, -3, lz + .4, 2.2, shelf); R.block(3, lz - .4, 10, lz + .4, 2.2, shelf); }
     R.block(-1.2, 17.6, 1.2, 18.4, 2.2, shelf);
     const alt = new T.Mesh(new T.BoxGeometry(2, 1, 1.2), E.mat(0x8a6a42)); R.place(alt, ALTAR5[0], ALTAR5[1] + .8, .5);
+    this.monks = [];
     for (const [x, lz] of [[-6, 3.5], [6, 11.5], [-6, 15.5]])
-      R.ghost({ home: [x, lz], look: 'hood', tint: 0xd8a05a, sp: 2.9, radius: 30, label: 'a woken monk', think: (g, dt, st, R2, E2, P) => {
+      this.monks.push(R.ghost({ home: [x, lz], look: 'hood', tint: 0xd8a05a, sp: 2.9, radius: 30, label: 'a woken monk', think: (g, dt, st, R2, E2, P) => {
         if (st.awake <= 0){ E2.stepToward(g, g.home[0], g.home[1], 2, dt); g.ry = Math.PI; return true; }
         return false;
-      } });
+      } }));
   },
   init(){ return { noise: 0, awake: 0, got: 0, items: SCROLLS.map(([x, lz]) => ({ k: 'scroll', s: 0, x, lz, w: -1 })) }; },
+  onLand(st, R, E, it){ if (it.s === 0) st.noise += .22; },   // a scroll hitting the floor goes "thud"
   solve(st){ st.got = 3; st.items.forEach(i => i.s = 3); },
   itemMesh(k, E){ const T = E.THREE, g = new T.Group(); const r = new T.Mesh(new T.CylinderGeometry(.14, .14, .8, 10), E.mat(0xf2e6c8)); r.rotation.z = Math.PI / 2; g.add(r); const b = new T.Mesh(new T.TorusGeometry(.15, .03, 6, 10), E.glow(0xd04040, .5)); b.rotation.y = Math.PI / 2; g.add(b); return g; },
   carryTick(st, R, E, it, p){ if (Math.hypot(p.pos.x - ALTAR5[0], R.lz(p.pos.z) - ALTAR5[1]) < 1.7){ it.s = 3; st.got++; E.ev('place', st.got < 3 ? `Scroll returned (${st.got}/3)` : ''); } },
   host(dt, st, R, E){
     if (st.awake > 0) st.awake -= dt;
     for (const p of E.P){ if (!R.inside(p.pos)) continue; if (p.running) st.noise += dt * .55; if (p.dashing) st.noise += dt * 2.5; }
+    // a carried scroll rustles: the closer to a sleeping monk, the louder
+    if (st.awake <= 0) for (const it of st.items){ if (it.s !== 1) continue; const p = E.playerPos(it.w); if (!p) continue; const d = Math.min(...this.monks.map(g => Math.hypot(g.x - p.x, g.z - p.z))); if (d < 3.6) st.noise += dt * .9 * (1 - d / 3.6) * 2; }
     st.noise = Math.max(0, st.noise - dt * .1);
     if (st.noise >= 1){ st.noise = 0; st.awake = 9; E.ev('boo', 'Too loud! The monks are AWAKE!'); }
     if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); st.awake = 0; E.ev('door', 'All the scrolls are home. The library door opens.'); }
   },
   bar(st, R, E){ if (st.got >= 3 || !R.inside(E.me.pos)) return null; if (st.awake > 0) return { frac: st.awake / 9, label: 'THE MONKS ARE AWAKE!', color: '#ff5a5a' }; return { frac: st.noise, label: 'Noise', color: st.noise > .7 ? '#ff9a3d' : '#9ab0d0' }; },
-  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Return the 3 scrolls to the altar. <b>Don't run or dash</b> — noise wakes the monks. (${st.got}/3)`; }
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Return the 3 scrolls to the altar. <b>Don't run or dash</b> — and a carried scroll <b>rustles</b>: keep it away from the sleeping monks. Noise wakes them. (${st.got}/3)`; }
 };
 
 /* =============================================================== */

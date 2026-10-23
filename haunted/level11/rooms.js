@@ -10,6 +10,7 @@ const fakeMat = E => new E.THREE.MeshStandardMaterial({ color: 0x9a6bff, emissiv
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
 const rect = (R, x, lz, hw, hd = hw) => R.rect(x - hw, lz - hd, x + hw, lz + hd);
 const bookMesh = (E, col) => { const T = E.THREE, g = new T.Group(); const b = new T.Mesh(new T.BoxGeometry(.5, .14, .38), E.mat(col)); g.add(b); const p = new T.Mesh(new T.BoxGeometry(.46, .1, .34), E.mat(0xf0e6c8)); p.position.set(.03, 0, 0); g.add(p); return g; };
+const pageMat = E => E.tex('parchment_ink', { color: 0xf4ecd4, emissive: 0x8a8060, emissiveIntensity: .3, rx: 1, ry: 1 });
 const pageMesh = E => { const m = new E.THREE.Mesh(new E.THREE.PlaneGeometry(.5, .65), E.tex('parchment_ink', { color: 0xf4ecd4, emissive: 0x8a8060, emissiveIntensity: .5, side: E.THREE.DoubleSide, rx: 1, ry: 1 })); m.rotation.x = -.6; return m; };
 const runTip = () => EE && EE.solo !== undefined ? 'Hold <b>Shift</b> (phone: RUN button) while moving' : '';
 // a dynamic ghost-wall mesh pool: boxes re-laid every frame from a list of rects
@@ -229,50 +230,63 @@ const restricted = {
 
 /* =============================================================== */
 const PUD8 = [[-8, 6, -4, 9], [2, 4.5, 6, 7.5], [-3, 12, 2, 14.5], [4.5, 16, 9, 19], [-9, 16.5, -5, 19.5]];
-const PG8 = [[-8.5, 20.5], [8.5, 20.5], [0, 18], [-6, 12], [7.5, 10]];
+// the pages go back into the great book by the entrance — and ink ruins any page that's carried (or thrown) through
+// the wave: it's blotted and drifts back to where it floated. You must RUN through the wave, but the page can't.
+const PG8 = [[-8.5, 20.5], [8.5, 20.5], [0, 18], [-6, 12], [7.5, 10]], BOOK8 = [-5, 1.8];
 const WAVE8 = { period: 8, speed: 5.4, thick: 1.4, from: 21.6, to: 2 };
 const waveLz = t => { const k = t % WAVE8.period, tr = (WAVE8.from - WAVE8.to) / WAVE8.speed; return k < tr ? WAVE8.from - k * WAVE8.speed : null; };
 const tide = {
   name: 'The Ink Tide',
   floor: parquet,
   notes: [[0, 1.4, '“Every few seconds the ink tide rolls in. Run through it — or be swept away.”', 1.5]],
-  hint: 'The black wave is a moving ghost-wall. If you\'re RUNNING when it reaches you, you phase straight through; if not, it shoves you all the way back. Save stamina for when it arrives — and don\'t be standing in an ink puddle (you can\'t run there). It sweeps the knights back too!',
+  hint: 'Bring the five pages to the great book by the entrance. The black wave is a moving ghost-wall: be RUNNING when it reaches you and you phase straight through, otherwise it shoves you all the way back (and you can\'t run in an ink puddle). But a page carried or thrown through the wave is blotted and drifts back to where it floated — so set it down (or throw it) where the wave has already passed, run through, and pick it up again. The wave sweeps the knights back too.',
   build(R, E){
     EE = E; const T = E.THREE;
     PUD8.forEach(([a, b, c, d]) => R.floor(a, b, c, d, new T.MeshStandardMaterial({ color: 0x0a0814, roughness: .1, metalness: .4, emissive: 0x1a0a3a, emissiveIntensity: .4 }), .02));
     this.wave = new T.Mesh(new T.BoxGeometry(20, 2.8, WAVE8.thick), new T.MeshStandardMaterial({ color: 0x1a0830, emissive: 0x4a1a8a, emissiveIntensity: .5, transparent: true, opacity: .75 })); this.wave.visible = false; E.scene.add(this.wave);
     this.warn = new T.Mesh(new T.BoxGeometry(20, .06, 1), E.glow(0x8a4aff, 1)); R.place(this.warn, 0, 21.4, .05);
     knight(R, E, [-5, 15], { sp: 2.3, radius: 7 }); knight(R, E, [5, 8], { sp: 2.3, radius: 7 });
+    const bk = new T.Group(); for (const s of [-1, 1]){ const half = new T.Mesh(new T.BoxGeometry(1, .12, 1.3), pageMat(E)); half.position.set(s * .52, .95, 0); half.rotation.z = s * -.12; bk.add(half); } const stand = new T.Mesh(new T.BoxGeometry(.9, .9, .7), E.texFrom(20, 'manor_oak', { color: 0x5a3a22, tile: 1 })); stand.position.y = .45; bk.add(stand); R.place(bk, BOOK8[0], BOOK8[1]);
     this.orbs = orbRow(E, R, 5, -2.6, 21.4, 1.3, 2.4);
   },
-  init(){ return { t: 0, got: [0, 0, 0, 0, 0], items: PG8.map(([x, lz], i) => mkItem('page', x, lz, { n: i })) }; },
+  init(){ return { t: 0, got: [0, 0, 0, 0, 0], items: PG8.map(([x, lz], i) => mkItem('page', x, lz, { n: i, yRest: .8 })) }; },
   solve(st){ st.got = [1, 1, 1, 1, 1]; st.items.forEach(i => i.s = 3); },
   itemMesh(k, E){ return k === 'page' ? pageMesh(E) : null; },
-  onPick(st, R, E, it){ it.s = 3; st.got[it.n] = 1; E.ev('pick', `Page saved from the ink! (${st.got.filter(Boolean).length}/5)`); return false; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got[it.n] = 1; E.ev('place', `Page pressed back into the book! (${st.got.filter(Boolean).length}/5)`); },
+  carryTick(st, R, E, it, p){ if (near(R, p, BOOK8[0], BOOK8[1], 1.5)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - BOOK8[0], it.lz - BOOK8[1]) < 1.4) this.deliver(st, R, E, it); },
   tNow(st, R){ return R.local.t ?? st.t; },
   spectral(st, R){ const w = waveLz(this.tNow(st, R)); return w === null ? [] : [R.rect(-10, w - WAVE8.thick / 2, 10, w + WAVE8.thick / 2)]; },
   speed(st, R, E, idx){ const p = E.playerPos(idx); if (!p) return null; const lz = R.lz(p.z); return PUD8.some(([a, b, c, d]) => p.x > a && p.x < c && lz > b && lz < d) ? { mult: .6, noRun: true } : null; },
-  host(dt, st, R, E){ st.t += dt; if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All five pages saved — the door opens!'); } },
+  host(dt, st, R, E){
+    st.t += dt;
+    const w = waveLz(st.t);
+    if (w !== null) st.items.forEach(it => { if ((it.s === 1 || it.s === 2) && Math.abs(it.lz - w) < WAVE8.thick / 2 + .3){ it.s = 0; it.w = -1; it.y = 0; it.x = it.hx; it.lz = it.hlz; E.ev('splash', 'The ink blots the page — it drifts back to where it floated!'); } });
+    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All five pages back in the book — the door opens!'); }
+  },
   local(dt, st, R, E){ const L = R.local; L.t = (L.t === undefined || Math.abs(L.t - st.t) > .3) ? st.t : L.t + dt + (st.t - L.t) * .1; },
   visual(dt, t, st, R, E){ const tt = this.tNow(st, R), w = waveLz(tt); this.wave.visible = w !== null; if (w !== null) this.wave.position.set(0, 1.4, R.Z(w)); const k = tt % WAVE8.period; this.warn.material.emissiveIntensity = k > WAVE8.period - 1.2 ? 2 + Math.sin(t * 20) : .3; setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'All pages saved — door open!' : `Save the 5 floating pages. The <b>ink tide</b> sweeps the room: be <b>running</b> when it hits you (not in a puddle!) or it shoves you back. (${st.got.filter(Boolean).length}/5)`; }
+  objective(st, R, E){ return st.got.every(Boolean) ? 'All pages saved — door open!' : `Bring the 5 pages to the <b>book</b> by the entrance. Be <b>running</b> when the <b>ink tide</b> hits you, or it shoves you back — but a page carried or thrown through it is <b>blotted</b> and drifts home. Put it down past the wave, then run through! (${st.got.filter(Boolean).length}/5)`; }
 };
 
 /* =============================================================== */
 const VX9 = [-10, -3.33, 3.33, 10], VL9 = [2.5, 8, 13.5, 19];
 const VPG9 = [[0, 0], [2, 1], [1, 1], [0, 2], [2, 2]], VKN9 = [[1, 1], [0, 2]];
 const VCYCLE = 6, VOPEN = 2.6;
-const vaultRects = (() => { const out = []; for (let i = 1; i < 3; i++) for (let r = 0; r < 3; r++) out.push([VX9[i] - .2, VL9[r], VX9[i] + .2, VL9[r + 1]]); for (let j = 0; j < 4; j++) for (let c = 0; c < 3; c++) out.push([VX9[c], VL9[j] - .2, VX9[c + 1], VL9[j] + .2]); return out; })();
+// the walls flicker in two colours that take turns: BLUE walls are ghost-walls first, then GOLD ones — so a route
+// through the chambers has to follow the colours. [x1, lz1, x2, lz2, group]
+const vaultRects = (() => { const out = []; for (let i = 1; i < 3; i++) for (let r = 0; r < 3; r++) out.push([VX9[i] - .2, VL9[r], VX9[i] + .2, VL9[r + 1], (i + r) % 2]); for (let j = 0; j < 4; j++) for (let c = 0; c < 3; c++) out.push([VX9[c], VL9[j] - .2, VX9[c + 1], VL9[j] + .2, (j + c + 1) % 2]); return out; })();
+const VWIN = [[0, 2.6], [3, 5.6]];
 const vcc = (c, r) => [(VX9[c] + VX9[c + 1]) / 2, (VL9[r] + VL9[r + 1]) / 2];
 const vault = {
   name: 'The Flickering Vault',
   floor: parquet,
   notes: [[0, 1.4, '“The vault walls are only ghosts for a moment at a time. Don\'t be caught between them.”', 1.5]],
-  hint: 'Every 6 seconds the vault walls turn to ghost-walls for a couple of seconds (they glow and hum first). Run through then! When they turn solid again you\'re locked in that chamber — so don\'t get locked in with a knight. Collect the 5 vault pages.',
+  hint: 'The vault walls take turns: the BLUE walls become ghost-walls for a couple of seconds, then the GOLD ones (they glow and hum just before). Run through a wall while it\'s a ghost-wall; when it turns solid you\'re locked in that chamber. Plan your route by colour — and don\'t get locked in with a knight. Collect the 5 vault pages.',
   build(R, E){
     EE = E; const T = E.THREE;
-    this.solidMat = E.mat(0x2a1a3a, { emissive: 0x1a0a2a, emissiveIntensity: .3 });
-    this.walls = vaultRects.map(([a, b, c, d]) => { const m = new T.Mesh(new T.BoxGeometry(c - a, 2.6, d - b), this.solidMat); R.place(m, (a + c) / 2, (b + d) / 2, 1.3); return m; });
+    this.solidMats = [E.mat(0x1a2a5a, { emissive: 0x1a3a8a, emissiveIntensity: .3 }), E.mat(0x4a3a12, { emissive: 0x8a6a10, emissiveIntensity: .3 })];
+    this.walls = vaultRects.map(([a, b, c, d, g]) => { const m = new T.Mesh(new T.BoxGeometry(c - a, 2.6, d - b), this.solidMats[g]); R.place(m, (a + c) / 2, (b + d) / 2, 1.3); return m; });
     VPG9.forEach(([c, r], i) => { const [x, lz] = vcc(c, r); R.plate('p' + i, x + (c === 1 ? 1.6 : 0), lz, 0xf4ecd4, 1.3, '📜'); });
     VKN9.forEach(([c, r]) => { const [x, lz] = vcc(c, r); knight(R, E, [x - 1.5, lz], { sp: 2.6, b: [VX9[c] + .5, VX9[c + 1] - .5, VL9[r] + .5, VL9[r + 1] - .5] }); });
     this.orbs = orbRow(E, R, 5, -2.6, 20.6, 1.3, 2.4);
@@ -280,23 +294,23 @@ const vault = {
   init(){ return { t: 0, got: [0, 0, 0, 0, 0], done: 0 }; },
   solve(st){ st.done = 1; st.got = [1, 1, 1, 1, 1]; },
   tNow(st, R){ return R.local.t ?? st.t; },
-  isOpenWin(st, R){ return st.done || (this.tNow(st, R) % VCYCLE) < VOPEN; },
-  rects(R){ return vaultRects.map(([a, b, c, d]) => R.rect(a, b, c, d)); },
-  spectral(st, R){ return this.isOpenWin(st, R) ? this.rects(R) : []; },
-  colliders(st, R){ return this.isOpenWin(st, R) ? [] : this.rects(R); },
+  isOpenWin(st, R, g = 0){ const k = this.tNow(st, R) % VCYCLE; return st.done || (k >= VWIN[g][0] && k < VWIN[g][1]); },
+  rects(R, open, st){ return vaultRects.filter(v => this.isOpenWin(st, R, v[4]) === open).map(([a, b, c, d]) => R.rect(a, b, c, d)); },
+  spectral(st, R){ return this.rects(R, true, st); },
+  colliders(st, R){ return st.done ? [] : this.rects(R, false, st); },
   host(dt, st, R, E){
     st.t += dt;
     VPG9.forEach((_, i) => { if (!st.got[i] && R.on('p' + i)){ st.got[i] = 1; E.ev('pick', `Vault page! (${st.got.filter(Boolean).length}/5)`); } });
     if (!st.done && st.got.every(Boolean)){ st.done = 1; R.open('exit'); E.ev('door', 'All five vault pages — the vault falls still and the door opens!'); }
   },
-  local(dt, st, R, E){ const L = R.local; L.t = (L.t === undefined || Math.abs(L.t - st.t) > .3) ? st.t : L.t + dt + (st.t - L.t) * .1; const k = L.t % VCYCLE, open = st.done || k < VOPEN; if (open !== L.open){ L.open = open; if (R.inside(E.me.pos) && !st.done) E.sfx.tone && E.beep(open ? 520 : 220, .15, 'sine', .06); } },
+  local(dt, st, R, E){ const L = R.local; L.t = (L.t === undefined || Math.abs(L.t - st.t) > .3) ? st.t : L.t + dt + (st.t - L.t) * .1; const key = this.isOpenWin(st, R, 0) + ':' + this.isOpenWin(st, R, 1); if (key !== L.open){ L.open = key; if (R.inside(E.me.pos) && !st.done) E.beep(key.includes('true') ? 520 : 220, .15, 'sine', .06); } },
   visual(dt, t, st, R, E){
-    const k = this.tNow(st, R) % VCYCLE, open = this.isOpenWin(st, R), warn = !open && k > VCYCLE - .9;
-    this.walls.forEach(m => { m.material = open ? E.spectralMat : this.solidMat; m.visible = !st.done; });
-    this.solidMat.emissiveIntensity = warn ? .9 + Math.sin(t * 30) * .4 : .3;
+    const k = this.tNow(st, R) % VCYCLE;
+    this.walls.forEach((m, i) => { const g = vaultRects[i][4]; m.material = this.isOpenWin(st, R, g) ? E.spectralMat : this.solidMats[g]; m.visible = !st.done; });
+    this.solidMats.forEach((m, g) => { const until = (VWIN[g][0] - k + VCYCLE) % VCYCLE; m.emissiveIntensity = until > 0 && until < .9 ? .9 + Math.sin(t * 30) * .4 : .3; });
     setOrbs(this.orbs, st.got.filter(Boolean).length);
   },
-  objective(st, R, E){ return st.done ? 'The door is open!' : `Collect the 5 vault pages 📜. The walls are <b>ghost-walls for ~2.5s</b> every 6s — run through then, or you're locked in. Two chambers hold knights! (${st.got.filter(Boolean).length}/5)`; }
+  objective(st, R, E){ return st.done ? 'The door is open!' : `Collect the 5 vault pages 📜. The walls take turns being <b>ghost-walls</b>: <b style="color:#6a9aff">blue</b>, then <b style="color:#e8c25a">gold</b> (~2.5s each) — plan your route by colour, or you're locked in. Two chambers hold knights! (${st.got.filter(Boolean).length}/5)`; }
 };
 
 /* =============================================================== */

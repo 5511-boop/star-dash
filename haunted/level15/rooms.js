@@ -46,12 +46,14 @@ const antechamber = {
 };
 
 /* =============================================================== */
-const NEST2 = [[-6, 9], [6, 12], [-2, 17]], AMU2 = [[-8.5, 12.5], [8.5, 7], [3, 19.5]];
+// each golden amulet lies at the bottom of a scarab nest — it can only be taken while that nest's swarm is OUT
+// chasing someone (lure it away, then double back — or one lures while the other grabs)
+const NEST2 = [[-6, 9], [6, 12], [-2, 17]], AMU2 = NEST2;
 const scarabs = {
   name: 'The Scarab Nest',
   floor: sandstone,
   notes: [[3, 1.4, '“Step near a nest and the scarabs boil out. A bolt scatters them.”', 1.5]],
-  hint: 'Each dark hole is a scarab nest: come within a few steps and a swarm pours out and chases you. A freeze bolt sends a swarm back down its hole for a while. Grab the three golden amulets.',
+  get hint(){ return 'Each golden amulet lies at the bottom of a scarab nest — and while the swarm is home, it\'s buried under them. Come within a few steps and the swarm pours out after you: lead it well away from its nest, then the amulet is free to grab. ' + (solo() ? 'Loop round and double back before the swarm gives up.' : 'One of you lures the swarm off, the other grabs the amulet.') + ' A freeze bolt drives a swarm back DOWN its nest — so don\'t bolt the one guarding the amulet you want.'; },
   build(R, E){
     EE = E; const T = E.THREE;
     NEST2.forEach(([x, lz]) => { const h = new T.Mesh(new T.CircleGeometry(1, 20), new T.MeshBasicMaterial({ color: 0x0a0604 })); h.rotation.x = -Math.PI / 2; R.place(h, x, lz, .02); });
@@ -74,11 +76,17 @@ const scarabs = {
   solve(st){ st.got = [1, 1, 1]; },
   host(dt, st, R, E){
     this.sw.forEach(g => { if (g.stun > 0 && g.mem.s){ g.mem.s = 0; g.mem.t = 6; g.stun = 0; E.ev('zap', 'The swarm scatters back into its nest!'); } });
-    AMU2.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A golden amulet! (${st.got.filter(Boolean).length}/3)`); } });
+    st.msg = Math.max(0, (st.msg || 0) - dt);
+    AMU2.forEach(([x, lz], i) => {
+      if (st.got[i] || !E.P.some(p => !p.frozen && near(R, p, x, lz, 1.1))) return;
+      const g = this.sw[i], away = g.mem.s && Math.hypot(g.x - g.home[0], g.z - g.home[1]) > 3;
+      if (away){ st.got[i] = 1; E.ev('pick', `A golden amulet from the empty nest! (${st.got.filter(Boolean).length}/3)`); }
+      else if (!st.msg){ st.msg = 3; E.ev('thud', 'The amulet is buried under the swarm — lure the scarabs away from the nest first!'); }
+    });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three amulets — the door opens!'); }
   },
   visual(dt, t, st){ this.am.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt; }); this.sw.forEach((g, k) => g.bugs.forEach((b, i) => { const a = t * 5 + i * .7 + k; b.position.set(Math.cos(a) * (.4 + (i % 4) * .2), .1 + (i % 3) * .1, Math.sin(a * 1.3) * (.4 + (i % 4) * .2)); b.rotation.y = -a; })); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 golden amulets. <b>Scarab swarms</b> pour out of their nests when you get close — a <b>freeze bolt</b> drives them back. (${st.got.filter(Boolean).length}/3)`; }
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Take the 3 golden amulets from the bottom of the <b>scarab nests</b> — only while that nest's swarm is out <b>chasing</b> someone. Lure it away first! (A freeze bolt drives a swarm back down.) (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */

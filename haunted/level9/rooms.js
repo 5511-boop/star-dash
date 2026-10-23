@@ -17,8 +17,10 @@ function gargoyle(R, E, key, perch, opt = {}){
       if (!m.st){ m.st = 'perch'; m.cd = 1 + Math.random() * 2; }
       if (m.st === 'perch'){
         g.x = g.home[0]; g.z = g.home[1]; g.y = py; m.cd -= dt;
-        const T = E2.targetsOf(g, P).filter(p => R2.inside(p.pos) && !p.frozen);
-        let best = null, bd = opt.anyRange ? 99 : range; for (const p of T){ const d = Math.hypot(p.pos.x - g.x, p.pos.z - g.z); if (d < bd){ bd = d; best = p; } }
+        let T = E2.targetsOf(g, P).filter(p => R2.inside(p.pos) && !p.frozen);
+        const focus = opt.focus ? T.filter(p => opt.focus(st, p)) : [];   // some rooms make every gargoyle go for one target
+        if (focus.length) T = focus;
+        let best = null, bd = opt.anyRange || focus.length ? 99 : range; for (const p of T){ const d = Math.hypot(p.pos.x - g.x, p.pos.z - g.z); if (d < bd){ bd = d; best = p; } }
         if (best && m.cd <= 0 && !(opt.active && !opt.active(st))){ st.dv[key] = [+best.pos.x.toFixed(2), +R2.lz(best.pos.z).toFixed(2), 1]; m.st = 'dive'; m.f = 0; m.sx = g.x; m.sz = g.z; E2.ev('whoosh'); }
       } else if (m.st === 'dive'){
         const d = st.dv[key]; if (!d){ m.st = 'back'; m.f = 0; m.rx = g.x; m.rz = g.z; return true; }
@@ -62,15 +64,16 @@ const collapsed = {
 
 /* =============================================================== */
 const PERCH2 = [[-9.3, 6], [9.3, 9.5], [-9.3, 13], [9.3, 17]], SHARDS = [[-6, 5], [6, 12], [-5, 17.5]], ALT2 = [0, 20.3];
+let E9 = null;
 const gallery = {
   name: 'The Gargoyle Gallery',
   floor: nave,
   notes: [[3, 1.6, '“The gargoyles wake when you pass beneath. Watch for the red shadow.”', 1.5]],
-  hint: 'When a red circle appears under you, a gargoyle is diving there — move or dash out of it! A flash makes a diving gargoyle pull up. Carry the three relic shards to the altar.',
+  get hint(){ return 'Carry the three relic shards to the altar. The gargoyles covet the relic: while someone carries a shard, EVERY gargoyle dives at the carrier, from anywhere in the hall. A red circle shows where one is coming down — move or dash out of it! ' + (E9 && E9.solo() ? 'Zig-zag, and flash a diving gargoyle to make it pull up.' : 'The other one stays close and flashes the divers away (a flash makes a diving gargoyle pull up) — or throw the shard ahead to each other.'); },
   build(R, E){
     const T = E.THREE;
     PERCH2.forEach(([x, lz]) => { const ledge = new T.Mesh(new T.BoxGeometry(1.4, .3, 1.6), E.tex('plain_flags', { color: 0x5a5662, tile: 1.6 })); R.place(ledge, x, lz, 2.2); });
-    this.gs = PERCH2.map((p, i) => gargoyle(R, E, 'g' + i, p));
+    E9 = E; this.gs = PERCH2.map((p, i) => gargoyle(R, E, 'g' + i, p, { focus: (st, p) => !!E.carrying(p.idx) }));
     this.marks = diveMarks(E);
     const alt = new T.Mesh(new T.BoxGeometry(2.4, 1, 1.2), E.mat(0xd8d0c4)); R.place(alt, ALT2[0], ALT2[1] + .9, .5);
     for (const [x, lz] of [[-3, 9], [3, 15]]){ const c = new T.Mesh(new T.CylinderGeometry(.6, .7, 3.2, 12), E.tex('plain_flags', { color: 0x6a6672, tile: 1.4 })); R.place(c, x, lz, 1.6); R.block(x - .6, lz - .6, x + .6, lz + .6, .01, E.mat(0)); }
@@ -84,7 +87,7 @@ const gallery = {
   onLand(st, R, E, it){ if (Math.hypot(it.x - ALT2[0], it.lz - ALT2[1]) < 1.6){ it.s = 3; st.got++; E.ev('place'); } },
   host(dt, st, R, E){ if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'The relic is whole — the gallery door opens!'); } },
   visual(dt, t, st, R){ showMarks(this.marks, st, R, ['g0', 'g1', 'g2', 'g3']); setOrbs(this.orbs, st.got); },
-  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Bring the 3 relic shards to the altar. Gargoyles dive at a <b style="color:#ff5050">red circle</b> under you — get out of it! A flash makes them pull up. (${st.got}/3)`; }
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Bring the 3 relic shards to the altar. While someone carries a shard, <b>every gargoyle</b> dives at them — get out of the <b style="color:#ff5050">red circles</b>! A flash makes a diver pull up. (${st.got}/3)`; }
 };
 
 /* =============================================================== */

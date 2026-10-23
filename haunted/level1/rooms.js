@@ -214,7 +214,7 @@ const BALL_NOTES = [N(0, -52, '“Light her four candles and she will let you le
 const ballroom = {
   name: 'The Ballroom', depth: 24, spawn: [[5, 1.6], [7, 1.6]], exitX: [-2, 2],
   floor: E => E.pbr('checker', 4, 4.8, { fallback: E.tiledTex(128, 128, x => { for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++){ x.fillStyle = (i + j) % 2 ? '#d8d0c4' : '#2a2433'; x.fillRect(i * 32, j * 32, 32, 32); } }, 4, 4.8), roughness: .22, normal: .8 }),
-  hint: 'Walk into a candle on a stand to pick it up, then carry it to the brass candelabra in the middle. One at a time each. If a ghost freezes you, you drop it. Four lit candles banish the ghosts.',
+  hint: 'Walk into a candle on a stand to pick it up, then carry it to the brass candelabra in the middle — WALKING: if you run, the draught blows the flame out and the candle goes back to its stand. If a ghost freezes you, you drop it. Four lit candles banish the ghosts.',
   build(R, E){
     const T = E.THREE, w = W(R); this.notes = notesOf(R, BALL_NOTES);
     for (const [x, z] of [[-4.5, -56.5], [4.5, -56.5], [-4.5, -67.5], [4.5, -67.5]]) pillar(E, w, x, z, 1.2, E.WALL_H + 1.2, 0xbab1c7);
@@ -234,6 +234,7 @@ const ballroom = {
   solve(st){ st.lit = 4; st.items.forEach(it => { it.s = 3; }); },
   itemMesh(k, E){ return k === 'candle' ? candle(E) : null; },
   carryTick(st, R, E, it, p){
+    if (p.running){ it.s = 0; it.w = -1; it.x = it.hx; it.lz = it.hlz; E.ev('boo', 'You ran — the draught blew the candle out! It\'s back on its stand.'); return; }
     if (Math.hypot(p.pos.x - CANDELABRA[0], p.pos.z - CANDELABRA[1]) > 2.3) return;
     it.s = 3; it.w = -1; st.lit++;
     E.ev('place', st.lit < 4 ? `Candle lit — ${st.lit} of 4` : '');
@@ -243,7 +244,7 @@ const ballroom = {
     this.lit.forEach((c, i) => { c.visible = i < st.lit; c.userData.flame.scale.setScalar(1 + Math.sin(t * 17 + i) * .12); });
     this.glowL.intensity += (st.lit * 2.2 - this.glowL.intensity) * Math.min(1, dt * 3);
   },
-  objective(st){ return st.lit < 4 ? `Carry the candles to the candelabra in the middle, one at a time. Lit: ${st.lit}/4` : 'A hidden door opened at the north end. Into the cellar!'; }
+  objective(st){ return st.lit < 4 ? `Carry the candles to the candelabra in the middle — <b>don't run</b>, or the flame blows out. Lit: ${st.lit}/4` : 'A hidden door opened at the north end. Into the cellar!'; }
 };
 function candle(E){
   const T = E.THREE, g = new T.Group();

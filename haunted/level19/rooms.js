@@ -122,25 +122,49 @@ const clocks = {
 };
 
 /* =============================================================== */
-const TOY4 = [[-8.5, 18], [8.5, 19], [8, 5], [-3, 12]];
+// the toys are dream-stuff: real hands pass straight through them, only a DREAM ECHO can carry one. Walk from a toy to
+// a crib within 3 seconds, rewind, and your echo replays the walk with the toy in its arms. Nightmares hunt echoes —
+// a swallowed echo drops its toy where it fell.
+const TOY4 = [[-8.5, 18], [8.5, 19], [8, 5], [-3, 12]], CRIB4 = [[-6, 10], [0, 10], [6, 10]];
+const echoKey = e => e.idx + ':' + e.p[0][1] + ':' + e.p[0][2] + ':' + e.p.length;
 const nursery = {
   name: 'The Nightmare Nursery',
   floor: cloudF,
   dark: .55,
   notes: [[0, 1.6, '“Nightmares can\'t tell a dreamer from a dream. Give them something to chase.”', 1.5]],
-  hint: 'Nightmares go for the nearest dreamer — including your dream echoes. Walk away from a toy, rewind, and your echo marches off the other way: the nightmares follow it while you grab the toy. A flash scatters them for a moment.',
+  hint: 'The toys are made of dream — your hands pass through them; only a DREAM ECHO can carry one. Walk over a toy and on to a crib within 3 seconds, then REWIND (R): your echo replays that walk, picks the toy up and tucks it into the crib. Nightmares hunt echoes too — if one swallows your echo, the toy drops there. A flash scatters them for a moment.',
   build(R, E){
     EE = E; const T = E.THREE;
-    this.tm = TOY4.map(([x, lz], i) => { const m = i % 2 ? new T.Mesh(new T.TorusKnotGeometry(.22, .07, 40, 6), E.glow(0xff8ad8, .8)) : new T.Mesh(new T.BoxGeometry(.5, .5, .5), E.glow(0x8ad8ff, .7)); R.place(m, x, lz, .5); return m; });
+    this.tm = TOY4.map(([x, lz], i) => { const m = i % 2 ? new T.Mesh(new T.TorusKnotGeometry(.22, .07, 40, 6), E.glow(0xff8ad8, .8)) : new T.Mesh(new T.BoxGeometry(.5, .5, .5), E.glow(0x8ad8ff, .7)); m.material.transparent = true; m.material.opacity = .7; R.place(m, x, lz, .5); return m; });
     for (let i = 0; i < 3; i++){ const crib = new T.Mesh(new T.BoxGeometry(2, .8, 1.2), E.mat(0x6a5a8a)); R.place(crib, -6 + i * 6, 10, .4); R.block(-7 + i * 6, 9.4, -5 + i * 6, 10.6, .01, E.mat(0)); }
     this.n = [nightmare(R, E, [-6, 15]), nightmare(R, E, [6, 15]), nightmare(R, E, [0, 6], { sp: 2.3 })];
     this.orbs = orbRow(E, R, 4, -1.95, 21.4, 1.3, 2.4);
   },
-  init(){ return { got: [0, 0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1, 1]; },
-  host(dt, st, R, E){ TOY4.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A lost toy! (${st.got.filter(Boolean).length}/4)`); } }); if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All four toys — the nursery falls quiet. The door opens!'); } },
-  visual(dt, t, st){ this.tm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 4 lost toys. <b>Nightmares</b> chase the nearest dreamer — your <b>dream echoes</b> make perfect bait. (${st.got.filter(Boolean).length}/4)`; }
+  // toy state: [x, lz, carriedBy (echo key or ''), tucked]
+  init(){ return { toys: TOY4.map(([x, lz]) => [x, lz, '', 0]), msg: 0 }; },
+  solve(st){ st.toys.forEach(t => t[3] = 1); },
+  host(dt, st, R, E){
+    const ech = E.S.echoes || [], pos = E.echoes();   // same order: echo objects and their [idx, x, z] positions
+    st.msg = Math.max(0, st.msg - dt);
+    st.toys.forEach((t, i) => {
+      if (t[3]) return;
+      if (t[2]){
+        const k = ech.findIndex(e => echoKey(e) === t[2]);
+        if (k >= 0){ t[0] = pos[k][1]; t[1] = +R.lz(pos[k][2]).toFixed(2); return; }
+        t[2] = '';   // the echo faded (or was swallowed): the toy drops right there
+        const c = CRIB4.find(([cx, cl]) => Math.hypot(t[0] - cx, t[1] - cl) < 1.6);
+        if (c){ t[3] = 1; t[0] = c[0]; t[1] = c[1]; E.ev('place', `Tucked into a crib! (${st.toys.filter(q => q[3]).length}/4)`); }
+        else E.ev('thud', 'The echo faded — the toy dropped to the floor.');
+        return;
+      }
+      const k = pos.findIndex(e => Math.hypot(e[1] - t[0], R.lz(e[2]) - t[1]) < .9);
+      if (k >= 0 && !st.toys.some(o => o[2] === echoKey(ech[k]))){ t[2] = echoKey(ech[k]); E.ev('pick', 'Your dream echo picks up the toy!'); return; }
+      if (!st.msg && E.P.some(p => !p.frozen && near(R, p, t[0], t[1], .9))){ st.msg = 5; E.ev('thud', 'Your hand passes right through it — only a dream echo can hold it. Walk it to a crib, then rewind!'); }
+    });
+    if (!R.isOpen('exit') && st.toys.every(t => t[3])){ R.open('exit'); E.ev('door', 'All four toys tucked in — the nursery falls quiet. The door opens!'); }
+  },
+  visual(dt, t, st, R){ this.tm.forEach((m, i) => { const q = st.toys[i]; m.position.set(q[0], q[3] ? .95 : q[2] ? 1.3 : .5, R.Z(q[1]) + (q[3] ? (i - 1.5) * .2 : 0)); m.rotation.y += dt; m.material.opacity = q[2] || q[3] ? 1 : .55 + Math.sin(t * 3 + i) * .15; }); setOrbs(this.orbs, st.toys.filter(q => q[3]).length); },
+  objective(st, R, E){ return st.toys.every(t => t[3]) ? 'The door is open!' : `Tuck the 4 dream toys into the cribs. Your hands pass through them — only a <b>dream echo</b> can carry one: walk toy → crib within 3s, then <b>rewind</b>. Nightmares swallow echoes! (${st.toys.filter(q => q[3]).length}/4)`; }
 };
 
 /* =============================================================== */
@@ -222,29 +246,35 @@ const shadowSelf = {
 
 /* =============================================================== */
 const ARM8 = [[-5, 7, 3.5, .9], [5, 7, 3.5, -1.1], [0, 13, 4.2, .8], [-5, 18, 3.5, -1], [5, 18, 3.5, 1.2]];
-const VIAL8 = [[-9, 7], [9, 13], [0, 20.5]];
+// the sand vials go back into the great hourglass by the entrance — and while anyone holds a vial, its sand runs and
+// time flows even when everyone stands still
+const VIAL8 = [[-9, 7], [9, 13], [0, 20.5]], GLASS8 = [0, 2.6];
 const hourglass = {
   name: 'The Hourglass',
   floor: cloudF,
   notes: [[0, 1.6, '“In this dream, time only passes when you move.”', 1.5]],
-  hint: 'Nothing here moves unless one of you is moving — stand still and the scythes and nightmares (almost) freeze. Step, stop, look, step. Collect the three sand vials.',
+  get hint(){ return 'Nothing here moves unless one of you is moving — stand still and the scythes and nightmares (almost) freeze. Step, stop, look, step. But the sand vials must go back into the great hourglass by the entrance, and while anyone HOLDS a vial its sand runs and time flows regardless. Plan the way back before you pick one up' + (EE && EE.solo() ? '.' : ' — or throw the vial to your partner and let them freeze time again.'); },
   build(R, E){
     EE = E; const T = E.THREE;
     this.arms = ARM8.map(([x, lz, len]) => { const g = new T.Group(); const hub = new T.Mesh(new T.CylinderGeometry(.4, .4, .6, 12), E.mat(0x4a3a6a)); hub.position.y = .3; g.add(hub); const bar = new T.Mesh(new T.BoxGeometry(.18, .18, len), E.mat(0xcfcfd8, { metalness: .9 })); bar.position.set(0, .6, len / 2); g.add(bar); R.place(g, x, lz); R.block(x - .4, lz - .4, x + .4, lz + .4, .01, E.mat(0)); return g; });
-    this.vm = VIAL8.map(([x, lz]) => { const m = new T.Mesh(new T.CylinderGeometry(.18, .18, .5, 10), new T.MeshStandardMaterial({ color: 0xe8c888, emissive: 0x8a6a2a, transparent: true, opacity: .85 })); R.place(m, x, lz, .5); return m; });
+    const gl = new T.Group(); for (const s of [-1, 1]){ const c = new T.Mesh(new T.ConeGeometry(.7, 1, 16), new T.MeshStandardMaterial({ color: 0xe8e0ff, transparent: true, opacity: .45 })); c.rotation.x = s > 0 ? Math.PI : 0; c.position.y = 1 + s * .5; gl.add(c); } const cap = new T.Mesh(new T.CylinderGeometry(.8, .8, .12, 16), E.mat(0xd4af37, { metalness: .7 })); gl.add(cap); const cap2 = cap.clone(); cap2.position.y = 2; gl.add(cap2); R.place(gl, GLASS8[0], GLASS8[1]);
     this.n = [nightmare(R, E, [-7, 11], { time: st => st.k, sp: 3 }), nightmare(R, E, [7, 19], { time: st => st.k, sp: 3 })];
     this.orbs = orbRow(E, R, 3, -1.3, 21.4, 1.3, 2.4);
   },
-  init(){ return { tm: 0, k: 0, got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  init(){ return { tm: 0, k: 0, got: 0, items: VIAL8.map(([x, lz]) => mkItem('vial', x, lz)) }; },
+  solve(st){ st.got = 3; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'vial' ? new E.THREE.Mesh(new E.THREE.CylinderGeometry(.18, .18, .5, 10), new E.THREE.MeshStandardMaterial({ color: 0xe8c888, emissive: 0x8a6a2a, transparent: true, opacity: .85 })) : null; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `The sand pours back into the hourglass! (${st.got}/3)`); },
+  carryTick(st, R, E, it, p){ if (near(R, p, GLASS8[0], GLASS8[1], 1.6)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - GLASS8[0], it.lz - GLASS8[1]) < 1.5) this.deliver(st, R, E, it); },
   host(dt, st, R, E){
-    st.k = E.P.some(p => p.moving && !p.frozen && R.inside(p.pos)) ? 1 : .04; st.tm += dt * st.k;
+    const running = st.items.some(it => it.s === 1 || it.s === 2);   // a held (or flying) vial keeps time flowing
+    st.k = running || E.P.some(p => p.moving && !p.frozen && R.inside(p.pos)) ? 1 : .04; st.tm += dt * st.k;
     for (const p of E.P){ if (p.frozen || p.dashing || !R.inside(p.pos)) continue; const lz = R.lz(p.pos.z); ARM8.forEach(([x, l, len, w]) => { const a = st.tm * w; if (segL(p.pos.x, lz, x, l, x + Math.sin(a) * len, l + Math.cos(a) * len) < .5) E.freeze(p.idx, E.FREEZE, `A dream scythe swept ${E.names()[p.idx]} off their feet!`); }); }
-    VIAL8.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A vial of dream sand! (${st.got.filter(Boolean).length}/3)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three vials — the hourglass turns and the door opens!'); }
+    if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'Three vials home — the hourglass turns and the door opens!'); }
   },
-  visual(dt, t, st, R){ this.arms.forEach((g, i) => { const a = st.tm * ARM8[i][3]; g.rotation.y = Math.atan2(Math.sin(a), -Math.cos(a)); }); this.vm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 sand vials. <b>Time only moves while you move</b> — stop to think! (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R){ this.arms.forEach((g, i) => { const a = st.tm * ARM8[i][3]; g.rotation.y = Math.atan2(Math.sin(a), -Math.cos(a)); }); setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Return the 3 sand vials to the <b>hourglass</b> by the entrance. <b>Time only moves while you move</b> — except while someone holds a vial: then it never stops. (${st.got}/3)`; }
 };
 
 /* =============================================================== */

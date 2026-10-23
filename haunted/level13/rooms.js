@@ -66,7 +66,7 @@ const tunnels = {
   dark: .92,
   oilRate: 1 / 45,
   notes: [[3, 1.4, '“Hear that knocking? Tommyknockers. They go for the brightest light.”', 1.5]],
-  hint: 'Tommyknockers spot you from further away the brighter your lantern is — with a full tank they see you across the room, nearly empty they almost have to bump into you. They\'re also drawn to decoy lanterns. A flash scares them off, but it costs oil.',
+  get hint(){ return 'Gold only glints in strong light: a nugget shows — and can be dug (stand on it a moment) — only while a BRIGHT lantern (over half full) is close to it. But Tommyknockers see bright lanterns from across the room. ' + (solo() ? 'Keep your oil up, drop a decoy (hold ⚡) to pull them away, then dig fast.' : 'One of you stays bright and lights the gold (and draws the knockers), the other keeps a dim lantern and digs.') + ' Red cans refill your oil; a flash scares them off but costs oil.'; },
   build(R, E){
     EE = E;
     PIL2.forEach(([a, b, c, d]) => R.block(a, b, c, d, 2.6, stoneMat(E)));
@@ -74,14 +74,21 @@ const tunnels = {
     this.k = [knocker(R, E, [6, 9]), knocker(R, E, [-6, 13]), knocker(R, E, [0, 17.5])];
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
   },
-  init(){ return { got: [0, 0, 0], items: oilCans(OIL2) }; },
+  init(){ return { got: [0, 0, 0], dig: [0, 0, 0], lit: [0, 0, 0], items: oilCans(OIL2) }; },
   solve(st){ st.got = [1, 1, 1]; },
   host(dt, st, R, E){
-    NUG2.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A gold nugget! (${st.got.filter(Boolean).length}/3)`); } });
+    NUG2.forEach(([x, lz], i) => {
+      if (st.got[i]) return;
+      st.lit[i] = E.P.some(p => !p.frozen && (p.oil ?? 1) > .55 && near(R, p, x, lz, 3.6)) ? 1 : 0;   // only a bright lantern shows the gold
+      const digging = st.lit[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1));
+      st.dig[i] = digging ? Math.min(1, st.dig[i] + dt / 1.6) : Math.max(0, st.dig[i] - dt / 3);
+      if (st.dig[i] >= 1){ st.got[i] = 1; E.ev('pick', `A gold nugget! (${st.got.filter(Boolean).length}/3)`); }
+    });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All three nuggets — the door opens!'); }
   },
-  visual(dt, t, st){ this.nm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt; }); swingPicks(this.k, t); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 glowing gold nuggets. <b>Tommyknockers</b> hunt the brightest light — the more oil in your lantern, the further they see you. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st){ this.nm.forEach((m, i) => { m.visible = !st.got[i] && !!st.lit[i]; m.rotation.y += dt; m.scale.setScalar(1 + st.dig[i] * .4); }); swingPicks(this.k, t); setOrbs(this.orbs, st.got.filter(Boolean).length); },
+  bar(st, R, E){ const i = NUG2.findIndex(([x, lz], k) => !st.got[k] && Math.hypot(E.me.pos.x - x, R.lz(E.me.pos.z) - lz) < 1); if (i < 0 || !st.dig[i]) return null; return { frac: st.dig[i], label: 'Digging…', color: '#ffc84a' }; },
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Dig out the 3 gold nuggets — they only show in a <b>bright</b> lantern's light (over half full), and the <b>Tommyknockers</b> hunt bright lanterns. ${E.solo() ? 'Use decoys!' : 'One lights, one digs.'} (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */
@@ -270,7 +277,7 @@ const glow = {
 };
 
 /* =============================================================== */
-const PICK8 = [[-8.5, 7], [8.5, 9], [-3, 15], [7, 19.5]];
+const PICK8 = [[-8.5, 7], [8.5, 9], [-3, 15], [7, 19.5]], RACK8 = [-6, 2];
 const ROCK8 = [[-6, 4, -4, 5.5], [3, 3.5, 5, 5], [-2, 8, 2, 9.5], [-8, 11, -5.5, 12.5], [5, 12, 8, 13.5], [-4, 17, -1, 18.5], [2, 15.5, 3.5, 17.5]];
 const warren = {
   name: 'The Knocker Warren',
@@ -282,19 +289,25 @@ const warren = {
     EE = E;
     ROCK8.forEach(([a, b, c, d]) => R.block(a, b, c, d, 2.6, stoneMat(E)));
     this.pm = PICK8.map(([x, lz]) => { const T = E.THREE, g = new T.Group(); const h = new T.Mesh(new T.CylinderGeometry(.05, .05, 1, 5), E.mat(0x6a4a2a)); h.rotation.z = .9; g.add(h); const hd = new T.Mesh(new T.BoxGeometry(.7, .1, .1), E.glow(0xbfbfc8, .4)); hd.position.set(-.3, .2, 0); hd.rotation.z = .9; g.add(hd); R.place(g, x, lz, .3); return g; });
-    this.k = [[-5, 9], [6, 6], [0, 13], [-6, 17], [6, 17]].map(h => knocker(R, E, h, { sp: 2.8 }));
+    // a carried pickaxe clinks: the knockers home in on it like a lantern, however dim yours is
+    const clink = st => (st.items || []).filter(it => it.k === 'pick' && it.s === 1).map(it => { const p = EE.playerPos(it.w); return p ? [p.x, p.z, .55] : null; }).filter(Boolean);
+    this.k = [[-5, 9], [6, 6], [0, 13], [-6, 17], [6, 17]].map(h => knocker(R, E, h, { sp: 2.8, lights: clink }));
+    const rack = new E.THREE.Mesh(new E.THREE.BoxGeometry(1.8, 1.2, .3), E.tex('oil_planks', { color: 0x5a3a1a, tile: 1.2 })); R.place(rack, RACK8[0], RACK8[1] - .5, .6);
     this.orbs = orbRow(E, R, 4, -1.95, 21.3, 1.3, 2.4);
   },
-  init(){ return { got: [0, 0, 0, 0], items: oilCans([[0, 2.5], [9, 21]]) }; },
-  solve(st){ st.got = [1, 1, 1, 1]; },
+  init(){ return { got: 0, items: oilCans([[0, 2.5], [9, 21]]).concat(PICK8.map(([x, lz]) => mkItem('pick', x, lz))) }; },
+  solve(st){ st.got = 4; st.items.forEach(it => { if (it.k === 'pick') it.s = 3; }); },
+  itemMesh(k, E){ if (k !== 'pick') return null; const T = E.THREE, g = new T.Group(); const h = new T.Mesh(new T.CylinderGeometry(.05, .05, 1, 5), E.mat(0x6a4a2a)); h.rotation.z = .9; g.add(h); const hd = new T.Mesh(new T.BoxGeometry(.7, .1, .1), E.glow(0xbfbfc8, .4)); hd.position.set(-.3, .2, 0); hd.rotation.z = .9; g.add(hd); return g; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `A pickaxe back on the rack! (${st.got}/4)`); },
+  carryTick(st, R, E, it, p){ if (it.k === 'pick' && near(R, p, RACK8[0], RACK8[1], 1.6)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (it.k === 'pick' && Math.hypot(it.x - RACK8[0], it.lz - RACK8[1]) < 1.5) this.deliver(st, R, E, it); },
   host(dt, st, R, E){
-    PICK8.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A lost pickaxe! (${st.got.filter(Boolean).length}/4)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All four pickaxes recovered — the door opens!'); }
+    if (!R.isOpen('exit') && st.got >= 4){ R.open('exit'); E.ev('door', 'All four pickaxes back on the rack — the door opens!'); }
   },
-  visual(dt, t, st){ this.pm.forEach((m, i) => m.visible = !st.got[i]); swingPicks(this.k, t); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Recover the 4 lost pickaxes from the Tommyknockers' warren. A <b>dim lantern</b> is your best disguise — your oil drains fast here. (${st.got.filter(Boolean).length}/4)`; }
+  visual(dt, t, st){ swingPicks(this.k, t); setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 4 ? 'The door is open!' : `Bring the 4 lost pickaxes back to the <b>rack</b> by the entrance. A <b>dim lantern</b> hides you — but a carried pickaxe <b>clinks</b>, and the Tommyknockers come for the sound. Throw them, use decoys. (${st.got}/4)`; }
 };
-warren.hint = 'Five Tommyknockers live here, and they hunt light. Let your lantern burn low before you go in (it drains fast here) — a dim lantern is nearly invisible to them. Decoy lanterns pull them away, and a flash stuns them — but every flash costs oil.';
+warren.hint = 'Five Tommyknockers live here, and they hunt light. Let your lantern burn low (it drains fast here) — a dim lantern is nearly invisible to them. But a pickaxe CLINKS while you carry it: they hear that from across the room, however dark you are. Throw pickaxes towards the rack (or to your partner), drop decoys (hold ⚡) to pull them off, and flash if you must — every flash costs oil.';
 
 /* =============================================================== */
 const WALL9 = [[-10, 6, 4, 6.6], [-4, 6.6, -3.4, 12], [1, 9.5, 10, 10.1], [-10, 12, -6, 12.6], [-1, 12.6, -.4, 16.5], [3, 14, 10, 14.6], [-6, 16.5, 1, 17.1]];

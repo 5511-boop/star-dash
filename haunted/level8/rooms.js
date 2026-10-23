@@ -200,16 +200,20 @@ const orchestra = {
 
 /* =============================================================== */
 const TD = { C: 10, Rr: 8 }, tdx = c => -9 + 2 * c, tdl = r => 4 + 2 * r;
+// the diva only accepts a rose THROWN onto her spotlight mark, which drifts around the stage — and a rose that lands
+// in an open trapdoor is lost (it reappears where it was found)
 const ROSES = [[-7, 6], [5, 5], [-1, 11], [7, 14], [-5, 18]];
+const markAt = t => [Math.sin(t * .23) * 5.5, 11.5 + Math.sin(t * .37 + 1) * 5.5];
 const trapdoors = {
   name: 'The Trapdoor Stage',
   floor: stageFloor,
   notes: [[3, 1.6, '“Where the Phantom walks, the trapdoors open.”', 1.4]],
-  hint: 'The invisible Phantom wanders the stage and the trapdoors open behind him for a few seconds. Use Ghost Sight to see where he\'s heading and stay out of his trail. Pick up all 5 roses.',
+  hint: 'The diva wants five roses — THROWN onto her golden spotlight mark (it drifts slowly round the stage). Pick up a rose, face the mark and tap ⚡ to toss it. The invisible Phantom opens trapdoors wherever he walks: a rose that lands in an open trapdoor is lost and reappears where it was found, and so do you if you step in one. Hold ☀ for Ghost Sight to see him coming.',
   build(R, E){
     const T = E.THREE;
     this.holes = [];
     for (let r = 0; r < TD.Rr; r++) for (let c = 0; c < TD.C; c++){ const m = R.floor(tdx(c) - .95, tdl(r) - .95, tdx(c) + .95, tdl(r) + .95, new T.MeshBasicMaterial({ color: 0x050303, transparent: true, opacity: 0 }), .02); this.holes.push(m); }
+    this.mark = new T.Mesh(new T.RingGeometry(.9, 1.3, 32), new T.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: .55, side: T.DoubleSide, depthWrite: false })); this.mark.rotation.x = -Math.PI / 2; E.scene.add(this.mark);
     this.ph = R.ghost({ home: [0, 11], look: 'hat', tint: 0xf2f2f2, invisible: true, label: 'the Phantom', sp: 0, think: (g, dt, st, R2, E2, P) => {
       const m = g.mem; m.t = (m.t || 0) - dt;
       if (m.t <= 0 || !m.w){ const T2 = E2.targetsOf(g, P).filter(p => R2.inside(p.pos)); const p = T2.length && Math.random() < .5 ? T2[Math.floor(Math.random() * T2.length)] : null; m.w = p ? [p.pos.x, R2.lz(p.pos.z)] : [-8 + Math.random() * 16, 4 + Math.random() * 15]; m.t = 3; }
@@ -220,14 +224,20 @@ const trapdoors = {
       return true;
     } });
   },
-  init(){ return { open: Array(TD.C * TD.Rr).fill(0), got: 0, items: ROSES.map(([x, lz]) => mkItem('rose', x, lz)) }; },
-  solve(st){ st.got = 5; st.open.fill(0); },
+  init(){ return { open: Array(TD.C * TD.Rr).fill(0), got: 0, mt: 0, items: ROSES.map(([x, lz]) => mkItem('rose', x, lz)) }; },
+  solve(st){ st.got = 5; st.open.fill(0); st.items.forEach(it => it.s = 3); },
   itemMesh(k, E){ if (k !== 'rose') return null; const T = E.THREE, g = new T.Group(); const s = new T.Mesh(new T.CylinderGeometry(.03, .03, .6, 5), E.mat(0x2a6a2a)); g.add(s); const b = new T.Mesh(new T.SphereGeometry(.18, 10, 8), E.glow(0xd01030, .6)); b.position.y = .35; g.add(b); return g; },
-  onPick(st, R, E, it){ if (it.k !== 'rose') return true; it.s = 3; st.got++; E.ev('chime', st.got < 5 ? `A rose for the diva (${st.got}/5)` : '', st.got); if (st.got >= 5 && !R.isOpen('exit')){ R.open('exit'); E.ev('door', 'The diva is pleased — the stage door opens!'); } return false; },
+  onLand(st, R, E, it){
+    if (it.k !== 'rose' || it.s !== 0) return;
+    const [mx, ml] = markAt(st.mt);
+    if (Math.hypot(it.x - mx, it.lz - ml) < 1.5){ it.s = 3; st.got++; E.ev('chime', st.got < 5 ? `The diva catches the rose! (${st.got}/5)` : '', st.got); if (st.got >= 5 && !R.isOpen('exit')){ R.open('exit'); E.ev('door', 'The diva is pleased — the stage door opens!'); } return; }
+    const c = Math.floor((it.x + 10) / 2), r = Math.floor((it.lz - 3) / 2);
+    if (c >= 0 && c < TD.C && r >= 0 && r < TD.Rr && st.open[r * TD.C + c] > 0){ it.x = it.hx; it.lz = it.hlz; E.ev('thud', 'The rose fell through a trapdoor — it\'s back where you found it.'); }
+  },
   pits(st, R){ const out = []; st.open.forEach((v, i) => { if (v > 0){ const c = i % TD.C, r = Math.floor(i / TD.C); out.push(R.rect(tdx(c) - 1, tdl(r) - 1, tdx(c) + 1, tdl(r) + 1)); } }); return out; },
-  host(dt, st, R, E){ for (let i = 0; i < st.open.length; i++) if (st.open[i] > 0) st.open[i] = Math.max(0, st.open[i] - dt); },
-  visual(dt, t, st, R, E){ this.holes.forEach((m, i) => { m.material.opacity += ((st.open[i] > 0 ? .95 : 0) - m.material.opacity) * E.damp(12, dt); }); },
-  objective(st, R, E){ return st.got >= 5 ? 'The stage door is open!' : `Gather 5 roses. Trapdoors open wherever the INVISIBLE Phantom walks — use Ghost Sight to see him coming. (${st.got}/5)`; }
+  host(dt, st, R, E){ st.mt += dt; for (let i = 0; i < st.open.length; i++) if (st.open[i] > 0) st.open[i] = Math.max(0, st.open[i] - dt); },
+  visual(dt, t, st, R, E){ this.holes.forEach((m, i) => { m.material.opacity += ((st.open[i] > 0 ? .95 : 0) - m.material.opacity) * E.damp(12, dt); }); const [mx, ml] = markAt(st.mt); this.mark.position.set(mx, .07, R.Z(ml)); this.mark.visible = st.got < 5; this.mark.material.opacity = .45 + Math.sin(t * 3) * .15; },
+  objective(st, R, E){ return st.got >= 5 ? 'The stage door is open!' : `Toss 5 roses onto the diva's drifting <b style="color:#ffd34a">golden mark</b> (pick one up, face the mark, ⚡). Trapdoors open wherever the INVISIBLE Phantom walks — a rose that lands in one is lost. Ghost Sight shows him. (${st.got}/5)`; }
 };
 
 /* =============================================================== */

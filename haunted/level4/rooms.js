@@ -301,7 +301,7 @@ const fog = {
   name: 'The Fog Banks',
   floor: seaFloor,
   notes: [[2.5, 1.6, '“Follow the bells. The louder the ring, the closer the buoy.”', 1.4]],
-  hint: 'You can barely see — listen instead. Each buoy rings its bell; it gets louder as you get closer. Split up, find all three, and avoid the sailor wandering in the mist.',
+  hint: 'You can barely see — listen instead. Each buoy rings its bell (louder as you get closer) — one rings ONCE, one TWICE, one THREE times. Reach them in that order: 1, 2, 3. Touch one out of turn and they all go dark again. Split up and count, and avoid the sailor wandering in the mist.',
   build(R, E){
     const T = E.THREE;
     for (const [x, lz] of FOG_ROCKS) R.block(x - .9, lz - .9, x + .9, lz + .9, 1.3, E.mat(0x4a4a52));
@@ -315,10 +315,18 @@ const fog = {
     });
     R.ghost({ home: [6, 12], look: 'hat', tint: 0x6a9a9a, sp: 1.9, radius: 6, label: 'a drowned sailor' });
   },
-  init(){ const idx = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - .5).slice(0, 3); return { b: idx, got: 0, done: 0 }; },
+  // buoy k rings k+1 times; they must be reached in order 1 → 2 → 3
+  init(){ const idx = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - .5).slice(0, 3); return { b: idx, got: 0, done: 0, cd: 0 }; },
   solve(st){ st.got = 7; st.done = 1; },
   host(dt, st, R, E){
-    st.b.forEach((bi, k) => { if (st.got & (1 << k)) return; const [x, lz] = BUOY_SPOTS[bi]; if (E.P.some(p => !p.frozen && near(R, p, x, lz, 1.3))){ st.got |= 1 << k; E.ev('chime', `Buoy found! (${[1, 2, 4].filter(m => st.got & m).length}/3)`, k + 1); } });
+    st.cd = Math.max(0, st.cd - dt);
+    const next = [1, 2, 4].filter(m => st.got & m).length;
+    st.b.forEach((bi, k) => {
+      if (st.got & (1 << k) || st.cd > 0) return; const [x, lz] = BUOY_SPOTS[bi];
+      if (!E.P.some(p => !p.frozen && near(R, p, x, lz, 1.3))) return;
+      if (k === next){ st.got |= 1 << k; E.ev('chime', `${['One', 'Two', 'Three'][k]} ring${k ? 's' : ''} — right! (${k + 1}/3)`, k + 1); }
+      else { st.got = 0; st.cd = 2; E.ev('wrong', `That buoy rings ${k + 1} time${k ? 's' : ''} — out of turn! Every buoy goes dark. Start again from the one that rings ONCE.`); }
+    });
     if (!st.done && st.got === 7){ st.done = 1; R.open('exit'); E.ev('door', 'The fog parts — the door is open!'); }
   },
   visual(dt, t, st, R, E){
@@ -328,12 +336,13 @@ const fog = {
     if (inside && !st.done){
       this._t = (this._t || 0) - dt;
       if (this._t <= 0){
-        this._t = 2.4;
-        st.b.forEach((bi, k) => { if (st.got & (1 << k)) return; const [x, lz] = BUOY_SPOTS[bi]; const d = Math.hypot(E.me.pos.x - x, R.lz(E.me.pos.z) - lz); E.beep(880 + k * 220, .9, 'sine', .22 / (1 + (d / 3.5) ** 2), 0, k * .5); });
+        this._t = 3.4;
+        // every buoy rings the same bell — buoy k rings k+1 times, each in its own slot of the cycle, so count them
+        st.b.forEach((bi, k) => { if (st.got & (1 << k)) return; const [x, lz] = BUOY_SPOTS[bi]; const d = Math.hypot(E.me.pos.x - x, R.lz(E.me.pos.z) - lz); for (let j = 0; j <= k; j++) E.beep(988, .5, 'sine', .22 / (1 + (d / 3.5) ** 2), 0, [0, 1, 2.1][k] + j * .24); });
       }
     }
   },
-  objective(st, R, E){ return st.done ? 'The fog is lifting — onward!' : `Thick fog! Find the 3 ringing buoys — the closer you are, the louder the bell. (${[1, 2, 4].filter(m => st.got & m).length}/3)`; }
+  objective(st, R, E){ return st.done ? 'The fog is lifting — onward!' : `Thick fog! Three buoys ring once, twice and three times — reach them <b>in that order</b> (out of turn, they all go dark). The closer you are, the louder the bell. (${[1, 2, 4].filter(m => st.got & m).length}/3)`; }
 };
 
 /* =============================================================== */

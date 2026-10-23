@@ -84,41 +84,56 @@ const terraces = {
 
 /* =============================================================== */
 const IS3 = [[-10, 0, 10, 3], [-7.5, 5.5, -4, 9], [3.5, 6, 7, 9.5], [-2, 11.5, 2.5, 14.5], [-8, 15.5, -4.5, 19], [4, 16, 8, 19.5], [-10, 21, 10, 22]];
-const FE3 = [[-5.8, 7.2], [6, 17.8], [-6.2, 17.2]];
+// the feathers go in the nest on the far ledge — but they're too light to hold near a wind spirit: a gust rips the
+// feather away and blows it off. Catch it, use the gust, or flash the spirit first. One blown into the sky floats home.
+const FE3 = [[-5.8, 7.2], [6, 17.8], [-6.2, 17.2]], NEST3 = [0, 21.5];
+const onIsle3 = (x, lz) => IS3.some(([a, b, c, d]) => x > a && x < c && lz > b && lz < d);
 const windy = {
   name: 'The Windy Terrace',
   floor: sky,
   noDashJump: true,
   notes: [[-3, 1.4, '“The wind spirits love to play. Their play is pushing people off terraces.”', 1.5]],
-  hint: 'Wind spirits shove you away from them — right off the edge if you\'re not careful. A flash scatters a spirit for a few seconds (but flashing also makes your light step, and then ☀ has to recharge). Collect the three golden feathers.',
+  get hint(){ return 'Bring the three golden feathers to the nest on the far ledge. Wind spirits shove you towards the edge — and a feather is so light that a spirit coming near RIPS it out of your hands and blows it away. ' + (solo() ? 'Flash a spirit to scatter it before you carry a feather past.' : 'Catch each other\'s blown feathers, or let a gust carry one towards the nest on purpose!') + ' A feather blown off into the sky floats back to where it started. (A flash also makes your light step — then ☀ has to recharge.)'; },
   build(R, E){
     EE = E; IS3.forEach(([a, b, c, d]) => isle(R, E, a, b, c, d));
-    this.fm = FE3.map(([x, lz]) => { const T = E.THREE, m = new T.Mesh(new T.ConeGeometry(.12, .9, 6), E.glow(0xffd34a, 1)); m.rotation.z = .5; R.place(m, x, lz, .7); return m; });
+    const T = E.THREE, nest = new T.Mesh(new T.TorusGeometry(.7, .25, 8, 16), E.texFrom(6, 'burlap', { color: 0x8a6a3a, tile: .6 })); nest.rotation.x = Math.PI / 2; R.place(nest, NEST3[0], NEST3[1], .25);
     this.w = [windSpirit(R, E, [0, 9]), windSpirit(R, E, [-2, 17], { sp: 1.8 }), windSpirit(R, E, [6, 12.5], { sp: 1.4 })];
     this.orbs = orbRow(E, R, 3, -1.3, 21.5, 1.3, 2.4);
   },
-  init(){ return { got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  init(){ return { got: 0, items: FE3.map(([x, lz]) => mkItem('feather', x, lz, { yRest: .7 })) }; },
+  solve(st){ st.got = 3; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ if (k !== 'feather') return null; const m = new E.THREE.Mesh(new E.THREE.ConeGeometry(.12, .9, 6), E.glow(0xffd34a, 1)); m.rotation.z = .5; return m; },
   pits(st, R){ return [ALL(R)]; },
   bridges(st, R){ return IS3.map(([a, b, c, d]) => R.rect(a, b, c, d)); },
   push(st, R, E, pos){ return windPush(E, R, pos, this.w); },
-  host(dt, st, R, E){
-    FE3.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A golden feather! (${st.got.filter(Boolean).length}/3)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three golden feathers — the door opens!'); }
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `A golden feather in the nest! (${st.got}/3)`); },
+  carryTick(st, R, E, it, p){
+    if (near(R, p, NEST3[0], NEST3[1], 1.5)) return this.deliver(st, R, E, it);
+    // a wind spirit close by tears the feather away and blows it off, away from the spirit
+    const g = this.w.find(s => s.stun <= 0 && Math.hypot(s.x - p.pos.x, s.z - p.pos.z) < 2.6); if (!g) return;
+    const dx = p.pos.x - g.x, dz = p.pos.z - g.z, d = Math.hypot(dx, dz) || 1;
+    Object.assign(it, { s: 2, by: -1, w: -1, ft: 0, fd: .8, sx: it.x, slz: it.lz, tx: +E.clamp(it.x + dx / d * 6, -9.5, 9.5).toFixed(2), tlz: +E.clamp(it.lz - dz / d * 6, .6, 21.6).toFixed(2), pickCD: E.elapsed + .5 });
+    E.ev('whoosh', 'A gust rips the feather away!');
   },
-  visual(dt, t, st){ this.fm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt * 2; }); spinWind(this.w, dt); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 golden feathers. <b>Wind spirits</b> push you away — careful near the edges! A flash scatters them. (${st.got.filter(Boolean).length}/3)`; }
+  onLand(st, R, E, it){ if (Math.hypot(it.x - NEST3[0], it.lz - NEST3[1]) < 1.5) return this.deliver(st, R, E, it); if (!onIsle3(it.x, it.lz)){ it.x = it.hx; it.lz = it.hlz; E.ev('chime', 'The feather floats away on the wind… and settles back where it started.', 2); } },
+  host(dt, st, R, E){
+    if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'Three golden feathers in the nest — the door opens!'); }
+  },
+  visual(dt, t, st){ spinWind(this.w, dt); setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Bring the 3 golden feathers to the <b>nest</b> on the far ledge. A <b>wind spirit</b> near you rips a feather away and blows it off — ${E.solo() ? 'flash it first!' : 'catch it, or ride the gust!'} Blown into the sky, a feather floats back home. (${st.got}/3)`; }
 };
 
 /* =============================================================== */
 const HEDGE4 = [[-10, 5, -4, 6], [-1, 5, 10, 6], [-6, 6, -5, 12], [1, 9, 10, 10], [-10, 13, 2, 14], [5, 10, 6, 17], [-3, 17, 10, 18], [-7, 14, -6, 20]];
 const VINES4 = [{ root: [-2.5, 6], dir: [0, 1], max: 6.5 }, { root: [10, 7.5], dir: [-1, 0], max: 8 }, { root: [-10, 11.5], dir: [1, 0], max: 9 }, { root: [3.5, 14], dir: [0, 1], max: 3 }, { root: [-6, 15.5], dir: [1, 0], max: 6 }, { root: [-10, 19], dir: [1, 0], max: 6 }];
-const SEED4 = [[8, 8], [-8, 9], [8, 15.5]];
+// each seed grows in the ROOT of a thorn vine: it can only be pulled while that vine is burnt back — and the vine
+// regrows from its root, right where you're standing. [x, lz, vine index]
+const SEED4 = [[9.4, 7.5, 1], [-9.4, 11.5, 2], [-5.4, 15.5, 4]];
 const thornMaze = {
   name: 'The Thorn Maze',
   floor: grass,
   notes: [[0, 1.6, '“The thorns grow while you watch. Light is the only thing they fear.”', 1.5]],
-  hint: 'Thorn vines creep across the paths — if a growing tip reaches you, you\'re snagged. Flash near a vine (or shoot a light step along it) and it withers back to its root for a few seconds. Burn your way to the three seeds.',
+  hint: 'Each seed grows in the root of a thorn vine, and it only comes loose while that vine is burnt back. Flash near the vine (or light-step along it) — it withers for a few seconds — then dash in, grab the seed and get clear: it regrows from the root, right where you\'re standing. If the growing tip reaches you, you\'re snagged.',
   build(R, E){
     EE = E; HEDGE4.forEach(([a, b, c, d]) => R.block(a, b, c, d, 1.8, E.tex('topiary', { color: 0x2a5a2a, tile: 1.4 })));
     this.v = vineSet(R, E, VINES4);
@@ -132,11 +147,16 @@ const thornMaze = {
   onBridge(st, R, E, sb){ this.v.burnSeg(st.vs, sbLocal(R, sb), 1, E); },
   host(dt, st, R, E){
     this.v.tick(dt, st.vs, R, E);
-    SEED4.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A sky seed! (${st.got.filter(Boolean).length}/3)`); } });
+    st.msg = Math.max(0, (st.msg || 0) - dt);
+    SEED4.forEach(([x, lz, v], i) => {
+      if (st.got[i] || !E.P.some(p => !p.frozen && near(R, p, x, lz, 1))) return;
+      if (st.vs.len[v] < .2){ st.got[i] = 1; E.ev('pick', `A sky seed! (${st.got.filter(Boolean).length}/3) — get clear before the vine regrows!`); }
+      else if (!st.msg){ st.msg = 3; E.ev('thud', 'The seed is wrapped in the living vine — burn it back first (flash or a light step)!'); }
+    });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); this.solve(st); E.ev('door', 'Three seeds — the thorns wither away and the door opens!'); }
   },
-  visual(dt, t, st, R){ this.v.visual(st.vs, R); this.sm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 glowing seeds. <b>Thorn vines</b> grow across the paths and snag you — <b>flash</b> them (or light-step through them) to burn them back. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R){ this.v.visual(st.vs, R); this.sm.forEach((m, i) => { m.visible = !st.got[i]; m.material.emissiveIntensity = st.vs.len[SEED4[i][2]] < .2 ? 1.6 + Math.sin(t * 12) * .4 : .4; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Pull the 3 seeds from the <b>roots of the thorn vines</b> — a seed only comes loose while its vine is <b>burnt back</b> (flash or light-step it). Then get clear: it regrows from the root! (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */

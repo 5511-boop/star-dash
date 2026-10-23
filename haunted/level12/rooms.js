@@ -281,12 +281,14 @@ const dollhouse = {
 
 /* =============================================================== */
 const PIT7 = [-9.6, 3, 9.6, 19], JB7 = [[-5, 6.5], [3, 5.5], [7, 11], [-1, 10.5], [-6.5, 14.5], [2, 16.5], [6.5, 17.8], [-3, 18.8]];
+// the marbles are buried too: they only glint when a ping lands near (or you're right on top of one) — and a popping
+// jack flings any marble near it somewhere else in the pit
 const MB7 = [[-7.5, 8.5], [5.5, 8], [-3.5, 15.5], [8, 15.5]];
 const ballpit = {
   name: 'The Ball Pit',
   floor: tiles,
   notes: [[0, 1.6, '“Something is buried under the balls. Ping to see what lurks.”', 1.5]],
-  hint: 'Jack-in-the-boxes are buried in the ball pit — you can\'t see them, and you can\'t run in the balls. Click / tap the pit to PING: buried boxes near the ping light up for a few seconds. Decoys and thrown things still set them off from afar.',
+  hint: 'Everything is buried in the ball pit — the jack-in-the-boxes AND the four marbles — and you can\'t run in the balls. Click / tap the pit to PING: buried things near the ping glint for a few seconds (you also feel a marble when you\'re right on top of it). Decoys and thrown things set the boxes off from afar — but a box that pops flings any marble near it to somewhere else in the pit.',
   build(R, E){
     EE = E; const T = E.THREE;
     const tex = E.tiledTex(128, 128, (x, w, h) => { const C = ['#c83a3a', '#e8c25a', '#4a8ac8', '#5ab86a', '#c85ab8']; x.fillStyle = '#2a2a3a'; x.fillRect(0, 0, w, h); for (let i = 0; i < 90; i++){ x.fillStyle = C[i % 5]; x.beginPath(); x.arc(Math.random() * w, Math.random() * h, 7, 0, 7); x.fill(); } }, 6, 6);
@@ -295,20 +297,24 @@ const ballpit = {
     this.jm.forEach(m => { m.g.position.y = -.9; });
     this.orbs = orbRow(E, R, 4, -1.95, 20.8, 1.3, 2.2);
   },
-  init(){ return { jk: JB7.map(() => [0, 0]), rv: JB7.map(() => 0), got: [0, 0, 0, 0], items: MB7.map(([x, lz], i) => mkItem('marble', x, lz, { n: i })), land: [] }; },
+  init(){ return { jk: JB7.map(() => [0, 0]), rv: JB7.map(() => 0), mv: MB7.map(() => 0), got: [0, 0, 0, 0], items: MB7.map(([x, lz], i) => mkItem('marble', x, lz, { n: i, hidden: 1 })), land: [] }; },
   solve(st){ st.got = [1, 1, 1, 1]; st.items.forEach(i => i.s = 3); },
   itemMesh(k, E){ return k === 'marble' ? new E.THREE.Mesh(new E.THREE.SphereGeometry(.3, 14, 10), new E.THREE.MeshStandardMaterial({ color: 0xbfe6ff, metalness: .4, roughness: .05, emissive: 0x4a8aff, emissiveIntensity: .6, transparent: true, opacity: .9 })) : null; },
   onPick(st, R, E, it){ it.s = 3; st.got[it.n] = 1; E.ev('pick', `A glass marble! (${st.got.filter(Boolean).length}/4)`); return false; },
-  onPing(st, R, E, idx, x, z){ JB7.forEach(([jx, jl], i) => { if (Math.hypot(jx - x, jl - R.lz(z)) < 6) st.rv[i] = 4; }); },
+  onPing(st, R, E, idx, x, z){ JB7.forEach(([jx, jl], i) => { if (Math.hypot(jx - x, jl - R.lz(z)) < 6) st.rv[i] = 4; }); st.items.forEach((it, i) => { if (it.s === 0 && Math.hypot(it.x - x, it.lz - R.lz(z)) < 6) st.mv[i] = 4; }); },
   onLand(st, R, E, it){ st.land.push([it.x, it.lz, .2]); },
   speed(st, R, E, idx){ const p = E.playerPos(idx); return p && inRect(R, p, PIT7[0], PIT7[1], PIT7[2], PIT7[3]) ? { mult: .55, noRun: true } : null; },
   host(dt, st, R, E){
     st.rv = st.rv.map(v => Math.max(0, v - dt)); st.land = st.land.filter(l => (l[2] -= dt) > 0);
+    const before = st.jk.map(j => j[0]);
     jackTick(dt, st, R, E, JB7, (i, x, lz) => st.land.some(([a, b]) => Math.hypot(a - x, b - lz) < JK.trig + .6));
+    // a box that just popped flings nearby marbles somewhere else in the pit
+    st.jk.forEach((j, i) => { if (j[0] === 2 && before[i] !== 2) st.items.forEach(it => { if (it.s !== 0 || Math.hypot(it.x - JB7[i][0], it.lz - JB7[i][1]) > 2.6) return; Object.assign(it, { s: 2, by: -1, w: -1, ft: 0, fd: .7, sx: it.x, slz: it.lz, tx: +(PIT7[0] + 1 + Math.random() * (PIT7[2] - PIT7[0] - 2)).toFixed(2), tlz: +(PIT7[1] + 1 + Math.random() * (PIT7[3] - PIT7[1] - 2)).toFixed(2), pickCD: E.elapsed + .5, nocatch: 1 }); E.ev('whoosh', 'The jack-in-the-box flings a marble across the pit!'); }); });
+    st.items.forEach((it, i) => { st.mv[i] = Math.max(0, st.mv[i] - dt); it.hidden = st.mv[i] > 0 || E.P.some(p => Math.hypot(p.pos.x - it.x, R.lz(p.pos.z) - it.lz) < 1.3) ? 0 : 1; });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All four marbles — the door opens!'); }
   },
   visual(dt, t, st, R, E){ jackVisual(this.jm, st, t); this.jm.forEach((m, i) => { const show = st.rv[i] > 0 || st.jk[i][0] > 0; m.g.position.y += ((show ? (st.jk[i][0] === 2 ? 0 : -.55) : -.9) - m.g.position.y) * E.damp(8, dt); m.ring.material.opacity = Math.max(m.ring.material.opacity, st.rv[i] > 0 ? .25 : 0); }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 4 glass marbles in the ball pit. Jack-in-the-boxes are <b>buried</b> — <b>click / tap</b> the pit to ping and reveal them. You can't run in the balls! (${st.got.filter(Boolean).length}/4)`; }
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Find the 4 glass marbles buried in the ball pit. <b>Click / tap</b> to ping: buried marbles and jack-in-the-boxes glint near it. A popping box <b>flings</b> nearby marbles elsewhere! You can't run in the balls. (${st.got.filter(Boolean).length}/4)`; }
 };
 
 /* =============================================================== */
@@ -347,27 +353,39 @@ const parade = {
 /* =============================================================== */
 const MC9 = 8, MR9 = 7, MX9 = c => -8.75 + c * 2.5, ML9 = r => 2.25 + r * 2.5;
 const MW9 = [[1, 1], [3, 1], [5, 1], [6, 1], [1, 2], [3, 3], [4, 3], [6, 3], [0, 4], [1, 4], [6, 4], [3, 5], [4, 5], [1, 6], [5, 6]];
+// three cheeses, four mice: a mouse that gets cheese at its home spot (carried in, or thrown) eats it and dozes off for
+// good. Choose which three to feed — without stepping into their sight lines — then slip past the last one to the door.
 const MICE9 = [[7, 2], [2, 3], [5, 5], [2, 6]], CH9 = [[7, 3], [0, 2], [7, 6]];
 const mwall9 = (c, r) => c < 0 || r < 0 || c >= MC9 || r >= MR9 || MW9.some(([a, b]) => a === c && b === r);
 const mice = {
   name: 'The Mouse Maze',
   floor: tiles,
   notes: [[-3, 1.4, '“Wind-up mice: they see along straight lines and they never stop until they hit a wall.”', 1.5]],
-  hint: 'A mouse sitting at home looks straight up, down, left and right. If you (or a lantern) are in its line of sight, it zooms along that line until it hits a wall — then it has to wind back up and trundle home. Bait them with decoys, or cross their lines while they\'re away. Collect the 3 cheeses.',
+  hint: 'A mouse sitting at home looks straight up, down, left and right; if you (or a lantern) are in its line of sight it zooms along that line until it hits a wall, then winds back up and trundles home. Feed three of the four mice: get a cheese onto a mouse\'s home spot (throw it from round a corner, or carry it in while the mouse is away) and it eats it and falls asleep for good. Which three you feed decides your path past the last one to the door.',
   build(R, E){
     EE = E; const T = E.THREE;
     MW9.forEach(([c, r]) => R.block(MX9(c) - 1.2, ML9(r) - 1.2, MX9(c) + 1.2, ML9(r) + 1.2, 1.6, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })));
     R.block(-10, 18.5, -1.2, 19, 2.4, E.mat(0x6a4a2a)); R.block(1.2, 18.5, 10, 19, 2.4, E.mat(0x6a4a2a));
     this.mm = MICE9.map(() => { const g = new T.Group(); const b = new T.Mesh(new T.SphereGeometry(.45, 12, 8), E.mat(0x9a9aa4, { metalness: .6 })); b.scale.set(1, .7, 1.5); b.position.y = .35; g.add(b); for (const s of [-1, 1]){ const ear = new T.Mesh(new T.CircleGeometry(.2, 10), E.mat(0xe8a0b0, { side: T.DoubleSide })); ear.position.set(s * .25, .75, .35); g.add(ear); } const tail = new T.Mesh(new T.TorusGeometry(.25, .04, 4, 8, Math.PI * 1.4), E.mat(0xe8a0b0)); tail.position.set(0, .3, -.7); g.add(tail); const k = new T.Mesh(new T.TorusGeometry(.18, .04, 6, 10), E.mat(0xd4af37)); k.position.set(0, .8, -.3); g.add(k); g.userData.k = k; E.scene.add(g); return g; });
-    this.cm = CH9.map(([c, r]) => { const m = new T.Mesh(new T.CylinderGeometry(.45, .45, .35, 3), E.mat(0xffd34a)); R.place(m, MX9(c), ML9(r), .3); return m; });
+    this.zz = this.mm.map(g => { const z = new T.Mesh(new T.TorusGeometry(.15, .04, 6, 10), E.glow(0xbfe8ff, .9)); z.position.y = 1.2; z.visible = false; g.add(z); return z; });
   },
-  init(){ return { m: MICE9.map(([c, r]) => ({ x: MX9(c), l: ML9(r), s: 0, t: 0, d: [0, 0] })), got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  init(){ return { m: MICE9.map(([c, r]) => ({ x: MX9(c), l: ML9(r), s: 0, t: 0, d: [0, 0] })), fed: 0, items: CH9.map(([c, r]) => mkItem('cheese', MX9(c), ML9(r))) }; },
+  solve(st){ st.fed = 3; st.m.forEach(m => m.s = 9); st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'cheese' ? new E.THREE.Mesh(new E.THREE.CylinderGeometry(.45, .45, .35, 3), E.mat(0xffd34a)) : null; },
+  feed(st, R, E, it){
+    const i = st.m.findIndex((m, k) => m.s !== 9 && Math.hypot(it.x - MX9(MICE9[k][0]), it.lz - ML9(MICE9[k][1])) < 1.3 && Math.hypot(m.x - MX9(MICE9[k][0]), m.l - ML9(MICE9[k][1])) < .3);
+    if (i < 0) return;
+    it.s = 3; it.w = -1; st.m[i].s = 9; st.fed++; E.ev('chime', `The mouse gobbles the cheese and dozes off… (${st.fed}/3 asleep)`, st.fed);
+    if (st.fed >= 3){ R.open('exit'); E.ev('door', 'Three mice asleep — the mouse-hole door opens! Mind the last one…'); }
+  },
+  carryTick(st, R, E, it, p){ this.feed(st, R, E, it); },
+  onLand(st, R, E, it){ this.feed(st, R, E, it); },
   sees(c0, r0, tc, tr){ if (c0 !== tc && r0 !== tr) return null; const dc = Math.sign(tc - c0), dr = Math.sign(tr - r0); if (!dc && !dr) return [0, 0]; let c = c0 + dc, r = r0 + dr; while (!(c === tc && r === tr)){ if (mwall9(c, r)) return null; c += dc; r += dr; } return [dc, dr]; },
   cell(x, lz){ const c = Math.round((x - MX9(0)) / 2.5), r = Math.round((lz - ML9(0)) / 2.5); return [c, r]; },
   host(dt, st, R, E){
     st.m.forEach((m, i) => {
       const [hc, hr] = MICE9[i];
+      if (m.s === 9) return;   // fed and fast asleep
       if (m.s === 0){
         const targets = [...E.P.filter(p => !p.frozen && R.inside(p.pos)).map(p => [p.pos.x, R.lz(p.pos.z)]), ...E.S.decoys.map(d => [d.x, R.lz(d.z)])];
         for (const [x, lz] of targets){ const [tc, tr] = this.cell(x, lz); if (Math.abs(x - MX9(tc)) > 1.25 || Math.abs(lz - ML9(tr)) > 1.25) continue; const dir = this.sees(hc, hr, tc, tr); if (dir && (dir[0] || dir[1]) && Math.hypot(tc - hc, tr - hr) <= 6){ m.s = 1; m.d = dir; E.ev('whoosh'); break; } }
@@ -379,11 +397,9 @@ const mice = {
       else { const tx = MX9(hc), tl = ML9(hr), dx = tx - m.x, dl = tl - m.l, d = Math.hypot(dx, dl); if (d < .05){ m.s = 0; m.x = tx; m.l = tl; } else { const s = Math.min(d, 2.4 * dt); m.x += dx / d * s; m.l += dl / d * s; } }
       if (m.s === 1 || m.s === 3) for (const p of E.P) if (!p.frozen && !p.dashing && R.inside(p.pos) && Math.hypot(p.pos.x - m.x, R.lz(p.pos.z) - m.l) < .9){ E.freeze(p.idx, E.FREEZE, `A wind-up mouse ran into ${E.names()[p.idx]}!`); }
     });
-    CH9.forEach(([c, r], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && Math.abs(p.pos.x - MX9(c)) < .9 && Math.abs(R.lz(p.pos.z) - ML9(r)) < .9)){ st.got[i] = 1; E.ev('pick', `Cheese! (${st.got.filter(Boolean).length}/3)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'All the cheese — the mouse maze door opens!'); }
   },
-  visual(dt, t, st, R, E){ this.mm.forEach((g, i) => { const m = st.m[i]; g.position.set(m.x, 0, R.Z(m.l)); if (m.s === 1) g.rotation.y = Math.atan2(m.d[0], -m.d[1]); g.userData.k.rotation.z += dt * (m.s === 2 ? 14 : 3); }); this.cm.forEach((m, i) => m.visible = !st.got[i]); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 cheeses. <b>Wind-up mice</b> zoom along any straight line where they see you (or a lantern) until they hit a wall. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R, E){ this.mm.forEach((g, i) => { const m = st.m[i]; g.position.set(m.x, 0, R.Z(m.l)); if (m.s === 1) g.rotation.y = Math.atan2(m.d[0], -m.d[1]); g.userData.k.rotation.z += m.s === 9 ? 0 : dt * (m.s === 2 ? 14 : 3); this.zz[i].visible = m.s === 9; if (m.s === 9){ this.zz[i].position.y = 1.2 + (t * .6 + i * .3) % 1; this.zz[i].material.opacity = 1; } }); },
+  objective(st, R, E){ return R.isOpen('exit') ? 'The mouse-hole door is open — get past the last mouse!' : `Put 3 of the 4 <b>wind-up mice</b> to sleep: get a cheese onto a mouse's <b>home spot</b> (carry it, or throw it from round a corner). They zoom along any straight line where they see you. (${st.fed}/3)`; }
 };
 
 /* =============================================================== */

@@ -44,26 +44,28 @@ const heartbeat = {
   floor: heartF,
   dark: .6,
   notes: [[0, 1.6, '“The manor has a heart, and every beat sends a ripple through the floor.”', 1.5]],
-  hint: 'Every heartbeat sends a red ripple out across the floor. If it passes under your feet you\'re frozen — unless you DASH at that moment (dashing hops right over it). Watch the ring, dash as it reaches you. Collect the four heart fragments.',
+  hint: 'Every heartbeat sends a red ripple out across the floor — it freezes you unless you DASH as it passes (the dash hops over it). Put the four fragments back into the heart. But while you hold a fragment, ⚡ THROWS it instead of dashing — so you can\'t hop ripples. Slip in right after a ripple passes, or throw the fragment into the heart (or to your partner) before the next one reaches you.',
   build(R, E){
     EE = E; const T = E.THREE;
     this.heart = new T.Mesh(new T.SphereGeometry(1.2, 18, 14), E.tex('flesh_wall', { color: 0xc81a3a, emissive: 0xff2a40, emissiveIntensity: .9, emissiveMap: true, tint: 0xff8a8a, rx: 2, ry: 1 })); R.place(this.heart, HC2[0], HC2[1], 1.4); R.block(-1, 10.5, 1, 12.5, .01, E.mat(0));
     this.ring = new T.Mesh(new T.RingGeometry(.97, 1, 64), new T.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: .8, side: T.DoubleSide, depthWrite: false })); this.ring.rotation.x = -Math.PI / 2; R.place(this.ring, HC2[0], HC2[1], .06);
-    this.fm = FR2.map(([x, lz]) => { const m = gem(E, 0xff4a6a); R.place(m, x, lz, .6); return m; });
     this.orbs = orbRow(E, R, 4, -1.95, 21.3, 1.3, 2.4);
   },
-  init(){ return { t: 0, got: [0, 0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1, 1]; },
+  init(){ return { t: 0, got: 0, items: FR2.map(([x, lz]) => mkItem('frag', x, lz, { yRest: .6 })) }; },
+  solve(st){ st.got = 4; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'frag' ? gem(E, 0xff4a6a) : null; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `The fragment sinks into the heart! (${st.got}/4)`); },
+  carryTick(st, R, E, it, p){ if (near(R, p, HC2[0], HC2[1], 1.9)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - HC2[0], it.lz - HC2[1]) < 1.9) this.deliver(st, R, E, it); },
   rad(st){ const k = st.t % 2.6; return 1.3 + k * 6; },
   host(dt, st, R, E){
-    if (Math.floor(st.t / 2.6) !== Math.floor((st.t + dt) / 2.6) && !st.got.every(Boolean)) E.ev('beat');
+    if (Math.floor(st.t / 2.6) !== Math.floor((st.t + dt) / 2.6) && st.got < 4) E.ev('beat');
     st.t += dt;
-    if (!st.got.every(Boolean)){ const r = this.rad(st); if (r < 15) for (const p of E.P){ if (p.frozen || p.dashing || !R.inside(p.pos)) continue; const d = Math.hypot(p.pos.x - HC2[0], R.lz(p.pos.z) - HC2[1]); if (Math.abs(d - r) < .4) E.freeze(p.idx, 3, `The heartbeat ripple caught ${E.names()[p.idx]}!`); } }
-    collect(R, E, st, FR2, 'A heart fragment!', 4);
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'The heart is whole — its beat softens. The door opens!'); }
+    if (st.got < 4){ const r = this.rad(st); if (r < 15) for (const p of E.P){ if (p.frozen || p.dashing || !R.inside(p.pos)) continue; const d = Math.hypot(p.pos.x - HC2[0], R.lz(p.pos.z) - HC2[1]); if (Math.abs(d - r) < .4) E.freeze(p.idx, 3, `The heartbeat ripple caught ${E.names()[p.idx]}!`); } }
+    if (!R.isOpen('exit') && st.got >= 4){ R.open('exit'); E.ev('door', 'The heart is whole — its beat softens. The door opens!'); }
   },
-  visual(dt, t, st, R){ const r = this.rad(st); this.ring.scale.setScalar(r); this.ring.visible = !st.got.every(Boolean); const k = st.t % 2.6; this.heart.scale.setScalar(1 + Math.max(0, .25 - k) * 1.2); this.fm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 4 heart fragments. Each <b>heartbeat ripple</b> freezes anyone it passes under — <b>dash</b> to hop over it! (${st.got.filter(Boolean).length}/4)`; }
+  visual(dt, t, st, R){ const r = this.rad(st); this.ring.scale.setScalar(r); this.ring.visible = st.got < 4; const k = st.t % 2.6; this.heart.scale.setScalar(1 + Math.max(0, .25 - k) * 1.2 + st.got * .04); setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 4 ? 'The door is open!' : `Put the 4 fragments back into the <b>heart</b>. Each <b>ripple</b> freezes anyone it passes — <b>dash</b> hops it, but holding a fragment, ⚡ throws instead. Time it, or throw! (${st.got}/4)`; }
 };
 
 /* =============================================================== */
@@ -101,33 +103,46 @@ const trials = {
 };
 
 /* =============================================================== */
-const AN4 = [[-4, 5], [4, 8], [-4.5, 12], [4.5, 15.5], [-4, 19], [0, 10]], CR4 = [[-6.8, 6], [6.8, 12], [-6.8, 18]];
+// the breath-crystals go into the manor's lung (the middle) — and nobody can hold one through a breath: an inhale yanks
+// it out of your hands towards the lung, an exhale flings it towards the edge (a crystal lost over the edge reappears)
+const AN4 = [[-4, 5], [4, 8], [-4.5, 12], [4.5, 15.5], [-4, 19], [0, 10]], CR4 = [[-6.8, 6], [6.8, 12], [-6.8, 18]], LUNG4 = [0, 13.5];
 const breathing = {
   name: 'The Breathing Walls',
   floor: heartF,
   dark: .5,
   notes: [[0, 1.6, '“The manor breathes. In… and OUT.”', 1.5]],
-  hint: 'The manor breathes: when it inhales, everything is sucked towards the middle; when it exhales, you\'re blown towards the edges — and off them. The glowing rings are anchors: standing on one, the wind can\'t move you. Move during the pauses, hold on during the breaths. Grab the three breath-crystals near the edges.',
+  hint: 'The manor breathes: an inhale sucks everything towards the middle, an exhale blows you towards the edges — and off them. The glowing rings are anchors: standing on one, the wind can\'t move you. Bring the three breath-crystals to the lung in the middle — but a crystal can\'t be held through a breath: an INHALE yanks it out of your hands towards the lung (use that!), an EXHALE flings it towards the edge. Carry them in the pauses, or get close and let the manor breathe them in.',
   build(R, E){
     EE = E; const T = E.THREE;
     R.floor(-10, 2.5, -7.4, 20, voidMat(E), .015); R.floor(7.4, 2.5, 10, 20, voidMat(E), .015);
     this.an = AN4.map(([x, lz]) => { const m = new T.Mesh(new T.RingGeometry(.6, .8, 24), E.glow(0x8affc1, .8)); m.rotation.x = -Math.PI / 2; R.place(m, x, lz, .05); return m; });
-    this.cm = CR4.map(([x, lz]) => { const m = gem(E, 0x8ad8ff); R.place(m, x, lz, .6); return m; });
+    this.lung = new T.Mesh(new T.SphereGeometry(.9, 16, 12), E.tex('flesh_wall', { color: 0xd86a8a, emissive: 0xff6a9a, emissiveIntensity: .5, tint: 0xffc0d0, rx: 2, ry: 1 })); R.place(this.lung, LUNG4[0], LUNG4[1], .9);
     this.parts = Array.from({ length: 50 }, () => { const m = new T.Mesh(new T.SphereGeometry(.05, 4, 3), new T.MeshBasicMaterial({ color: 0xffb8c8, transparent: true, opacity: .6 })); m.userData = { a: Math.random() * 7, r: Math.random() * 9, l: 3 + Math.random() * 17 }; E.scene.add(m); return m; });
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
   },
-  init(){ return { t: 0, got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  init(){ return { t: 0, got: 0, items: CR4.map(([x, lz]) => mkItem('crystal', x, lz, { yRest: .6 })) }; },
+  solve(st){ st.got = 3; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'crystal' ? gem(E, 0x8ad8ff) : null; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `The lung breathes the crystal in! (${st.got}/3)`); },
+  carryTick(st, R, E, it, p){
+    if (near(R, p, LUNG4[0], LUNG4[1], 1.7)) return this.deliver(st, R, E, it);
+    const ph = this.phase(st); if (!ph) return;
+    // a breath tears the crystal away: in towards the lung, or out towards the edge
+    const tx = ph > 0 ? LUNG4[0] : Math.sign(it.x || 1) * 9.4, tl = ph > 0 ? LUNG4[1] : it.lz, d = Math.hypot(tx - it.x, tl - it.lz) || 1, f = Math.min(1, 7 / d);
+    Object.assign(it, { s: 2, by: -1, w: -1, ft: 0, fd: .8, sx: it.x, slz: it.lz, tx: +(it.x + (tx - it.x) * f).toFixed(2), tlz: +(it.lz + (tl - it.lz) * f).toFixed(2), pickCD: E.elapsed + .6 });
+    E.ev('whoosh', ph > 0 ? 'The manor INHALES — the crystal flies towards the lung!' : 'The manor EXHALES — the crystal is blown out of your hands!');
+  },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - LUNG4[0], it.lz - LUNG4[1]) < 1.7) return this.deliver(st, R, E, it); if (Math.abs(it.x) > 7.3){ it.x = it.hx; it.lz = it.hlz; E.ev('chime', 'The crystal fell into the dark… it glimmers back where it started.', 2); } },
   phase(st){ const k = st.t % 9.2; return k < 3 ? 1 : k < 4.6 ? 0 : k < 7.6 ? -1 : 0; },
   tNow(st, R){ return R.local.t ?? st.t; },
-  pits(st, R){ return st.got.every(Boolean) ? [] : [R.rect(-10.5, 2.5, -7.4, 20), R.rect(7.4, 2.5, 10.5, 20)]; },
-  push(st, R, E, pos){ const lz = R.lz(pos.z); if (lz < 2.5 || lz > 20 || st.got.every(Boolean)) return null; if (AN4.some(([x, l]) => Math.hypot(pos.x - x, lz - l) < .8)) return [0, 0]; const ph = this.phase({ t: this.tNow(st, R) }); if (!ph) return null; const dx = pos.x, d = Math.abs(dx) || .1; return [-ph * Math.sign(dx) * 4.6 * Math.min(1, d / 2 + .3), 0]; },
+  pits(st, R){ return st.got >= 3 ? [] : [R.rect(-10.5, 2.5, -7.4, 20), R.rect(7.4, 2.5, 10.5, 20)]; },
+  push(st, R, E, pos){ const lz = R.lz(pos.z); if (lz < 2.5 || lz > 20 || st.got >= 3) return null; if (AN4.some(([x, l]) => Math.hypot(pos.x - x, lz - l) < .8)) return [0, 0]; const ph = this.phase({ t: this.tNow(st, R) }); if (!ph) return null; const dx = pos.x, d = Math.abs(dx) || .1; return [-ph * Math.sign(dx) * 4.6 * Math.min(1, d / 2 + .3), 0]; },
   speed(st, R, E, idx){ const p = E.playerPos(idx); if (!p) return null; const lz = R.lz(p.z); return AN4.some(([x, l]) => Math.hypot(p.x - x, lz - l) < .8) && this.phase({ t: this.tNow(st, R) }) ? { mult: .25 } : null; },
-  host(dt, st, R, E){ st.t += dt; collect(R, E, st, CR4, 'A breath-crystal!', 3); if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three crystals — the manor holds its breath. The door opens!'); } },
+  host(dt, st, R, E){ st.t += dt; if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'Three crystals in the lung — the manor holds its breath. The door opens!'); } },
   local(dt, st, R, E){ const L = R.local; L.t = (L.t === undefined || Math.abs(L.t - st.t) > .3) ? st.t : L.t + dt + (st.t - L.t) * .1; },
-  visual(dt, t, st, R){ const ph = this.phase({ t: this.tNow(st, R) }); this.parts.forEach(m => { const u = m.userData; u.r = (u.r + dt * (ph === 1 ? -3 : ph === -1 ? 3 : 0) + 10) % 10; m.position.set(Math.sin(u.a) * u.r, .5, R.Z(u.l)); m.visible = !st.got.every(Boolean); }); this.cm.forEach((m, i) => m.visible = !st.got[i]); this.an.forEach(m => m.material.emissiveIntensity = ph ? 1.6 : .5); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  bar(st, R, E){ const ph = this.phase({ t: this.tNow(st, R) }); if (st.got.every(Boolean) || !R.inside(E.me.pos)) return null; const k = this.tNow(st, R) % 9.2; return { frac: ph === 1 ? (3 - k) / 3 : ph === -1 ? (7.6 - k) / 3 : 1, label: ph === 1 ? 'INHALE…' : ph === -1 ? 'EXHALE…' : 'pause — move!', color: ph ? '#ff8aa8' : '#8affc1' }; },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Grab the 3 crystals near the edges. The manor <b>inhales</b> (pulls you in) and <b>exhales</b> (blows you out over the edge) — hold on at the glowing <b>anchor rings</b>. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R){ const ph = this.phase({ t: this.tNow(st, R) }); this.parts.forEach(m => { const u = m.userData; u.r = (u.r + dt * (ph === 1 ? -3 : ph === -1 ? 3 : 0) + 10) % 10; m.position.set(Math.sin(u.a) * u.r, .5, R.Z(u.l)); m.visible = st.got < 3; }); this.lung.scale.setScalar(1 + (ph === 1 ? .25 : ph === -1 ? -.15 : 0) + st.got * .08); this.an.forEach(m => m.material.emissiveIntensity = ph ? 1.6 : .5); setOrbs(this.orbs, st.got); },
+  bar(st, R, E){ const ph = this.phase({ t: this.tNow(st, R) }); if (st.got >= 3 || !R.inside(E.me.pos)) return null; const k = this.tNow(st, R) % 9.2; return { frac: ph === 1 ? (3 - k) / 3 : ph === -1 ? (7.6 - k) / 3 : 1, label: ph === 1 ? 'INHALE…' : ph === -1 ? 'EXHALE…' : 'pause — move!', color: ph ? '#ff8aa8' : '#8affc1' }; },
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Bring the 3 crystals to the <b>lung</b> in the middle. No one can hold a crystal through a breath: an <b>inhale</b> yanks it towards the lung, an <b>exhale</b> flings it to the edge. Hold on at the <b>anchor rings</b>. (${st.got}/3)`; }
 };
 
 /* =============================================================== */

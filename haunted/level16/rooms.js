@@ -50,42 +50,49 @@ const gallery = {
   name: 'The Figure Gallery',
   floor: carpet,
   notes: [[3, 1.4, '“They only move when nobody is watching. So… watch them.”', 1.5]],
-  hint: 'A wax figure is frozen while either of you is FACING it. The moment nobody looks, it rushes at you. Walk backwards, keep them in front of you, and ' + 'vault the ropes. Collect the three golden tickets.',
+  hint: 'A wax figure is frozen while either of you is FACING it; the moment nobody looks, it rushes at you. Each figure holds a golden ticket — pluck it from its hand, but only while someone is watching that figure (walk up facing it, or have your partner watch it while you come from the side). Vault the ropes.',
   build(R, E){
     EE = E;
     rope(R, E, -10, 8, -3, 8.4); rope(R, E, 3, 8, 10, 8.4); rope(R, E, -3, 14, 3, 14.4); rope(R, E, -10, 15, -5, 15.4); rope(R, E, 5, 15.5, 10, 15.9);
     this.f = [waxFig(R, E, [-6, 11]), waxFig(R, E, [6, 5]), waxFig(R, E, [5, 18.5])];
-    this.tm = TIX2.map(([x, lz]) => { const m = new E.THREE.Mesh(new E.THREE.BoxGeometry(.5, .04, .25), E.glow(0xffd34a, .9)); R.place(m, x, lz, .5); return m; });
+    // each figure holds a golden ticket out in its hand
+    this.tm = this.f.map(g => { const m = new E.THREE.Mesh(new E.THREE.BoxGeometry(.5, .04, .25), E.glow(0xffd34a, .9)); m.position.set(.55, 1.25, .35); g.mesh.add(m); return m; });
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
   },
   init(){ return { got: [0, 0, 0] }; },
   solve(st){ st.got = [1, 1, 1]; },
   host(dt, st, R, E){
-    TIX2.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A golden ticket! (${st.got.filter(Boolean).length}/3)`); } });
+    this.f.forEach((g, i) => { if (!st.got[i] && g.mem.watched && E.P.some(p => !p.frozen && Math.hypot(p.pos.x - g.x, p.pos.z - g.z) < 1.25)){ st.got[i] = 1; E.ev('pick', `You pluck the golden ticket from its hand! (${st.got.filter(Boolean).length}/3)`); } });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three tickets — the door opens!'); }
   },
-  visual(dt, t, st){ this.tm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt * 2; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 golden tickets. <b>Wax figures</b> only move when <b>nobody is looking at them</b> — keep them in view! (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st){ this.tm.forEach((m, i) => { m.visible = !st.got[i]; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Take the golden ticket from each <b>wax figure's hand</b> — only while someone is <b>watching</b> that figure. They move whenever nobody looks! (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */
 const LAMP3 = [[6.5, .55, 0], [11.5, .7, 1.7], [16.5, .45, 3.1]];
-const KEY3 = [[-8, 9], [8, 14], [-3, 19]];
+// the wax keys go in the lock by the door — and a key carried under a heat lamp melts straight back into its mould
+const KEY3 = [[-8, 9], [8, 14], [-3, 19]], LOCK3 = [0, 20.8];
 const meltFloor = {
   name: 'The Melting Floor',
   floor: E => E.mat(0xe8c890, { roughness: .4 }),
   notes: [[3, 1.4, '“The heat lamps melt the wax floor. A freeze bolt sets it hard again.”', 1.5]],
-  hint: 'Wherever a heat lamp passes, the wax floor melts into a puddle you\'ll sink through. Puddles harden again after a while — or instantly if you fire a freeze bolt over them. Vault the benches. Collect the three wax keys.',
+  hint: 'Wherever a heat lamp passes, the wax floor melts into a puddle you\'ll sink through (a freeze bolt over a puddle hardens it). The three keys are wax too: carry one under a heat lamp and it melts straight back into its mould. Time your crossing between the swinging lamps, or THROW the key past them — then put all three in the lock by the door.',
   build(R, E){
     EE = E; const T = E.THREE;
     rope(R, E, -4, 4, 4, 4.4); rope(R, E, -10, 12, -4, 12.4); rope(R, E, 4, 17, 10, 17.4);
     this.lamps = LAMP3.map(() => { const g = new T.Group(); const sh = new T.Mesh(new T.ConeGeometry(.6, .8, 12, 1, true), new T.MeshStandardMaterial({ color: 0x3a3a3a, side: T.DoubleSide })); sh.position.y = 3; g.add(sh); const b = new T.Mesh(new T.SphereGeometry(.25, 10, 8), E.glow(0xff6a2a, 2)); b.position.y = 2.7; g.add(b); const l = new T.PointLight(0xff6a2a, 4, 6, 1.2); l.position.y = 2.4; g.add(l); E.scene.add(g); return g; });
     this.pud = Array.from({ length: 40 }, () => { const m = new T.Mesh(new T.CircleGeometry(1.5, 18), new T.MeshStandardMaterial({ color: 0xffa040, emissive: 0xff6a10, emissiveIntensity: .5, transparent: true, opacity: .85 })); m.rotation.x = -Math.PI / 2; m.visible = false; E.scene.add(m); return m; });
-    this.km = KEY3.map(([x, lz]) => { const m = new T.Mesh(new T.TorusGeometry(.2, .06, 6, 12), waxMat(E)); R.place(m, x, lz, .5); return m; });
+    const lk = new T.Mesh(new T.BoxGeometry(1.2, 1.4, .3), E.tex('museum_gilt', { color: 0xc9a24a, metalness: .6, tile: 1 })); R.place(lk, LOCK3[0], LOCK3[1] + .5, .7);
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
   },
-  init(){ return { t: 0, sp: [], got: [0, 0, 0], drop: 0 }; },
-  solve(st){ st.got = [1, 1, 1]; st.sp = []; },
+  init(){ return { t: 0, sp: [], got: 0, drop: 0, items: KEY3.map(([x, lz]) => mkItem('key', x, lz)) }; },
+  solve(st){ st.got = 3; st.sp = []; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'key' ? new E.THREE.Mesh(new E.THREE.TorusGeometry(.2, .06, 6, 12), waxMat(E)) : null; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `A wax key turns in the lock! (${st.got}/3)`); },
+  underLamp(st, x, lz){ return LAMP3.some(L => Math.hypot(x - this.lampX(L, st.t), lz - L[0]) < 1.7); },
+  carryTick(st, R, E, it, p){ if (near(R, p, LOCK3[0], LOCK3[1], 1.5)) return this.deliver(st, R, E, it); if (this.underLamp(st, it.x, it.lz)){ it.s = 0; it.w = -1; it.x = it.hx; it.lz = it.hlz; E.ev('splash', 'The heat lamp melts the key — it drips back into its mould!'); } },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - LOCK3[0], it.lz - LOCK3[1]) < 1.5) this.deliver(st, R, E, it); },
   lampX(L, t){ return Math.sin(t * L[1] + L[2]) * 8.5; },
   pits(st, R){ return st.sp.map(([x, lz]) => R.rect(x - 1.25, lz - 1.25, x + 1.25, lz + 1.25)); },
   boltStep(st, R, E, b){ const n0 = st.sp.length; st.sp = st.sp.filter(([x, lz]) => Math.hypot(b.x - x, R.lz(b.z) - lz) > 2); if (st.sp.length < n0 && !b.cooled){ b.cooled = 1; E.ev('zap', 'The bolt sets the melted wax hard!'); } },
@@ -93,11 +100,10 @@ const meltFloor = {
     st.t += dt; st.drop -= dt;
     st.sp.forEach(s => s[2] -= dt); st.sp = st.sp.filter(s => s[2] > 0);
     if (st.drop <= 0){ st.drop = .45; LAMP3.forEach(L => { const x = +this.lampX(L, st.t).toFixed(2); if (!st.sp.some(([a, b]) => Math.hypot(a - x, b - L[0]) < 1.2)) st.sp.push([x, L[0], 3.6]); }); if (st.sp.length > 40) st.sp.splice(0, st.sp.length - 40); }
-    KEY3.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A wax key! (${st.got.filter(Boolean).length}/3)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three wax keys — the door opens!'); }
+    if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'Three wax keys in the lock — the door opens!'); }
   },
-  visual(dt, t, st, R, E){ this.lamps.forEach((g, i) => g.position.set(this.lampX(LAMP3[i], st.t), 0, R.Z(LAMP3[i][0]))); this.pud.forEach((m, i) => { const s = st.sp[i]; m.visible = !!s; if (s){ m.position.set(s[0], .02, R.Z(s[1])); m.material.opacity = Math.min(.85, s[2] / 2); } }); this.km.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 wax keys. <b>Heat lamps</b> melt the floor into puddles you fall through — a <b>freeze bolt</b> over a puddle hardens it instantly. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R, E){ this.lamps.forEach((g, i) => g.position.set(this.lampX(LAMP3[i], st.t), 0, R.Z(LAMP3[i][0]))); this.pud.forEach((m, i) => { const s = st.sp[i]; m.visible = !!s; if (s){ m.position.set(s[0], .02, R.Z(s[1])); m.material.opacity = Math.min(.85, s[2] / 2); } }); setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Bring the 3 wax keys to the <b>lock</b> by the door. Carried under a <b>heat lamp</b>, a key melts back into its mould — time it, or throw it past. The lamps also melt the floor (a <b>freeze bolt</b> hardens a puddle). (${st.got}/3)`; }
 };
 
 /* =============================================================== */
@@ -185,30 +191,35 @@ const bath = {
 };
 
 /* =============================================================== */
-const MASK7 = [[-8, 18], [8, 9], [0, 13]];
+// the masks hang on the hooks at the far wall — but whoever wears one (carries it) is BLIND: their gaze can't hold
+// a figure still, so their partner has to watch over them
+const MASK7 = [[-8, 18], [8, 9], [0, 13]], HOOK7 = [0, 21];
 const darkGallery = {
   name: 'The Dark Gallery',
   floor: carpet,
   dark: st => st.lights ? .2 : .96,
   notes: [[0, 1.6, '“When the lights go out, you can only watch what your lantern shows you.”', 1.5]],
-  hint: 'The gallery lights flicker off every few seconds. In the dark you can only "watch" a figure that\'s inside your lantern\'s glow — the rest come for you. A flash lights the room up for a moment. Grab the three masks.',
+  get hint(){ return 'Hang the three masks on the hooks at the far wall. Whoever carries a mask is wearing it — and can\'t see a thing: their gaze no longer holds the figures still. ' + (EE && EE.solo() ? 'Grab a mask, then RUN (or throw it ahead and catch up).' : 'One carries, the other walks backwards beside them, watching the figures.') + ' When the lights go out you can only hold still the figures inside your lantern glow; a flash lights everything for a moment.'; },
   build(R, E){
     EE = E;
     rope(R, E, -10, 6, -4, 6.4); rope(R, E, 4, 6, 10, 6.4); rope(R, E, -3, 11, 3, 11.4); rope(R, E, -10, 15, -4, 15.4); rope(R, E, 4, 16, 10, 16.4);
-    this.f = [[-6, 9], [6, 13], [-5, 19], [5, 20], [0, 6]].map(h => waxFig(R, E, h, { sp: 2.7, see: (st, g, p, d) => st.lights || st.fl > 0 || d < 4 }));
-    this.mm = MASK7.map(([x, lz]) => { const m = new E.THREE.Mesh(new E.THREE.SphereGeometry(.3, 12, 8, 0, Math.PI), E.mat(0xffffff, { side: E.THREE.DoubleSide, emissive: 0x8a8a8a })); R.place(m, x, lz, .7); return m; });
+    this.f = [[-6, 9], [6, 13], [-5, 19], [5, 20], [0, 6]].map(h => waxFig(R, E, h, { sp: 2.7, see: (st, g, p, d) => !E.carrying(p.idx) && (st.lights || st.fl > 0 || d < 4) }));
+    const T = E.THREE, board = new T.Mesh(new T.BoxGeometry(4.4, 1.2, .2), E.tex('museum_gilt', { color: 0xc9a24a, metalness: .5, tile: 1 })); R.place(board, HOOK7[0], HOOK7[1] + .45, 1.8);
     this.orbs = orbRow(E, R, 3, -1.3, 21.3, 1.3, 2.4);
   },
-  init(){ return { t: 0, lights: 1, fl: 0, got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  init(){ return { t: 0, lights: 1, fl: 0, got: 0, items: MASK7.map(([x, lz]) => mkItem('mask', x, lz, { yRest: .7 })) }; },
+  solve(st){ st.got = 3; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'mask' ? new E.THREE.Mesh(new E.THREE.SphereGeometry(.3, 12, 8, 0, Math.PI), E.mat(0xffffff, { side: E.THREE.DoubleSide, emissive: 0x8a8a8a })) : null; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `A mask on its hook! (${st.got}/3)`); },
+  carryTick(st, R, E, it, p){ if (near(R, p, HOOK7[0], HOOK7[1], 1.8)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - HOOK7[0], it.lz - HOOK7[1]) < 1.6) this.deliver(st, R, E, it); },
   onFlash(st){ st.fl = 2; },
   host(dt, st, R, E){
     st.t += dt; st.fl = Math.max(0, st.fl - dt); const k = st.t % 7; const l = k < 4 ? 1 : 0; if (l !== st.lights){ st.lights = l; E.ev(l ? 'click' : 'boo', l ? '' : 'The lights go out…'); }
-    MASK7.forEach(([x, lz], i) => { if (!st.got[i] && E.P.some(p => !p.frozen && near(R, p, x, lz, 1))){ st.got[i] = 1; E.ev('pick', `A carnival mask! (${st.got.filter(Boolean).length}/3)`); } });
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three masks — the lights come on for good and the door opens!'); st.done = 1; }
+    if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'Three masks on their hooks — the lights come on for good and the door opens!'); st.done = 1; }
   },
-  visual(dt, t, st){ this.mm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 masks. When the lights go out, you can only hold still the figures inside your <b>lantern glow</b> — a <b>flash</b> lights everything for a moment. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st){ setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Hang the 3 masks on the <b>hooks</b> at the far wall. Whoever carries a mask is <b>blind</b> — their gaze can't hold the figures still${E.solo() ? ', so run!' : ', so the other one watches.'} In the dark only your <b>lantern glow</b> holds them; a <b>flash</b> lights everything. (${st.got}/3)`; }
 };
 
 /* =============================================================== */

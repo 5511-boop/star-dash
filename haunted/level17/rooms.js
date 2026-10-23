@@ -89,7 +89,7 @@ const angler = {
   floor: seabed,
   dark: .93,
   notes: [[3, 1.4, '“Don\'t look at the pretty light. Definitely don\'t follow it.”', 1.5]],
-  get hint(){ return 'Each anglerfish dangles a glowing lure. If it can see you, the lure drags you towards its jaws — fight it, or hide (' + (solo() ? 'deep shadows' : 'your partner\'s back, or deep shadows') + ') and the pull stops. The eggs are right beside them.'; },
+  get hint(){ return 'Each anglerfish reels in the CLOSEST diver it can see with its glowing lure — hide (' + (solo() ? 'deep shadows' : 'your partner\'s back, or deep shadows') + ') and the pull stops. It guards its egg: you can only snatch one mid-DASH, while hidden, or while that fish is busy reeling in someone else. ' + (solo() ? 'Dash past the egg!' : 'One of you plays bait — get reeled in slowly, fighting it — while the other snatches the egg.'); },
   build(R, E){
     EE = E; const T = E.THREE;
     this.sm = shadeMeshes(E, R, SH3);
@@ -101,14 +101,23 @@ const angler = {
   solve(st){ st.got = [1, 1, 1]; },
   shadows(st, R){ return shadeRects(R, SH3); },
   jaws(i){ const [x, lz, a] = FISH3[i]; return [x + Math.sin(a) * 1.6, lz - Math.cos(a) * 1.6]; },
-  push(st, R, E, pos){ if (E.me.hiddenL) return null; const lz = R.lz(pos.z); let vx = 0, vl = 0; FISH3.forEach((f, i) => { const [jx, jl] = this.jaws(i), dx = jx - pos.x, dl = jl - lz, d = Math.hypot(dx, dl); if (d < 7 && d > .3){ const k = 4.4 * (1 - d / 9); vx += dx / d * k; vl += dl / d * k; } }); return vx || vl ? [vx, -vl] : null; },
+  // each fish reels in only the closest diver it can see (within 7 of its jaws)
+  target(R, E, i){ const [jx, jl] = this.jaws(i); let best = null, bd = 7; for (const p of E.P){ if (p.frozen || p.hidden || !R.inside(p.pos)) continue; const d = Math.hypot(p.pos.x - jx, R.lz(p.pos.z) - jl); if (d < bd){ bd = d; best = p.idx; } } return best; },
+  push(st, R, E, pos, idx){ if (E.me.hiddenL) return null; const lz = R.lz(pos.z); let vx = 0, vl = 0; FISH3.forEach((f, i) => { if (this.target(R, E, i) !== idx) return; const [jx, jl] = this.jaws(i), dx = jx - pos.x, dl = jl - lz, d = Math.hypot(dx, dl); if (d < 7 && d > .3){ const k = 4.4 * (1 - d / 9); vx += dx / d * k; vl += dl / d * k; } }); return vx || vl ? [vx, -vl] : null; },
   host(dt, st, R, E){
     for (const p of E.P){ if (p.frozen || p.hidden || !R.inside(p.pos)) continue; FISH3.forEach((f, i) => { const [jx, jl] = this.jaws(i); if (Math.hypot(p.pos.x - jx, R.lz(p.pos.z) - jl) < 1.3){ E.freeze(p.idx, E.FREEZE, `CHOMP! An anglerfish got ${E.names()[p.idx]}!`); } }); }
-    pick(R, E, st, EGG3, 'got', 'A glowing egg!', 3);
+    st.msg = Math.max(0, (st.msg || 0) - dt);
+    EGG3.forEach(([x, lz], i) => {
+      if (st.got[i]) return;
+      const p = E.P.find(q => !q.frozen && near(R, q, x, lz, 1.15)); if (!p) return;
+      const tgt = this.target(R, E, i);
+      if (p.hidden || p.dashing || (tgt !== null && tgt !== p.idx)){ st.got[i] = 1; E.ev('pick', `A glowing egg! (${st.got.filter(Boolean).length}/3)`); }
+      else if (!st.msg){ st.msg = 3; E.ev('thud', 'The anglerfish is watching its egg — snatch it on a dash, while hidden, or while it\'s reeling in someone else!'); }
+    });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three eggs — the door opens!'); }
   },
   visual(dt, t, st){ this.fish.forEach((g, i) => { g.userData.bulb.position.y = 2.5 + Math.sin(t * 2 + i) * .15; }); this.em.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Steal the 3 glowing eggs. <b>Anglerfish lures</b> drag in anyone they can see — <b>hide</b> to break free. (${st.got.filter(Boolean).length}/3)`; }
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Steal the 3 glowing eggs. Each <b>anglerfish</b> reels in the closest diver it sees and guards its egg — snatch one mid-<b>dash</b>, while <b>hidden</b>, or while it's busy reeling in someone else. (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */
@@ -230,76 +239,101 @@ const searchlight = {
 };
 
 /* =============================================================== */
-const WC = [0, 11.5], COIN7 = [[0, 5], [6.5, 11.5], [0, 18], [-6.5, 11.5]];
+// the doubloons ride the current round the eye, sinking slowly inward (the eye swallows them and they wash back out
+// at the rim). Each has to be CARRIED out to the chest — and a diver holding gold is pulled in much harder.
+const WC = [0, 11.5], CHEST7 = [8.4, 20.4], COIN7R = [3.4, 5, 6.6, 8.2];
+const orbitAt = (it, dt, rad, ang) => { ang += dt * 1.6 / Math.max(1.5, rad); rad -= dt * .16; it.x = +(WC[0] + Math.sin(ang) * rad).toFixed(3); it.lz = +(WC[1] + Math.cos(ang) * rad).toFixed(3); };
 const whirl = {
   name: 'The Whirlpool',
   floor: seabed,
   dark: .7,
   notes: [[0, 1.6, '“The water turns and turns, and everything ends up in the middle.”', 1.5]],
-  hint: 'The whirlpool drags you round and inward — the closer you get, the stronger. Get sucked into the eye and you\'re spat back to the start. Dash (or run) outward to escape. Grab the four doubloons circling it.',
+  get hint(){ return 'The doubloons ride the current round the whirlpool, sinking slowly towards the eye (it swallows them, and they wash back out at the rim). Each one has to be carried to the chest (top right) — and while you hold gold the whirlpool pulls you in much harder. ' + (solo() ? 'Grab one on the outside of its orbit and dash outward.' : 'Grab one and THROW it out to your partner waiting by the rim (⚡ while carrying).') + ' Get sucked into the eye and you\'re spat back to the start.'; },
   build(R, E){
     EE = E; const T = E.THREE;
     this.sp = Array.from({ length: 60 }, (_, i) => { const m = new T.Mesh(new T.SphereGeometry(.07, 4, 3), new T.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: .6 })); m.userData = { r: 1 + Math.random() * 8, a: Math.random() * 7 }; E.scene.add(m); return m; });
     const eye = new T.Mesh(new T.CircleGeometry(1.4, 24), new T.MeshBasicMaterial({ color: 0x020a12 })); eye.rotation.x = -Math.PI / 2; R.place(eye, WC[0], WC[1], .03);
-    this.cm = COIN7.map(([x, lz]) => { const m = new T.Mesh(new T.CylinderGeometry(.3, .3, .06, 14), E.mat(0xd4af37, { metalness: .9, emissive: 0x6a5010 })); m.rotation.x = Math.PI / 2; R.place(m, x, lz, .6); return m; });
+    const chest = new T.Mesh(new T.BoxGeometry(1.4, .8, .9), E.tex('galleon_deck', { color: 0x6a4a1a, tint: 0xd8b890, tile: 1 })); R.place(chest, CHEST7[0], CHEST7[1] + .4, .4);
+    const lid = new T.Mesh(new T.BoxGeometry(1.45, .2, .95), E.mat(0xd4af37, { metalness: .8 })); R.place(lid, CHEST7[0], CHEST7[1] + .4, .9);
     this.orbs = orbRow(E, R, 4, -1.95, 21.4, 1.3, 2.4);
   },
-  init(){ return { got: [0, 0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1, 1]; },
-  push(st, R, E, pos){ if (st.got.every(Boolean)) return null; const dx = pos.x - WC[0], dl = R.lz(pos.z) - WC[1], d = Math.hypot(dx, dl); if (d > 10 || d < .05) return null; const k = Math.max(0, 1 - d / 10); const inw = 1.2 + 3.2 * k, tan = 2 + 3.5 * k; const vx = -dx / d * inw + (-dl / d) * tan, vl = -dl / d * inw + (dx / d) * tan; return [vx, -vl]; },
+  init(){ return { got: 0, items: COIN7R.map((rad, i) => ({ k: 'coin', s: 0, x: +(WC[0] + Math.sin(i * 1.7) * rad).toFixed(3), lz: +(WC[1] + Math.cos(i * 1.7) * rad).toFixed(3), w: -1 })) }; },
+  solve(st){ st.got = 4; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ if (k !== 'coin') return null; const m = new E.THREE.Mesh(new E.THREE.CylinderGeometry(.3, .3, .06, 14), E.mat(0xd4af37, { metalness: .9, emissive: 0x6a5010 })); m.rotation.x = Math.PI / 2; return m; },
+  push(st, R, E, pos, idx){ if (st.got >= 4) return null; const dx = pos.x - WC[0], dl = R.lz(pos.z) - WC[1], d = Math.hypot(dx, dl); if (d > 10 || d < .05) return null; const gold = E.carrying(idx) ? 1.7 : 1, k = Math.max(0, 1 - d / 10); const inw = (1.2 + 3.2 * k) * gold, tan = 2 + 3.5 * k; const vx = -dx / d * inw + (-dl / d) * tan, vl = -dl / d * inw + (dx / d) * tan; return [vx, -vl]; },
   local(dt, st, R, E){ const p = E.me.pos; if (!R.inside(p) || E.me.dash) return; if (Math.hypot(p.x - WC[0], R.lz(p.z) - WC[1]) < 1.1){ const sp = R.spawnW[E.myIdx()]; E.respawnLocal(sp[0], sp[1], 'Glug! The whirlpool spat you out at the start.'); E.sfx.fall(); } },
-  host(dt, st, R, E){ pick(R, E, st, COIN7, 'got', 'A doubloon!', 4); if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Four doubloons — the whirlpool calms and the door opens!'); } },
-  visual(dt, t, st, R){ const calm = st.got.every(Boolean); this.sp.forEach(m => { const u = m.userData; u.a += dt * (calm ? .2 : 3 / Math.max(1, u.r) + .5); u.r -= dt * (calm ? 0 : .6); if (u.r < 1) u.r = 9; m.position.set(WC[0] + Math.sin(u.a) * u.r, .4, R.Z(WC[1] + Math.cos(u.a) * u.r)); }); this.cm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.z += dt * 3; }); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Grab the 4 doubloons around the <b>whirlpool</b>. It drags you round and in — don't get sucked into the eye! (${st.got.filter(Boolean).length}/4)`; }
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `A doubloon in the chest! (${st.got}/4)`); },
+  carryTick(st, R, E, it, p){ if (near(R, p, CHEST7[0], CHEST7[1], 1.6)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - CHEST7[0], it.lz - CHEST7[1]) < 1.6) this.deliver(st, R, E, it); },
+  host(dt, st, R, E){
+    for (const it of st.items){
+      if (it.s !== 0) continue;
+      // a loose coin rides the current from wherever it is (dropped far out, it drifts back in at the rim)
+      const rad = Math.min(8.2, Math.hypot(it.x - WC[0], it.lz - WC[1])), ang = Math.atan2(it.x - WC[0], it.lz - WC[1]);
+      if (rad < 1.6){ orbitAt(it, 0, 8.2, Math.random() * 7); E.ev('splash', 'The eye swallowed a doubloon — it washes back out at the rim.'); }
+      else orbitAt(it, dt, rad, ang);
+    }
+    if (!R.isOpen('exit') && st.got >= 4){ R.open('exit'); E.ev('door', 'Four doubloons in the chest — the whirlpool calms and the door opens!'); }
+  },
+  visual(dt, t, st, R){ const calm = st.got >= 4; this.sp.forEach(m => { const u = m.userData; u.a += dt * (calm ? .2 : 3 / Math.max(1, u.r) + .5); u.r -= dt * (calm ? 0 : .6); if (u.r < 1) u.r = 9; m.position.set(WC[0] + Math.sin(u.a) * u.r, .4, R.Z(WC[1] + Math.cos(u.a) * u.r)); }); setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 4 ? 'The door is open!' : `Carry the 4 doubloons circling the <b>whirlpool</b> to the chest (top right). They sink towards the eye as they go round — and holding gold makes the pull MUCH stronger. ${E.solo() ? 'Dash outward!' : 'Throw them out to each other!'} (${st.got}/4)`; }
 };
 
 /* =============================================================== */
 const SH8 = [[-9.5, 4, -6.5, 6.5], [6, 7, 9.5, 9.5], [-3, 10, 0, 12.5], [-9.5, 13.5, -6, 16], [3.5, 15, 7, 17.5], [-3, 18.5, 1, 20.5]];
-const REL8 = [[-8, 11], [8.5, 13], [8, 19.5]];
+// the relics glow: whoever carries one can't hide, so the squid always sees the carrier. They go back to the basket
+// by the entrance — while your partner (hidden or not) draws the squid's attention, or you weave out of its circles.
+const REL8 = [[-8, 11], [8.5, 13], [8, 19.5]], BASK8 = [0, 2.4];
 const trench = {
   name: 'The Trench',
   floor: seabed,
   dark: .9,
   notes: [[0, 1.6, '“Something enormous lives at the bottom of the trench. It hunts by sight.”', 1.5]],
-  get hint(){ return 'A giant squid slams its tentacles down where it last saw you — a red circle marks the spot. Get out of the circle, or hide (' + (solo() ? 'deep shadows' : 'deep shadows or your partner\'s back') + ') and it loses track of you. Collect the three relics.'; },
+  get hint(){ return 'A giant squid slams its tentacles down where it last saw you — a red circle marks the spot. Hiding (' + (solo() ? 'deep shadows' : 'deep shadows or your partner\'s back') + ') throws it off — but a relic glows, so whoever CARRIES one can\'t hide. Bring the three relics back to the basket at the entrance' + (solo() ? ', moving between circles.' : ': one carries, the other stays visible to split the squid\'s attention, or throw the relic from shadow to shadow.'); },
   build(R, E){
     EE = E; const T = E.THREE;
     this.sm = shadeMeshes(E, R, SH8);
     this.marks = [0, 1].map(() => { const m = new T.Mesh(new T.RingGeometry(.3, 1.5, 24), new T.MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: .5, side: T.DoubleSide, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.visible = false; E.scene.add(m); return m; });
     this.tent = [0, 1].map(() => { const m = new T.Mesh(new T.CylinderGeometry(.3, .7, 8, 8), E.mat(0x8a2a4a)); m.visible = false; E.scene.add(m); return m; });
     this.eye = new T.Mesh(new T.SphereGeometry(1.2, 14, 10), E.glow(0xffd34a, 1.5)); R.place(this.eye, 6, 21.3, 3.2);
-    this.rm = REL8.map(([x, lz]) => { const m = new T.Mesh(new T.OctahedronGeometry(.35), E.glow(0x8affc1, .9)); R.place(m, x, lz, .6); return m; });
+    const bk = new T.Mesh(new T.CylinderGeometry(.8, .6, .7, 12, 1, true), E.texFrom(6, 'burlap', { color: 0x8a7a5a, side: T.DoubleSide, tile: .8 })); R.place(bk, BASK8[0], BASK8[1], .35);
     this.orbs = orbRow(E, R, 3, -1.3, 21.4, 1.3, 2.4);
   },
-  init(){ return { mk: [null, null], cd: [1, 2], fl: [0, 0], got: [0, 0, 0] }; },
-  solve(st){ st.got = [1, 1, 1]; },
+  init(){ return { mk: [null, null], cd: [1, 2], fl: [0, 0], got: 0, items: REL8.map(([x, lz]) => ({ k: 'relic', s: 0, x, lz, w: -1 })) }; },
+  solve(st){ st.got = 3; st.items.forEach(it => it.s = 3); },
+  itemMesh(k, E){ return k === 'relic' ? new E.THREE.Mesh(new E.THREE.OctahedronGeometry(.35), E.glow(0x8affc1, .9)) : null; },
+  deliver(st, R, E, it){ it.s = 3; it.w = -1; st.got++; E.ev('place', `A relic in the basket! (${st.got}/3)`); },
+  carryTick(st, R, E, it, p){ if (near(R, p, BASK8[0], BASK8[1], 1.5)) this.deliver(st, R, E, it); },
+  onLand(st, R, E, it){ if (Math.hypot(it.x - BASK8[0], it.lz - BASK8[1]) < 1.4) this.deliver(st, R, E, it); },
   shadows(st, R){ return shadeRects(R, SH8); },
   host(dt, st, R, E){
     [0, 1].forEach(k => {
       st.fl[k] = Math.max(0, st.fl[k] - dt);
       if (st.mk[k]){ st.mk[k][2] -= dt; if (st.mk[k][2] <= 0){ const [x, lz] = st.mk[k]; for (const p of E.P) if (!p.frozen && !p.dashing && Math.hypot(p.pos.x - x, R.lz(p.pos.z) - lz) < 1.5) E.freeze(p.idx, E.FREEZE, `A tentacle slammed down on ${E.names()[p.idx]}!`); E.ev('thud'); st.fl[k] = .4; st.mk[k] = null; st.cd[k] = 1.1; } return; }
       st.cd[k] -= dt; if (st.cd[k] > 0) return;
-      const T = E.P.filter(p => !p.frozen && !p.hidden && R.inside(p.pos) && R.lz(p.pos.z) > 3); if (!T.length){ st.cd[k] = .4; return; }
+      const T = E.P.filter(p => !p.frozen && (!p.hidden || E.carrying(p.idx)) && R.inside(p.pos) && R.lz(p.pos.z) > 3); if (!T.length){ st.cd[k] = .4; return; }   // a glowing relic gives you away
       const p = T[(k + Math.floor(E.elapsed)) % T.length]; st.mk[k] = [+p.pos.x.toFixed(2), +R.lz(p.pos.z).toFixed(2), 1.15];
     });
-    pick(R, E, st, REL8, 'got', 'A relic!', 3);
-    if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three relics — the squid sinks back into the deep. The door opens!'); }
+    if (!R.isOpen('exit') && st.got >= 3){ R.open('exit'); E.ev('door', 'Three relics home — the squid sinks back into the deep. The door opens!'); }
   },
-  visual(dt, t, st, R){ this.marks.forEach((m, k) => { const mk = st.mk[k]; m.visible = !!mk; if (mk){ m.position.set(mk[0], .06, R.Z(mk[1])); m.material.opacity = .3 + (1.15 - mk[2]) * .5; } }); this.tent.forEach((m, k) => { m.visible = st.fl[k] > 0; }); this.rm.forEach((m, i) => { m.visible = !st.got[i]; m.rotation.y += dt; }); this.eye.scale.y = .6 + Math.abs(Math.sin(t * .7)) * .4; setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Collect the 3 relics. The <b>squid</b> slams the <b style="color:#ff5050">red circles</b> where it sees you — hide to throw it off. (${st.got.filter(Boolean).length}/3)`; }
+  visual(dt, t, st, R){ this.marks.forEach((m, k) => { const mk = st.mk[k]; m.visible = !!mk; if (mk){ m.position.set(mk[0], .06, R.Z(mk[1])); m.material.opacity = .3 + (1.15 - mk[2]) * .5; } }); this.tent.forEach((m, k) => { m.visible = st.fl[k] > 0; }); this.eye.scale.y = .6 + Math.abs(Math.sin(t * .7)) * .4; setOrbs(this.orbs, st.got); },
+  objective(st, R, E){ return st.got >= 3 ? 'The door is open!' : `Bring the 3 relics back to the <b>basket</b> at the entrance. The <b>squid</b> slams the <b style="color:#ff5050">red circles</b> where it sees you — hiding throws it off, but a carried relic <b>glows</b> and gives you away. (${st.got}/3)`; }
 };
 
 /* =============================================================== */
-const OC = [0, 12.5], TR9 = [[-5, 15.5], [5, 15.5], [0, 7.5]];
+// the octopus gets warier with every theft (less ink, longer arms), and the last treasure is clutched in its arms —
+// it only lets go while it's stunned by a freeze bolt
+const OC = [0, 12.5], TR9 = [[-5, 15.5], [5, 15.5], [0, 10.6]];
+const inkReach = st => 6.5 + st.got.filter(Boolean).length * 1.1;
 const ink = {
   name: 'The Ink Cloud',
   floor: seabed,
   dark: .85,
   notes: [[0, 1.6, '“The octopus guards its treasure — and hides in its own ink.”', 1.5]],
-  hint: 'The octopus\'s tentacles lash at anyone it can see within reach. But it keeps puffing out clouds of ink that drift away from it — inside an ink cloud you\'re hidden. Ride the clouds in, grab a treasure, ride them out. A freeze bolt stuns the octopus for a while.',
+  hint: 'The octopus\'s tentacles lash at anyone it can see within reach — but inside its drifting ink clouds you\'re hidden. Ride a cloud in, grab a treasure, ride out. Every theft makes it warier: less ink, longer arms. The last treasure is clutched in its arms — it only lets go while the octopus is stunned by a freeze bolt (tap ☀ while moving towards it), so bolt it and grab, or one bolts while the other waits in the ink.',
   build(R, E){
     EE = E; const T = E.THREE;
-    this.oct = R.ghost({ home: OC, look: 'blob', tint: 0x6a2a5a, scale: 2.2, sp: 0, flashImmune: true, label: 'the octopus', think: (g, dt, st, R2, E2, P) => { g.x = OC[0]; g.z = R2.Z(OC[1]); const m = g.mem; m.cd = (m.cd || 0) - dt; if (m.cd > 0) return true; const T2 = E2.targetsOf(g, P).filter(p => Math.hypot(p.pos.x - g.x, p.pos.z - g.z) < 6.5); if (T2.length){ const p = T2[0]; E2.freeze(p.idx, E2.FREEZE, `The octopus grabbed ${E2.names()[p.idx]}!`); m.cd = 1.5; m.lash = [p.pos.x, p.pos.z, .4]; } return true; } });
+    this.oct = R.ghost({ home: OC, look: 'blob', tint: 0x6a2a5a, scale: 2.2, sp: 0, flashImmune: true, label: 'the octopus', think: (g, dt, st, R2, E2, P) => { g.x = OC[0]; g.z = R2.Z(OC[1]); const m = g.mem; m.cd = (m.cd || 0) - dt; if (m.cd > 0) return true; const T2 = E2.targetsOf(g, P).filter(p => Math.hypot(p.pos.x - g.x, p.pos.z - g.z) < inkReach(st)); if (T2.length){ const p = T2[0]; E2.freeze(p.idx, E2.FREEZE, `The octopus grabbed ${E2.names()[p.idx]}!`); m.cd = 1.5; m.lash = [p.pos.x, p.pos.z, .4]; } return true; } });
     this.lash = new T.Mesh(new T.CylinderGeometry(.15, .4, 1, 6), E.mat(0x6a2a5a)); this.lash.visible = false; E.scene.add(this.lash);
     this.cl = Array.from({ length: 6 }, () => { const m = new T.Mesh(new T.CylinderGeometry(1, 1, 2.4, 18), new T.MeshBasicMaterial({ color: 0x050208, transparent: true, opacity: .75, depthWrite: false })); m.visible = false; E.scene.add(m); return m; });
     this.tm = TR9.map(([x, lz]) => { const m = new T.Mesh(new T.BoxGeometry(.7, .5, .5), E.mat(0xd4af37, { metalness: .8, emissive: 0x6a5010 })); R.place(m, x, lz, .25); return m; });
@@ -310,14 +344,20 @@ const ink = {
   shadows(st, R){ return st.cl.map(([x, lz, r]) => R.rect(x - r * .8, lz - r * .8, x + r * .8, lz + r * .8)); },
   host(dt, st, R, E){
     st.t -= dt;
-    if (st.t <= 0){ st.t = 1.6; const a = Math.random() * Math.PI * 2; st.cl.push([OC[0] + Math.sin(a) * 1.5, OC[1] + Math.cos(a) * 1.5, 1.6, Math.sin(a) * 1.3, Math.cos(a) * 1.3, 7]); if (st.cl.length > 6) st.cl.shift(); }
+    if (st.t <= 0){ st.t = 1.6 + st.got.filter(Boolean).length * .7; const a = Math.random() * Math.PI * 2; st.cl.push([OC[0] + Math.sin(a) * 1.5, OC[1] + Math.cos(a) * 1.5, 1.6, Math.sin(a) * 1.3, Math.cos(a) * 1.3, 7]); if (st.cl.length > 6) st.cl.shift(); }
     st.cl.forEach(c => { c[0] = +(c[0] + c[3] * dt).toFixed(3); c[1] = +(c[1] + c[4] * dt).toFixed(3); c[2] = Math.min(2.4, +(c[2] + dt * .15).toFixed(3)); c[5] -= dt; });
     st.cl = st.cl.filter(c => c[5] > 0 && Math.abs(c[0]) < 11 && c[1] > -1 && c[1] < 23);
-    pick(R, E, st, TR9, 'got', 'Treasure!', 3);
+    const stunned = this.oct.stun > 0;
+    st.msg = Math.max(0, (st.msg || 0) - dt);
+    TR9.forEach(([x, lz], i) => {
+      if (st.got[i] || !E.P.some(p => !p.frozen && near(R, p, x, lz, 1.1))) return;
+      if (i === 2 && !stunned){ if (!st.msg){ st.msg = 3; E.ev('thud', 'It\'s clutched tight in the octopus\'s arms — stun it with a freeze bolt first!'); } return; }
+      st.got[i] = 1; const n = st.got.filter(Boolean).length; E.ev('pick', `Treasure! (${n}/3)` + (n < 3 ? ' The octopus grows warier…' : ''));
+    });
     if (!R.isOpen('exit') && st.got.every(Boolean)){ R.open('exit'); E.ev('door', 'Three treasures — the octopus sulks in its ink. The door opens!'); }
   },
   visual(dt, t, st, R, E){ this.cl.forEach((m, i) => { const c = st.cl[i]; m.visible = !!c; if (c){ m.position.set(c[0], 1.2, R.Z(c[1])); m.scale.set(c[2], 1, c[2]); m.material.opacity = Math.min(.75, c[5] / 2); } }); const L = this.oct.mem.lash; this.lash.visible = !!(L && L[2] > 0); if (L && L[2] > 0){ L[2] -= dt; const ox = this.oct.x, oz = this.oct.z, len = Math.hypot(L[0] - ox, L[1] - oz); this.lash.scale.y = len; this.lash.position.set((ox + L[0]) / 2, .6, (oz + L[1]) / 2); this.lash.rotation.set(Math.PI / 2, 0, -Math.atan2(L[0] - ox, L[1] - oz)); } this.tm.forEach((m, i) => m.visible = !st.got[i]); setOrbs(this.orbs, st.got.filter(Boolean).length); },
-  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Grab the 3 treasures beside the <b>octopus</b>. Its tentacles grab anyone it can see nearby — hide inside its drifting <b>ink clouds</b>! (${st.got.filter(Boolean).length}/3)`; }
+  objective(st, R, E){ return st.got.every(Boolean) ? 'The door is open!' : `Grab the 3 treasures. The <b>octopus</b> grabs anyone it can see nearby — hide in its drifting <b>ink</b>. Each theft makes it warier; the last treasure is in its arms — <b>freeze-bolt</b> it to make it let go. (${st.got.filter(Boolean).length}/3)`; }
 };
 
 /* =============================================================== */
