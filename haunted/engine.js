@@ -104,6 +104,9 @@ style.textContent = `
   #fade{position:fixed;inset:0;z-index:60;background:#05060c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
     opacity:1;transition:opacity .55s;pointer-events:none;font-family:Georgia,serif;color:#efe8ff;text-align:center;padding:16px}
   #fade.out{opacity:0}
+  #sndHint{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:30;pointer-events:none;background:#0b0918d9;border:1px solid #ffffff2a;
+    border-radius:999px;padding:6px 14px;font:700 12.5px system-ui,sans-serif;color:var(--dim);white-space:nowrap;animation:sndPulse 2.4s ease-in-out infinite}
+  @keyframes sndPulse{50%{opacity:.55}}
   #fade small{font-family:system-ui,sans-serif;font-size:12px;font-weight:800;letter-spacing:3px;color:var(--accent)}
   #fade b{font-size:32px;text-shadow:0 0 18px var(--accent)}
   #story{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100% - 32px));text-align:center;background:#0b0918e6;border:1px solid #ffffff22;
@@ -188,7 +191,7 @@ const SKINS = /[?&]noskin/.test(location.search) ? null : SKIN_SETS[LEVEL];
 const skinOpts = () => SKINS ? `<option value="auto">Auto (host = ${esc(SKINS[0].name)}, guest = ${esc(SKINS[1].name)})</option><option value="0">${esc(SKINS[0].name)}</option><option value="1">${esc(SKINS[1].name)}</option>` : '';
 const feat = CFG.feature ? `<div class="feat">NEW POWER: <b>${CFG.feature.icon || ''} ${esc(CFG.feature.name)}</b><br>${CFG.feature.how}</div>` : '';
 document.body.innerHTML = `
-<div id="fade"><small>LEVEL ${LEVEL}</small><b>${esc(CFG.title)}</b></div>
+<div id="fade"><small>LEVEL ${LEVEL}</small><b>${esc(CFG.title)}</b></div><div id="sndHint" hidden>🔇 Tap anywhere for sound</div>
 <canvas id="c"></canvas><div id="dread"></div><div id="flash"></div><div id="frost"></div><div id="sightFx"></div>
 <div id="hud" hidden>
   <div id="hudTop"><div class="pill" id="roomName"></div><div class="pill" id="timer">0:00</div><div class="pill" id="hintBtn" hidden>💡 Hint</div></div>
@@ -264,6 +267,7 @@ function initAudio(){
   try {
     if (!actx){
       actx = new (window.AudioContext || window.webkitAudioContext)();
+      actx.onstatechange = sndHint; setTimeout(sndHint, 600);   // most browsers start it suspended until a tap
       master = actx.createGain(); master.connect(actx.destination);
       sfxBus = actx.createGain(); sfxBus.connect(master); ambBus = actx.createGain(); ambBus.connect(master); applyAudio();
       const o = actx.createOscillator(), o2 = actx.createOscillator(); droneGain = actx.createGain();
@@ -285,11 +289,20 @@ function initAudio(){
 }
 function unlockAudio(){
   initAudio();
-  try { if (actx && actx.state !== 'running') actx.resume(); } catch {}
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}   // iPhone: play even with the silent switch on
+  try { if (actx && actx.state !== 'running') actx.resume().then(sndHint, () => {}); } catch {}
 }
 const audioOn = () => actx && actx.state === 'running';
+// Browsers only start sound after a tap, and every level is a new page, so until then a small hint says so
+function sndHint(){
+  const el = document.getElementById('sndHint'); if (!el) return;
+  el.hidden = !actx || actx.state === 'running' || OPT.vol === 0;
+}
 // any tap or key unlocks audio, including pages reached by the auto-join redirect (no button press there)
-addEventListener('pointerdown', unlockAudio, { passive: true }); addEventListener('keydown', unlockAudio);
+// phones count a tap as permission to play only when the finger lifts (touchend / pointerup / click), not on touch-down
+for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, unlockAudio, { passive: true, capture: true });
+// a phone call, the lock screen or switching apps can suspend ("interrupt") the audio: pick it back up on return
+document.addEventListener('visibilitychange', () => { if (!document.hidden && actx && actx.state !== 'running') try { actx.resume().then(sndHint, sndHint); } catch {} });
 function out(pan){
   const dst = ambOut || sfxBus;   // soundscape one-shots (asAmb) go to the ambience bus instead
   if (!pan || !actx.createStereoPanner) return dst;
