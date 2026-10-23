@@ -75,7 +75,7 @@ const wrapping = {
   hint: 'The aisle on the left is too narrow to get past the soldier. HOLD ⚡ (Space) to drop a decoy lantern somewhere far from the aisle — the soldier marches over to guard it for a few seconds. Then slip up the aisle.',
   build(R, E){
     EE = E; const T = E.THREE;
-    R.block(-8, 6, 10, 18, 1.4, E.mat(0x8a5a3a));
+    R.block(-8, 6, 10, 18, 1.4, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 }));
     for (let i = 0; i < 14; i++){ const s = .5 + Math.random() * .6, b = new T.Mesh(new T.BoxGeometry(s, s, s), E.mat([0xc83a3a, 0x4a8ac8, 0x5ab86a, 0xe8c25a][i % 4])); R.place(b, -6 + Math.random() * 15, 6.5 + Math.random() * 11, 1.4 + s / 2); }
     this.s = [soldier(R, E, { path: [[-9, 7], [-9, 17]], sp: 2.2, b: [-10, 10, .5, 21.5] })];
   },
@@ -96,7 +96,7 @@ const alley = {
   hint: 'A jack box plays its tune when ANYTHING comes near — you, a decoy lantern, or a toy block you throw next to it. Then it pops and freezes everyone close by, and takes a few seconds to wind back down. Set them off from a distance, then walk past while they rewind.',
   build(R, E){
     EE = E; const T = E.THREE;
-    R.block(-10, 10.2, -3.5, 10.8, 1.4, E.mat(0x8a5a3a)); R.block(4, 10.2, 10, 10.8, 1.4, E.mat(0x8a5a3a)); R.block(-1, 16.4, 10, 17, 1.4, E.mat(0x8a5a3a));
+    R.block(-10, 10.2, -3.5, 10.8, 1.4, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })); R.block(4, 10.2, 10, 10.8, 1.4, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })); R.block(-1, 16.4, 10, 17, 1.4, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 }));
     this.jm = jackMeshes(R, E, JA2);
   },
   init(){ return { jk: JA2.map(() => [0, 0]), items: BL2.map(([x, lz], i) => mkItem('block', x, lz, { n: i })), land: [], done: 0 }; },
@@ -133,7 +133,7 @@ const conveyor = {
     }
     SWP3.forEach(([x, lz], i) => R.plate('s' + i, x, lz, 0xffd34a, 1.3, '⟳'));
     const hop = new T.Mesh(new T.CylinderGeometry(1, .5, 1.4, 10, 1, true), new T.MeshStandardMaterial({ color: 0x8a8a94, metalness: .7, side: T.DoubleSide })); R.place(hop, BX3(HOP3[0]), BL3(HOP3[1]) + .4, 2.6);
-    const box = new T.Mesh(new T.BoxGeometry(2.2, 1.2, 1.6), E.mat(0xc83a3a)); R.place(box, BX3(BOX3[0]), BL3(BOX3[1]) - 2.3, .6); const bow = new T.Mesh(new T.TorusGeometry(.35, .12, 8, 16), E.mat(0xe8c25a)); R.place(bow, BX3(BOX3[0]), BL3(BOX3[1]) - 2.3, 1.4);
+    const box = new T.Mesh(new T.BoxGeometry(2.2, 1.2, 1.6), E.tex('polka_paper', { color: 0xc83a3a, tile: 1 })); R.place(box, BX3(BOX3[0]), BL3(BOX3[1]) - 2.3, .6); const bow = new T.Mesh(new T.TorusGeometry(.35, .12, 8, 16), E.mat(0xe8c25a)); R.place(bow, BX3(BOX3[0]), BL3(BOX3[1]) - 2.3, 1.4);
     this.orbs = orbRow(E, R, 3, 4, 1.4, 1.3, 1.8);
     this.s = [soldier(R, E, { path: [[-9, 3], [-9, 18], [9, 18], [9, 3]], sp: 2, b: [-10, 10, .5, 21.5], noCollide: true })];
   },
@@ -173,7 +173,7 @@ const blocks = {
   hint: 'Walk into a block to push it one square. Spell B-O-O on the three gold squares at the top, left to right. A block in a corner is stuck for good — use the ↺ pad to reset. The soldier marching up the right side can\'t walk through blocks.',
   build(R, E){
     EE = E; const T = E.THREE;
-    WALL4.forEach(([c, r]) => { R.block(SX4(c) - 1.2, SL4(r) - 1.2, SX4(c) + 1.2, SL4(r) + 1.2, 1.6, E.mat(0x8a5a3a)); });
+    WALL4.forEach(([c, r]) => { R.block(SX4(c) - 1.2, SL4(r) - 1.2, SX4(c) + 1.2, SL4(r) + 1.2, 1.6, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })); });
     TGT4.forEach(([c, r, l]) => { const m = new T.Mesh(new T.BoxGeometry(2.3, .06, 2.3), E.glow(0xe8c25a, .5)); R.place(m, SX4(c), SL4(r), .03); });
     R.block(-10, 18.5, 7.5, 19, 2.4, E.mat(0x6a4a2a));
     this.bm = BLK4.map(([c, r, l]) => { const m = new T.Mesh(new T.BoxGeometry(2.2, 2, 2.2), E.mat(0xffffff, { map: E.canvasTex(128, 128, (x, w, h) => { x.fillStyle = l === 'B' ? '#4a8ac8' : '#c83a3a'; x.fillRect(0, 0, w, h); x.strokeStyle = '#f2ead8'; x.lineWidth = 8; x.strokeRect(6, 6, w - 12, h - 12); x.fillStyle = '#f2ead8'; x.font = 'bold 90px Georgia'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(l, w / 2, h / 2 + 6); }) })); E.scene.add(m); return m; });
@@ -212,7 +212,7 @@ const tops = {
   hint: 'The tops bounce off the walls and curve towards any decoy lantern nearby. Drop a lantern near a toy chest in a corner and a top will swerve into it. Catch all three — and don\'t let one hit you.',
   build(R, E){
     EE = E; const T = E.THREE;
-    BOX5.forEach(([x, lz]) => { const b = new T.Mesh(new T.BoxGeometry(2.4, .5, 2.4), E.mat(0x8a5a3a)); R.place(b, x, lz, .25); const i = new T.Mesh(new T.BoxGeometry(2, .05, 2), E.glow(0xe8c25a, .4)); R.place(i, x, lz, .51); });
+    BOX5.forEach(([x, lz]) => { const b = new T.Mesh(new T.BoxGeometry(2.4, .5, 2.4), E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })); R.place(b, x, lz, .25); const i = new T.Mesh(new T.BoxGeometry(2, .05, 2), E.glow(0xe8c25a, .4)); R.place(i, x, lz, .51); });
     this.tm = TOP5.map((_, i) => { const g = new T.Group(); const body = new T.Mesh(new T.ConeGeometry(.8, 1.1, 16), E.mat([0xc83a3a, 0x4a8ac8, 0x5ab86a][i], { metalness: .3 })); body.rotation.x = Math.PI; body.position.y = .75; g.add(body); const cap = new T.Mesh(new T.CylinderGeometry(.8, .8, .2, 16), E.mat(0xe8c25a)); cap.position.y = 1.35; g.add(cap); const st = new T.Mesh(new T.CylinderGeometry(.07, .07, .6, 6), E.mat(0xe8c25a)); st.position.y = 1.7; g.add(st); E.scene.add(g); return g; });
     this.orbs = orbRow(E, R, 3, -1.3, 21.2, 1.3, 2.4);
   },
@@ -254,8 +254,8 @@ const dollhouse = {
       R.wall(ex - .2, c.l1, ex + .2, c.door[1]); R.wall(ex - .2, c.door[3], ex + .2, c.l2);
       R.door('c' + i, c.door[0], c.door[1], c.door[2], c.door[3], 'gate');
     });
-    const tbl = new T.Mesh(new T.BoxGeometry(4.2, .9, 4.4), E.mat(0x8a5a3a)); R.place(tbl, 0, 12, .45);
-    const roof = new T.Mesh(new T.ConeGeometry(2.2, 1.4, 4), E.mat(0xc83a3a)); roof.rotation.y = Math.PI / 4; R.place(roof, 0, 12, 1.6);
+    const tbl = new T.Mesh(new T.BoxGeometry(4.2, .9, 4.4), E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })); R.place(tbl, 0, 12, .45);
+    const roof = new T.Mesh(new T.ConeGeometry(2.2, 1.4, 4), E.tex('red_tin', { color: 0xc83a3a, metalness: .4, roughness: .45, tile: 1.4 })); roof.rotation.y = Math.PI / 4; R.place(roof, 0, 12, 1.6);
     MODEL6.forEach(([x, lz], i) => R.plate('m' + i, x + (i === 1 ? 1.9 : -1.9), lz, 0xe8c25a, 1.1, ['Ⅰ', 'Ⅱ', 'Ⅲ'][i]));
     R.block(-2.1, 9.8, 2.1, 14.2, .01, E.mat(0));
     this.s = [
@@ -356,7 +356,7 @@ const mice = {
   hint: 'A mouse sitting at home looks straight up, down, left and right. If you (or a lantern) are in its line of sight, it zooms along that line until it hits a wall — then it has to wind back up and trundle home. Bait them with decoys, or cross their lines while they\'re away. Collect the 3 cheeses.',
   build(R, E){
     EE = E; const T = E.THREE;
-    MW9.forEach(([c, r]) => R.block(MX9(c) - 1.2, ML9(r) - 1.2, MX9(c) + 1.2, ML9(r) + 1.2, 1.6, E.mat(0x8a5a3a)));
+    MW9.forEach(([c, r]) => R.block(MX9(c) - 1.2, ML9(r) - 1.2, MX9(c) + 1.2, ML9(r) + 1.2, 1.6, E.tex('workshop_boards', { color: 0x8a5a3a, tile: 1.6 })));
     R.block(-10, 18.5, -1.2, 19, 2.4, E.mat(0x6a4a2a)); R.block(1.2, 18.5, 10, 19, 2.4, E.mat(0x6a4a2a));
     this.mm = MICE9.map(() => { const g = new T.Group(); const b = new T.Mesh(new T.SphereGeometry(.45, 12, 8), E.mat(0x9a9aa4, { metalness: .6 })); b.scale.set(1, .7, 1.5); b.position.y = .35; g.add(b); for (const s of [-1, 1]){ const ear = new T.Mesh(new T.CircleGeometry(.2, 10), E.mat(0xe8a0b0, { side: T.DoubleSide })); ear.position.set(s * .25, .75, .35); g.add(ear); } const tail = new T.Mesh(new T.TorusGeometry(.25, .04, 4, 8, Math.PI * 1.4), E.mat(0xe8a0b0)); tail.position.set(0, .3, -.7); g.add(tail); const k = new T.Mesh(new T.TorusGeometry(.18, .04, 6, 10), E.mat(0xd4af37)); k.position.set(0, .8, -.3); g.add(k); g.userData.k = k; E.scene.add(g); return g; });
     this.cm = CH9.map(([c, r]) => { const m = new T.Mesh(new T.CylinderGeometry(.45, .45, .35, 3), E.mat(0xffd34a)); R.place(m, MX9(c), ML9(r), .3); return m; });

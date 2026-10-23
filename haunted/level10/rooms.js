@@ -6,7 +6,8 @@ import { orbRow, setOrbs, near, inRect } from '../lib.js';
 let EE = null;
 const BLUE = 0, PINK = 1, CNAME = ['blue', 'pink'];
 const marble = E => E.mat(0xffffff, { roughness: .35, map: E.tiledTex(128, 128, (x, w, h) => { for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++){ x.fillStyle = (i + j) % 2 ? '#d9d4e4' : '#3a3448'; x.fillRect(i * 32, j * 32, 32, 32); } x.strokeStyle = '#c8a24a'; x.lineWidth = 2; x.strokeRect(0, 0, w, h); }, 5, 5) });
-const mirrorMat = E => E.mat(0xd8e4f4, { metalness: .95, roughness: .06, emissive: 0x334466, emissiveIntensity: .35 });
+let _mirror = null;
+const mirrorMat = E => _mirror || (_mirror = E.tex('old_mirror', { color: 0xd8e4f4, metalness: .85, roughness: .08, emissive: 0x334466, emissiveIntensity: .35, tile: 2 }));
 const goldMat = E => E.mat(0xd4af37, { metalness: .8, roughness: .3, emissive: 0x5a4210, emissiveIntensity: .4 });
 const voidMat = E => new E.THREE.MeshBasicMaterial({ color: 0x05040a });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
@@ -489,6 +490,7 @@ const queen = {
 export default {
   level: 10,
   // texture pack in tex/level10/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'panel', tex: 'old_mirror', w: 1.2, h: 1.9, y: 1.3, every: 6, frame: true, metalness: .6, roughness: .15, color: 0xb8c0c8, skip: 3 },   // wall dressing: foxed old mirrors (engine wallDecor)
   wallImg: 'palace_wall', trimImg: 'palace_gilt', texVer: 1,
   texFloors: {
     "The Gilded Foyer": "foyer_marble",

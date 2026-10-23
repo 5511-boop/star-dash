@@ -8,9 +8,9 @@ const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -
 const home = it => { it.s = 0; it.x = it.hx; it.lz = it.hlz; it.w = -1; it.y = 0; };
 function trunkMesh(E, color = 0x7a4a2a){
   const T = E.THREE, g = new T.Group();
-  const body = new T.Mesh(new T.BoxGeometry(1.5, .8, 1), E.mat(color)); body.position.y = .4; g.add(body);
+  const body = new T.Mesh(new T.BoxGeometry(1.5, .8, 1), E.tex('luggage_leather', { color, tint: new E.THREE.Color(color).lerp(new E.THREE.Color(0xffffff), .45).getHex(), tile: 1.2 })); body.position.y = .4; g.add(body);
   const lid = new T.Group(); lid.position.set(0, .8, -.5); g.add(lid);
-  const top = new T.Mesh(new T.BoxGeometry(1.52, .25, 1.02), E.mat(color)); top.position.set(0, .12, .5); lid.add(top);
+  const top = new T.Mesh(new T.BoxGeometry(1.52, .25, 1.02), E.tex('luggage_leather', { color, tint: new E.THREE.Color(color).lerp(new E.THREE.Color(0xffffff), .45).getHex(), tile: 1.2 })); top.position.set(0, .12, .5); lid.add(top);
   const band = new T.Mesh(new T.BoxGeometry(1.55, .82, .1), E.mat(0xc9a24a, { metalness: .6 })); band.position.y = .4; g.add(band);
   const teeth = new T.Group(); for (let i = 0; i < 6; i++){ const t = new T.Mesh(new T.ConeGeometry(.07, .2, 4), E.mat(0xf2f2e8)); t.position.set(-.6 + i * .24, .78, .45); t.rotation.x = Math.PI; teeth.add(t); } teeth.visible = false; g.add(teeth);
   g.userData = { lid, teeth }; return g;
@@ -69,7 +69,7 @@ const inspection = {
   hint: 'Both levers must be held, but there\'s only one ticket. The Conductor walks to one of you at a time — throw the ticket to whoever he\'s heading for before he gets there!',
   build(R, E){
     const T = E.THREE;
-    for (const [x, lz] of [[-7.5, 5], [7.5, 5], [-7.5, 9.5], [7.5, 9.5], [-7.5, 14], [7.5, 14]]){ const s = new T.Mesh(new T.BoxGeometry(2.4, .9, 1.2), E.mat(0x6a2a3a)); R.place(s, x, lz, .45); R.block(x - 1.2, lz - .6, x + 1.2, lz + .6, .01, E.mat(0)); }
+    for (const [x, lz] of [[-7.5, 5], [7.5, 5], [-7.5, 9.5], [7.5, 9.5], [-7.5, 14], [7.5, 14]]){ const s = new T.Mesh(new T.BoxGeometry(2.4, .9, 1.2), E.texFrom(8, 'seat_red', { color: 0x6a2a3a, tile: 1.2 })); R.place(s, x, lz, .45); R.block(x - 1.2, lz - .6, x + 1.2, lz + .6, .01, E.mat(0)); }
     R.plate('A', PA[0], PA[1], 0xffc46b, 1.6, '⇩'); R.plate('B', PB[0], PB[1], 0xffc46b, 1.6, '⇩');
     this.cond = R.ghost({ home: [0, 20.5], ...conductorMesh, flashImmune: true, label: 'the Conductor', sp: 0, scale: 1.2, harmless: true,
       think: (g, dt, st, R2, E2, P) => {
@@ -248,8 +248,8 @@ const engineRoom = {
   hint: 'Coal makes the fire hotter and the pressure climbs; the valve plate (far left) vents steam. Keep the needle in the GREEN band. One shovels coal (throw it into the firebox), the other works the valve.',
   build(R, E){
     const T = E.THREE;
-    const boil = new T.Mesh(new T.CylinderGeometry(2.2, 2.2, 9, 20), E.mat(0x2a2a30, { metalness: .6 })); boil.rotation.z = Math.PI / 2; R.place(boil, 1, 12, 2.2); R.block(-3.5, 9.8, 5.5, 14.2, .01, E.mat(0));
-    const fb = new T.Mesh(new T.BoxGeometry(2, 1.6, 1.4), E.mat(0x1a1a1a, { metalness: .5 })); R.place(fb, BOX[0], BOX[1] + 1.2, .8);
+    const boil = new T.Mesh(new T.CylinderGeometry(2.2, 2.2, 9, 20), E.tex('boiler_iron', { color: 0x2a2a30, metalness: .6, roughness: .5, tile: 2.5 })); boil.rotation.z = Math.PI / 2; R.place(boil, 1, 12, 2.2); R.block(-3.5, 9.8, 5.5, 14.2, .01, E.mat(0));
+    const fb = new T.Mesh(new T.BoxGeometry(2, 1.6, 1.4), E.tex('boiler_iron', { color: 0x1a1a1a, metalness: .5, roughness: .5, tile: 1.4 })); R.place(fb, BOX[0], BOX[1] + 1.2, .8);
     this.fire = new T.Mesh(new T.BoxGeometry(1.4, .8, .1), E.glow(0xff6a1a, 1)); R.place(this.fire, BOX[0], BOX[1] + .48, .6);
     const pile = new T.Mesh(new T.ConeGeometry(1.4, 1, 10), E.mat(0x111111)); R.place(pile, PILE[0], PILE[1] - .6, .5);
     R.plate('V', -8.5, 18, 0x9ad8ff, 1.6, '♨');
@@ -300,7 +300,7 @@ const dining = {
   hint: 'You can only hear a diner\'s order when you stand right next to them. One of you listens and tells the other; the other grabs the right dish from the kitchen and throws it onto the diner\'s table. A wrong dish makes them throw a fit.',
   build(R, E){
     const T = E.THREE;
-    DINERS.forEach(([x, lz]) => { const tb = new T.Mesh(new T.CylinderGeometry(1.1, 1.1, .1, 16), E.mat(0xf2ead8)); R.place(tb, x + (x < 0 ? 2 : -2), lz, .9); const leg = new T.Mesh(new T.CylinderGeometry(.1, .1, .9, 6), E.mat(0x3a2a1a)); R.place(leg, x + (x < 0 ? 2 : -2), lz, .45); R.block(x + (x < 0 ? 1 : -3), lz - 1, x + (x < 0 ? 3 : -1), lz + 1, .01, E.mat(0)); });
+    DINERS.forEach(([x, lz]) => { const tb = new T.Mesh(new T.CylinderGeometry(1.1, 1.1, .1, 16), E.common('cloth', { color: 0xf2ead8, tile: .8 })); R.place(tb, x + (x < 0 ? 2 : -2), lz, .9); const leg = new T.Mesh(new T.CylinderGeometry(.1, .1, .9, 6), E.mat(0x3a2a1a)); R.place(leg, x + (x < 0 ? 2 : -2), lz, .45); R.block(x + (x < 0 ? 1 : -3), lz - 1, x + (x < 0 ? 3 : -1), lz + 1, .01, E.mat(0)); });
     const counter = new T.Mesh(new T.BoxGeometry(12, 1, 1), E.mat(0x8a6a42)); R.place(counter, 0, 21.2, .5);
     this.diners = DINERS.map(([x, lz]) => R.ghost({ home: [x, lz], look: 'hat', tint: 0xd8c8ff, harmless: true, sp: 0, label: 'a diner', think: (g, dt) => { g.ry = x < 0 ? Math.PI / 2 : -Math.PI / 2; return true; } }));
     this.orbs = orbRow(E, R, 4, -1.95, 2.2, 1.3, 1.6);
@@ -409,7 +409,7 @@ const conductor = {
   build(R, E){
     const T = E.THREE;
     this.cords = CORDS.map(([x, lz], i) => { R.plate('c' + i, x, lz, 0xff5050, 1.6, '⛔'); const c = new T.Mesh(new T.CylinderGeometry(.05, .05, 2, 6), E.mat(0xc03030)); R.place(c, x + (x < 0 ? -.8 : .8), lz, 1.6); const h = new T.Mesh(new T.TorusGeometry(.2, .05, 6, 12), E.mat(0xd4af37, { metalness: .7 })); R.place(h, x + (x < 0 ? -.8 : .8), lz, .55); return h; });
-    for (const [x, lz] of [[-4, 8], [4, 8], [-4, 14], [4, 14], [0, 11]]){ const s = new T.Mesh(new T.BoxGeometry(2, .9, 1.2), E.mat(0x6a2a3a)); R.place(s, x, lz, .45); R.block(x - 1, lz - .6, x + 1, lz + .6, .01, E.mat(0)); }
+    for (const [x, lz] of [[-4, 8], [4, 8], [-4, 14], [4, 14], [0, 11]]){ const s = new T.Mesh(new T.BoxGeometry(2, .9, 1.2), E.texFrom(8, 'seat_red', { color: 0x6a2a3a, tile: 1.2 })); R.place(s, x, lz, .45); R.block(x - 1, lz - .6, x + 1, lz + .6, .01, E.mat(0)); }
     this.boss = R.ghost({ home: [0, 20], ...conductorMesh, scale: 1.6, flashImmune: true, label: 'the Conductor', sp: 0, touch: 1.4, gone: st => !!st.done,
       think: (g, dt, st, R2, E2, P) => {
         const m = g.mem;

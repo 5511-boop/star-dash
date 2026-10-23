@@ -1,0 +1,50 @@
+# Level 16: The Wax Museum: maroon and gilt, velvet ropes, waxy creams that sag and drip, orange molten wax.
+def wax(g, base=(.82, .72, .55), seed=0, drips=True):
+    n = g.noise(4, 5, .6, seed, dist=1)
+    col = g.mix(g._sstep(.3, .75, n), lin(tuple(c * .75 for c in base)), lin(base))
+    h = n
+    if drips:
+        d = g._sstep(.55, .6, g.noise(5, 3, .5, seed + 1, ax=4, ay=.5))
+        col = g.mix(g.m('MULTIPLY', d, .5), col, lin(tuple(min(1, c * 1.1) for c in base)))
+        h = g.m('ADD', n, g.m('MULTIPLY', d, .4))
+    return grime(g, col, .25, 3, seed + 2), g.bump(h, .35, .03)
+
+@use('The Velvet Ropes (floor): crimson carpet, gold border')
+def rope_carpet(g): return velvet(g, (.3, .03, .06), (.1, .01, .02), 1, (.55, .4, .15), 2)
+@use('The Figure Gallery (floor): dark green gallery carpet')
+def gallery_carpet(g): return velvet(g, (.05, .12, .08), (.02, .05, .03), 2, (.35, .3, .15), 4)
+@use('The Melting Floor (floor): soft cream wax, pooled and dripping')
+def melting_wax(g): return wax(g, (.85, .74, .55), 3)
+@use('The Impostor (floor): large white marble tiles, grey veins')
+def impostor_marble(g): return marble(g, (.66, .65, .62), (.35, .35, .38), 2, 4)
+@use('The Wax Chessboard (floor): cream and oxblood wax squares, softened edges')
+def wax_chess(g):
+    col, n = tiles(g, 8, (.75, .66, .5), (.3, .06, .06), 'checker', (.5, .42, .32), .05, 0, 5, .2)
+    return col, g.bump(g.noise(6, 4, .6, 6), .3, .03, n)
+@use('The Wax Bath (floor): molten orange wax, swirling (pair with an emissive tint)')
+def wax_bath(g):
+    n = g.noise(3, 6, .65, 7, dist=3)
+    col = g.mix(g._sstep(.3, .75, n), lin((.6, .18, .02)), lin((1, .62, .2)))
+    sk = g._sstep(.66, .72, g.noise(5, 4, .6, 8))
+    return g.mix(g.m('MULTIPLY', sk, .6), col, lin((.85, .7, .5))), g.bump(n, .3, .03)
+@use('The Dark Gallery (floor): threadbare black-violet carpet')
+def dark_carpet(g): return velvet(g, (.06, .03, .08), (.02, .01, .03), 9)
+@use('The Fire Exit (floor): scuffed green and cream service tiles')
+def exit_tiles(g): return tiles(g, 6, (.3, .4, .32), (.6, .58, .5), 'checker', (.15, .15, .14), .02, .6, 10, .5)
+@use('The Twin Exhibits (floor): rose marble, mirrored veins')
+def twin_marble(g): return marble(g, (.5, .36, .35), (.75, .65, .6), 3, 11, second=(.46, .34, .34))
+@use('Madame Wax (floor): black marble with gold veins')
+def madame_marble(g): return marble(g, (.05, .045, .05), (.6, .45, .15), 3, 12, second=(.08, .07, .08))
+@use('Vault (tutorial room floor): dark steel tread plate')
+def vault_tread(g): return tread(g, (.18, .17, .18), 10, 13, .1)
+@use('walls (wallImg): maroon striped wallpaper over dark wainscot')
+def museum_wall(g):
+    col, n = cloth_stripes(g, [(.3, .06, .08), (.22, .04, .06)], 10, 14)
+    wain, _ = ph_tex(g, 'dark_wooden_planks', 4, (.7, .5, .4), .8, .8, .3, 15, swap=True)
+    return g.mix(g.m('SUBTRACT', 1, g._sstep(.3, .305, g.v)), col, wain), n
+@use('trim (trimImg), frames, rope posts: gilt')
+def museum_gilt(g): return brass(g, (.75, .56, .22), 16, (.35, .3, .2))
+@use('wax figures: cream wax skin')
+def wax_skin(g): return wax(g, (.85, .72, .62), 17, False)
+@use('velvet ropes, plinth covers: red velvet')
+def rope_velvet(g): return velvet(g, (.38, .03, .06), (.15, .01, .03), 18)

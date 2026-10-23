@@ -404,6 +404,7 @@ const finale = {
 export default {
   level: 8,
   // texture pack in tex/level8/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'drape', tex: 'opera_curtain', w: 2.2, h: 2.3, y: 1.2, every: 6, color: 0x6a1020 },   // wall dressing: velvet drapes (engine wallDecor)
   wallImg: 'opera_wall', trimImg: 'gilt', texVer: 1,
   texFloors: {
     "The Grand Lobby": "lobby_marble",

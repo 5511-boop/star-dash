@@ -152,7 +152,8 @@ const deck = {
   build(R, E){
     const T = E.THREE, rail = E.mat(0x8a6a42);
     R.block(-7.3, 3.7, 7.3, 4, .6, rail); R.block(-7.3, 18, 7.3, 18.3, .6, rail); R.block(-7.3, 3.7, -7, 18.3, .6, rail); R.block(7, 3.7, 7.3, 18.3, .6, rail);
-    for (const [c, r] of TILT.posts){ const p = new T.Mesh(new T.CylinderGeometry(.55, .6, 1.2, 12), E.mat(0x6a4a2a)); R.place(p, tcx(c), tcl(r), .6); }
+    for (const [c, r] of TILT.posts){ const p = new T.Mesh(new T.CylinderGeometry(.55, .6, 1.2, 12), E.mat(0x6a4a2a)); R.place(p, tcx(c), tcl(r), .6);
+      const coil = new T.Mesh(new T.TorusGeometry(.72, .1, 8, 20), E.tex('rope', { color: 0x9a8058, rx: 6, ry: 1 })); coil.rotation.x = Math.PI / 2; R.place(coil, tcx(c), tcl(r), .1); }
     for (const [c, r] of TILT.holes){ R.floor(tcx(c) - .95, tcl(r) - .95, tcx(c) + .95, tcl(r) + .95, new T.MeshBasicMaterial({ color: 0x050302 }), .02); }
     this.crates = TILT.crates.map(() => { const m = new T.Mesh(new T.BoxGeometry(1.7, 1.2, 1.7), E.mat(0x9a7442)); E.scene.add(m); return m; });
     for (const [s, ps] of Object.entries(SIDES)) ps.forEach((p, i) => R.plate(s + i, p[0], p[1], 0x4fd1c5, 1.5, { W: '◀', E: '▶', S: '▼', N: '▲' }[s]));
@@ -277,7 +278,7 @@ const valves = {
     this.waters = CH.map(([a, b, c, d]) => R.floor(a, b, c, d, waterMat(E), .03));
     VALVES.forEach(([ch, mask, x, lz], i) => {
       R.zone('v' + i, x, lz, 1.6);
-      const w = new T.Mesh(new T.TorusGeometry(.6, .12, 8, 18), E.mat(0xc04040, { metalness: .5 })); w.rotation.x = Math.PI / 2; R.place(w, x, lz, .9); this['w' + i] = w;
+      const w = new T.Mesh(new T.TorusGeometry(.6, .12, 8, 18), E.tex('buoy_stripes', { color: 0xc04040, rx: 4, ry: 1 })); w.rotation.x = Math.PI / 2; R.place(w, x, lz, .9); this['w' + i] = w;
       const post = new T.Mesh(new T.CylinderGeometry(.08, .08, .9, 6), E.mat(0x6a6a72)); R.place(post, x, lz, .45);
     });
     this.labels = ['A', 'B', 'C', 'D'];
@@ -306,7 +307,7 @@ const fog = {
     for (const [x, lz] of FOG_ROCKS) R.block(x - .9, lz - .9, x + .9, lz + .9, 1.3, E.mat(0x4a4a52));
     this.buoys = BUOY_SPOTS.map(([x, lz]) => {
       const g = new T.Group();
-      const b = new T.Mesh(new T.CylinderGeometry(.45, .55, 1.2, 12), E.mat(0xc03030)); b.position.y = .6; g.add(b);
+      const b = new T.Mesh(new T.CylinderGeometry(.45, .55, 1.2, 12), E.tex('buoy_stripes', { color: 0xc03030, rx: 1, ry: 1 })); b.position.y = .6; g.add(b);
       const s = new T.Mesh(new T.CylinderGeometry(.46, .46, .3, 12), E.mat(0xf0f0f0)); s.position.y = .7; g.add(s);
       const bell = new T.Mesh(new T.ConeGeometry(.25, .4, 10), E.mat(0xd4af37, { metalness: .8 })); bell.position.y = 1.5; g.add(bell);
       const l = new T.Mesh(new T.SphereGeometry(.12, 8, 6), E.glow(0xfff1a0, 2)); l.position.y = 1.9; g.add(l);
@@ -383,6 +384,7 @@ tide.build = function(R, E){
 export default {
   level: 4,
   // texture pack in tex/level4/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'ring', tex: 'buoy_stripes', w: .9, y: 1.4, every: 7, color: 0xc04040, rx: 4 },   // wall dressing: life rings (engine wallDecor)
   wallImg: 'sea_wall', trimImg: 'verdigris', texVer: 1,
   texFloors: {
     "The Pier": "pier_boards",

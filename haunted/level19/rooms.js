@@ -5,7 +5,7 @@ import { orbRow, setOrbs, near, inRect, textPlane, redraw } from '../lib.js';
 
 let EE = null;
 const solo = () => EE && EE.solo();
-const cloudF = E => E.mat(0xffffff, { roughness: .8, map: E.tiledTex(128, 128, (x, w, h) => { const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#3a2a5a'); g.addColorStop(1, '#5a3a6a'); x.fillStyle = g; x.fillRect(0, 0, w, h); x.fillStyle = 'rgba(255,220,255,.12)'; for (let i = 0; i < 12; i++){ x.beginPath(); x.arc(Math.random() * w, Math.random() * h, 6 + Math.random() * 14, 0, 7); x.fill(); } x.fillStyle = '#ffffffaa'; for (let i = 0; i < 10; i++) x.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5); }, 5, 5) });
+const cloudF = E => E.tex('pillow_cloud', { tile: 3, roughness: .8, fallback: E.tiledTex(128, 128, (x, w, h) => { const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#3a2a5a'); g.addColorStop(1, '#5a3a6a'); x.fillStyle = g; x.fillRect(0, 0, w, h); x.fillStyle = 'rgba(255,220,255,.12)'; for (let i = 0; i < 12; i++){ x.beginPath(); x.arc(Math.random() * w, Math.random() * h, 6 + Math.random() * 14, 0, 7); x.fill(); } x.fillStyle = '#ffffffaa'; for (let i = 0; i < 10; i++) x.fillRect(Math.random() * w, Math.random() * h, 1.5, 1.5); }, 5, 5) });
 const voidMat = E => new E.THREE.MeshBasicMaterial({ color: 0x0a0618 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
 const rewTip = 'Press <b>R</b> (phone: double-tap ☀) to <b>rewind</b> 3 seconds — a dream echo replays what you undid';
@@ -295,6 +295,7 @@ const king = {
 export default {
   level: 19,
   // texture pack in tex/level19/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'disc', tex: 'moon_surface', w: 1.1, y: 1.6, every: 7, glow: .7, color: 0xe8e4d8 },   // wall dressing: moon lamps (engine wallDecor)
   wallImg: 'dream_wall', trimImg: 'lavender_silver', texVer: 1,
   texFloors: {
     "The Waking Door": "waking_clouds",

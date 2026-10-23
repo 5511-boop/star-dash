@@ -370,6 +370,7 @@ const oldKnocker = {
 export default {
   level: 13,
   // texture pack in tex/level13/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'cluster', tex: 'crystal_face', w: 1.4, every: 7, glow: .6, color: 0x9a6bff, skip: 2 },   // wall dressing: glowing crystals (engine wallDecor)
   wallImg: 'coal_seam', trimImg: 'mine_timber', texVer: 1,
   texFloors: {
     "The Lamp House": "lamphouse_boards",

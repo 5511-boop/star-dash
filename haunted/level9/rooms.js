@@ -372,6 +372,7 @@ const king = {
 export default {
   level: 9,
   // texture pack in tex/level9/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'panel', tex: 'stained_glass', w: 1.1, h: 1.8, y: 1.45, every: 5, glow: .55, frame: true, mullion: true, color: 0x8a6a3a },   // wall dressing: stained-glass windows (engine wallDecor)
   wallImg: 'cathedral_wall', trimImg: 'wrought_iron', texVer: 1,
   texFloors: {
     "The Collapsed Nave": "nave_flags",

@@ -716,7 +716,7 @@ export default {
   story: 'The doors are locked behind you. Ghosts freeze anyone they touch — touch your frozen partner to break the ice. Escape together.',
   winTitle: 'You escaped! 🌙',
   accent: '#9b6bff',
-  wallImg: 'wallpaper', wallColor: 0x3a2b4d, trimColor: 0x2e1d14, doorImg: 'door', frontDoorImg: 'frontdoor', doorColor: 0x5b3a22,
+  wallImg: 'wallpaper', trimImg: 'trim', wallColor: 0x3a2b4d, trimColor: 0x2e1d14, doorImg: 'door', frontDoorImg: 'frontdoor', doorColor: 0x5b3a22,
   texVer: 2, exposure: 1.7, sky: 0x8a8fc8, ambient: .9, bg: 0x05060c, lantern: 1.8, fancy: true,
   ghostMult: 1,
   rooms: [foyer, library, gallery, ballroom, cellar, mirrors, storeroom, music, observatory, crypt],

@@ -5,12 +5,12 @@ import { orbRow, setOrbs, near, inRect, textPlane, redraw, knight } from '../lib
 let EE = null;
 const solo = () => EE && EE.solo();
 const parquet = E => E.mat(0xffffff, { map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#4a3222'; x.fillRect(0, 0, w, h); for (let i = 0; i < 8; i++){ x.fillStyle = i % 2 ? '#563a26' : '#432c1d'; x.fillRect((i % 4) * 32, Math.floor(i / 4) * 64, 32, 64); } x.strokeStyle = '#2a1a10'; x.lineWidth = 2; for (let i = 0; i <= 4; i++){ x.beginPath(); x.moveTo(i * 32, 0); x.lineTo(i * 32, h); x.stroke(); } }, 6, 6) });
-const shelfMat = E => E.mat(0xffffff, { map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#3a2416'; x.fillRect(0, 0, w, h); const C = ['#7a2a2a', '#2a4a7a', '#2a6a3a', '#8a6a2a', '#5a2a6a', '#6a6a6a']; for (let r = 0; r < 2; r++) for (let i = 0; i < 8; i++){ x.fillStyle = C[(i * 3 + r) % C.length]; x.fillRect(i * 8 + 1, r * 32 + 4, 6, 26); } }, 2, 2) });
+const shelfMat = E => E.tex('bookshelf', { tile: 2.2, fallback: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#3a2416'; x.fillRect(0, 0, w, h); const C = ['#7a2a2a', '#2a4a7a', '#2a6a3a', '#8a6a2a', '#5a2a6a', '#6a6a6a']; for (let r = 0; r < 2; r++) for (let i = 0; i < 8; i++){ x.fillStyle = C[(i * 3 + r) % C.length]; x.fillRect(i * 8 + 1, r * 32 + 4, 6, 26); } }, 2, 2) });
 const fakeMat = E => new E.THREE.MeshStandardMaterial({ color: 0x9a6bff, emissive: 0x6a3aff, emissiveIntensity: .6, transparent: true, opacity: .35 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
 const rect = (R, x, lz, hw, hd = hw) => R.rect(x - hw, lz - hd, x + hw, lz + hd);
 const bookMesh = (E, col) => { const T = E.THREE, g = new T.Group(); const b = new T.Mesh(new T.BoxGeometry(.5, .14, .38), E.mat(col)); g.add(b); const p = new T.Mesh(new T.BoxGeometry(.46, .1, .34), E.mat(0xf0e6c8)); p.position.set(.03, 0, 0); g.add(p); return g; };
-const pageMesh = E => { const m = new E.THREE.Mesh(new E.THREE.PlaneGeometry(.5, .65), new E.THREE.MeshStandardMaterial({ color: 0xf4ecd4, emissive: 0x8a8060, emissiveIntensity: .5, side: E.THREE.DoubleSide })); m.rotation.x = -.6; return m; };
+const pageMesh = E => { const m = new E.THREE.Mesh(new E.THREE.PlaneGeometry(.5, .65), E.tex('parchment_ink', { color: 0xf4ecd4, emissive: 0x8a8060, emissiveIntensity: .5, side: E.THREE.DoubleSide, rx: 1, ry: 1 })); m.rotation.x = -.6; return m; };
 const runTip = () => EE && EE.solo !== undefined ? 'Hold <b>Shift</b> (phone: RUN button) while moving' : '';
 // a dynamic ghost-wall mesh pool: boxes re-laid every frame from a list of rects
 function wallPool(E, n, mat){ const T = E.THREE; return Array.from({ length: n }, () => { const m = new T.Mesh(new T.BoxGeometry(1, 2.6, 1), mat || E.spectralMat); m.visible = false; E.scene.add(m); return m; }); }
@@ -336,6 +336,7 @@ const archivist = {
 export default {
   level: 11,
   // texture pack in tex/level11/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'panel', tex: 'bookshelf', w: 2.4, h: 2.2, y: 1.1, every: 5, frame: true, color: 0x3a2416 },   // wall dressing: bookshelves (engine wallDecor)
   wallImg: 'archive_wall', trimImg: 'archive_brass', texVer: 1,
   texFloors: {
     "The Reading Room": "reading_parquet",

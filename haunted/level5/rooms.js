@@ -68,7 +68,7 @@ const flags = {
     this.flags = FLAGS.map(([x, lz], i) => {
       R.plate('f' + i, x, lz, 0xffd84d, 1.8, '⚑');
       const pole = new T.Mesh(new T.CylinderGeometry(.06, .06, 3.2, 6), E.mat(0x8a6a42)); R.place(pole, x + (x < 0 ? -1.3 : 1.3), lz, 1.6);
-      const cloth = new T.Mesh(new T.PlaneGeometry(1.1, .7), new T.MeshStandardMaterial({ color: [0xff5a5a, 0x5ad1ff, 0xffd84d, 0x8aff7a][i], side: T.DoubleSide, emissive: 0x222222 }));
+      const cloth = new T.Mesh(new T.PlaneGeometry(1.1, .7), E.common('cloth', { color: [0xff5a5a, 0x5ad1ff, 0xffd84d, 0x8aff7a][i], side: T.DoubleSide, emissive: 0x222222, emissiveIntensity: 1 }));
       R.place(cloth, x + (x < 0 ? -.75 : 1.85), lz, .4); return cloth;
     });
     for (const [x, lz] of [[-3, 9], [3, 9], [-3, 14], [3, 14]]) R.block(x - .6, lz - .6, x + .6, lz + .6, 2.6, E.mat(0x7a7e8a));
@@ -126,7 +126,7 @@ const lake = {
     this.crackTex = E.canvasTex(64, 64, (x, w, h) => { x.fillStyle = '#e8f4ff'; x.fillRect(0, 0, w, h); x.strokeStyle = '#6a8ab0'; x.lineWidth = 2; for (let i = 0; i < 7; i++){ x.beginPath(); x.moveTo(w / 2, h / 2); x.lineTo(Math.random() * w, Math.random() * h); x.stroke(); } });
     for (let r = 0; r < LK.Rr; r++) for (let c = 0; c < LK.C; c++){
       if (isRock(c, r)){ R.block(lkx(c) - 1.2, lkl(r) - 1.2, lkx(c) + 1.2, lkl(r) + 1.2, 1.2, E.mat(0x6a6e78)); this.tiles.push(null); continue; }
-      const m = new T.Mesh(new T.BoxGeometry(2.9, .1, 2.9), new T.MeshStandardMaterial({ color: 0xbfe6ff, roughness: .1, metalness: .2, emissive: 0x2a4a6a, emissiveIntensity: .3 }));
+      const m = new T.Mesh(new T.BoxGeometry(2.9, .1, 2.9), E.tex('lake_ice', { color: 0xbfe6ff, roughness: .1, metalness: .2, emissive: 0x2a4a6a, emissiveIntensity: .3, tint: 0xd8f0ff }));
       R.place(m, lkx(c), lkl(r), .05); this.tiles.push(m);
     }
     R.floor(-10, 5, 10, 17, new T.MeshBasicMaterial({ color: 0x07101c }), .01);
@@ -163,8 +163,8 @@ const lake = {
     this.tiles.forEach((m, i) => {
       if (!m) return; const v = st.done ? 2 : st.t[i];
       m.visible = v !== 2;
-      if (v === 1 && m.material.map !== this.crackTex){ m.material.map = this.crackTex; m.material.needsUpdate = true; }
-      if (v === 0 && m.material.map){ m.material.map = null; m.material.needsUpdate = true; }
+      if (v === 1 && m.material.map !== this.crackTex){ m.userData.ice = m.material.map; m.material.map = this.crackTex; m.material.needsUpdate = true; }
+      if (v === 0 && m.material.map === this.crackTex){ m.material.map = m.userData.ice || null; m.material.needsUpdate = true; }
     });
   },
   objective(st, R, E){
@@ -465,6 +465,7 @@ const abbot = {
 export default {
   level: 5,
   // texture pack in tex/level5/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'panel', tex: 'prayer_cloth', w: 1.1, h: 1.6, y: 1.4, every: 5, color: 0x8a8a8a, skip: 3 },   // wall dressing: prayer banners (engine wallDecor)
   wallImg: 'monastery_wall', trimImg: 'frost_silver', texVer: 1,
   texFloors: {
     "The Crevasse Field": "crevasse_snow",

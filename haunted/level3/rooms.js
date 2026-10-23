@@ -21,7 +21,8 @@ function textPlane(E, w, h, emissive = .7){
   m.userData.tex = tex; return m;
 }
 function redraw(mesh, draw){ const t = mesh.userData.tex, c = t.image.getContext('2d'); c.clearRect(0, 0, t.image.width, t.image.height); draw(c, t.image.width, t.image.height); t.needsUpdate = true; }
-const brassOf = E => E.mat(0xc9a24a, { metalness: .75, roughness: .3 });
+let _brass = null;
+const brassOf = E => _brass || (_brass = E.tex('bell_bronze', { color: 0xc9a24a, metalness: .75, roughness: .3, tile: 1 }));   // tex/level3/bell_bronze: tarnished bronze
 function gearMesh(E, r, teeth, m){
   const T = E.THREE, g = new T.Group();
   const disc = new T.Mesh(new T.CylinderGeometry(r, r, .22, 24), m); g.add(disc);
@@ -44,13 +45,20 @@ const clockFace = {
   notes: [[0, 2.3, '“Blue is the long minute hand. Pink is the short hour hand. YOU are the hands.”', 1.7]],
   build(R, E){
     const T = E.THREE, brass = brassOf(E);
-    const face = new T.Mesh(new T.CylinderGeometry(FACE.r, FACE.r, .08, 48), E.mat(0xffffff, { map: E.canvasTex(512, 512, (x, w, h) => {
+    // the numbers are drawn over the baked dial (tex/level3/clock_face) once it loads; plain cream until then
+    const dialImg = new Image();
+    const drawFace = (x, w, h) => {
       x.fillStyle = '#efe4c8'; x.beginPath(); x.arc(w / 2, h / 2, w / 2 - 2, 0, Math.PI * 2); x.fill();
+      if (dialImg.complete && dialImg.naturalWidth){ x.save(); x.clip(); x.globalAlpha = .85; x.drawImage(dialImg, 0, 0, w, h); x.restore(); }
       x.strokeStyle = '#3a2a1a'; x.lineWidth = 10; x.stroke();
       x.fillStyle = '#2a1a10'; x.font = 'bold 54px Georgia'; x.textAlign = 'center'; x.textBaseline = 'middle';
       for (let i = 1; i <= 12; i++){ const a = i / 12 * Math.PI * 2; x.fillText(String(i), w / 2 + Math.sin(a) * 205, h / 2 - Math.cos(a) * 205); }
       for (let i = 0; i < 60; i++){ const a = i / 60 * Math.PI * 2, r1 = i % 5 ? 235 : 225; x.lineWidth = i % 5 ? 3 : 6; x.beginPath(); x.moveTo(w / 2 + Math.sin(a) * r1, h / 2 - Math.cos(a) * r1); x.lineTo(w / 2 + Math.sin(a) * 248, h / 2 - Math.cos(a) * 248); x.stroke(); }
-    }) }));
+    };
+    const faceTex = E.canvasTex(512, 512, drawFace);
+    dialImg.onload = () => { drawFace(faceTex.image.getContext('2d'), 512, 512); faceTex.needsUpdate = true; };
+    dialImg.src = '../tex/level3/clock_face.jpg?v=2';
+    const face = new T.Mesh(new T.CylinderGeometry(FACE.r, FACE.r, .08, 48), E.mat(0xffffff, { map: faceTex }));
     R.place(face, 0, FACE.lz, .04);
     const mk = (len, col, w) => { const g = new T.Group(); const b = new T.Mesh(new T.BoxGeometry(w, .12, len), E.glow(col, .6)); b.position.z = -len / 2; g.add(b); const tip = new T.Mesh(new T.ConeGeometry(w * .9, .6, 4), E.glow(col, .8)); tip.rotation.x = -Math.PI / 2; tip.position.z = -len - .2; g.add(tip); return R.place(g, 0, FACE.lz, .2); };
     this.minute = mk(6.4, E.COLORS[0], .35); this.hour = mk(4.2, E.COLORS[1], .5);
@@ -427,7 +435,7 @@ const bells = {
     this.bells = BELLS.map(([x, lz], i) => {
       R.plate('b' + i, x, lz, 0xc9a24a, 1.8, '♪');
       const g = new T.Group();
-      const bell = new T.Mesh(new T.CylinderGeometry(.35, .85, 1.1, 18, 1, true), new T.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .25, side: T.DoubleSide })); bell.position.y = -.6; g.add(bell);
+      const bell = new T.Mesh(new T.CylinderGeometry(.35, .85, 1.1, 18, 1, true), E.tex('bell_bronze', { color: 0xc9a24a, metalness: .8, roughness: .25, side: T.DoubleSide, tile: 1 })); bell.position.y = -.6; g.add(bell);
       const top = new T.Mesh(new T.SphereGeometry(.36, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), brass); top.position.y = -.05; g.add(top);
       const rope = new T.Mesh(new T.CylinderGeometry(.03, .03, .8, 6), E.mat(0xc8a26a)); rope.position.y = .4; g.add(rope);
       R.place(g, x, lz, 3); return g;
@@ -612,6 +620,7 @@ const heart = {
 export default {
   level: 3,
   // texture pack in tex/level3/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'disc', tex: 'clock_face', w: 1.5, y: 1.5, every: 6, frame: true, color: 0xefe4c8 },   // wall dressing: old clock dials (engine wallDecor)
   wallImg: 'clock_wall', trimImg: 'brass_trim', texVer: 1,
   texFloors: {
     "The Clock Face": "clock_wood",

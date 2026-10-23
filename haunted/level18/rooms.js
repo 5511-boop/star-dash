@@ -7,13 +7,13 @@ const solo = () => EE && EE.solo();
 const basalt = E => E.mat(0xffffff, { roughness: .95, map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#2a2224'; x.fillRect(0, 0, w, h); x.strokeStyle = '#ff5a1a'; x.globalAlpha = .35; x.lineWidth = 2; for (let i = 0; i < 6; i++){ x.beginPath(); x.moveTo(Math.random() * w, Math.random() * h); x.lineTo(Math.random() * w, Math.random() * h); x.stroke(); } x.globalAlpha = 1; x.strokeStyle = '#1a1416'; x.lineWidth = 3; for (let j = 0; j < 4; j++) for (let i = 0; i < 2; i++) x.strokeRect(i * 64 + (j % 2) * 32, j * 32, 64, 32); }, 6, 6) });
 // molten lava: tex/level18/lava.jpg over a hot emissive glow (the flat orange stays as the look until the image loads)
 const lavaMat = (E, rx = 1, ry = 1) => E.pbr('lava', rx, ry, { color: 0xff5a1a, emissive: 0xff3a0a, emissiveIntensity: .25, roughness: .5, normal: .6 });
-const ironMat = E => E.mat(0x4a4a52, { metalness: .8, roughness: .4 });
+const ironMat = E => E.tex('hot_iron', { color: 0x4a4a52, metalness: .8, roughness: .4, tile: 1.2 });
 const reinforcedMat = E => E.mat(0x5a3a2a, { metalness: .6, roughness: .5, emissive: 0x3a1a0a, emissiveIntensity: .3 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
 const home = it => { it.s = 0; it.x = it.hx; it.lz = it.hlz; it.w = -1; it.y = 0; it.fuse = 0; };
 const bombs = (list, n0 = 0) => list.map(([x, lz], i) => mkItem('bomb', x, lz, { n: n0 + i }));
 const respawnBombs = (st, dt, delay = 2.2) => (st.items || []).forEach(it => { if (it.k !== 'bomb' || it.s !== 3 || it.noRespawn) return; it.rt = (it.rt || 0) + dt; if (it.rt > delay){ it.rt = 0; home(it); } });
-const crate = (E, R, x, lz) => { const T = E.THREE, m = new T.Mesh(new T.BoxGeometry(1.6, .5, 1.2), E.mat(0x5a3a1a)); R.place(m, x, lz, .25); return m; };
+const crate = (E, R, x, lz) => { const T = E.THREE, m = new T.Mesh(new T.BoxGeometry(1.6, .5, 1.2), E.tex('keg_boards', { color: 0x5a3a1a, tile: 1.2 })); R.place(m, x, lz, .25); return m; };
 const bombTip = 'Pick up a <b>bomb</b> (walk over it) and <b>throw</b> it (Space / ⚡) — it explodes a moment after it lands';
 function blastAt(E, R, x, lz, rad = 2.2, msg = 'got caught in the blast!'){ E.ev('boom', '', 0, x, R.Z(lz)); for (const p of E.P) if (!p.frozen && Math.hypot(p.pos.x - x, R.lz(p.pos.z) - lz) < rad) E.freeze(p.idx, 3, `${E.names()[p.idx]} ${msg}`); }
 
@@ -58,7 +58,7 @@ const hammers = {
     EE = E; const T = E.THREE;
     this.rwm = RW2.map(([a, b, c, d]) => { const m = new T.Mesh(new T.BoxGeometry(c - a, 2.6, d - b), reinforcedMat(E)); R.place(m, (a + c) / 2, (b + d) / 2, 1.3); return m; });
     R.wall(-2, 7.6, 10, 8.4); R.wall(-10, 12.6, -2, 13.4); R.wall(4, 12.6, 10, 13.4); R.wall(-10, 17.6, 2, 18.4);
-    this.hm = ANV2.map(([x, lz]) => { const an = new T.Mesh(new T.BoxGeometry(1.6, .6, 1.2), ironMat(E)); R.place(an, x, lz, .3); const g = new T.Group(); const head = new T.Mesh(new T.BoxGeometry(1.8, 1, 1.4), ironMat(E)); g.add(head); const shaft = new T.Mesh(new T.CylinderGeometry(.15, .15, 3, 8), E.mat(0x5a3a1a)); shaft.position.y = 2; g.add(shaft); R.place(g, x, lz, 4); return g; });
+    this.hm = ANV2.map(([x, lz]) => { const an = new T.Mesh(new T.BoxGeometry(1.6, .6, 1.2), ironMat(E)); R.place(an, x, lz, .3); const g = new T.Group(); const head = new T.Mesh(new T.BoxGeometry(1.8, 1, 1.4), ironMat(E)); g.add(head); const shaft = new T.Mesh(new T.CylinderGeometry(.15, .15, 3, 8), E.tex('keg_boards', { color: 0x5a3a1a, tile: 1.2 })); shaft.position.y = 2; g.add(shaft); R.place(g, x, lz, 4); return g; });
     crate(E, R, 0, 2.5);
   },
   init(){ return { t: 0, rw: [0, 0, 0], items: bombs([[-.4, 2.5], [.4, 2.5]]) }; },
@@ -157,7 +157,7 @@ const kegs = {
   },
   init(){ return { door: 0, chain: [], items: [...bombs([[0, 2]]), ...KEG5.map(([x, lz], i) => mkItem('keg', x, lz, { n: i }))] }; },
   solve(st){ st.door = 1; },
-  itemMesh(k, E){ if (k !== 'keg') return null; const T = E.THREE, g = new T.Group(); const b = new T.Mesh(new T.CylinderGeometry(.35, .35, .7, 12), E.mat(0x6a4a2a)); b.position.y = .35; g.add(b); for (const y of [.12, .58]){ const r = new T.Mesh(new T.TorusGeometry(.36, .03, 4, 14), ironMat(E)); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); } const x = new T.Mesh(new T.BoxGeometry(.3, .02, .3), E.glow(0xff3a0a, .5)); x.position.y = .71; g.add(x); return g; },
+  itemMesh(k, E){ if (k !== 'keg') return null; const T = E.THREE, g = new T.Group(); const b = new T.Mesh(new T.CylinderGeometry(.35, .35, .7, 12), E.tex('keg_boards', { color: 0x6a4a2a, tile: .8 })); b.position.y = .35; g.add(b); for (const y of [.12, .58]){ const r = new T.Mesh(new T.TorusGeometry(.36, .03, 4, 14), ironMat(E)); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); } const x = new T.Mesh(new T.BoxGeometry(.3, .02, .3), E.glow(0xff3a0a, .5)); x.position.y = .71; g.add(x); return g; },
   colliders(st, R){ return st.door ? [] : [R.rect(...WALL5)]; },
   boom(st, R, E, x, lz){ blastAt(E, R, x, lz, 2.2); st.items.forEach(it => { if (it.k === 'keg' && it.s === 0 && !it.lit && Math.hypot(it.x - x, it.lz - lz) < 3.3){ it.lit = .3; } }); },
   onBomb(st, R, E, it){ this.boom(st, R, E, it.x, it.lz); },
@@ -276,7 +276,7 @@ const smithy = {
     const f = new T.Mesh(new T.BoxGeometry(2.6, 2.4, 1.6), E.mat(0x3a2a24)); R.place(f, FURN9[0], FURN9[1] + 1.6, 1.2); const mouth = new T.Mesh(new T.PlaneGeometry(1.4, 1), E.glow(0xff6a1a, 2)); R.place(mouth, FURN9[0], FURN9[1] + .79, .8); R.block(FURN9[0] - 1.3, FURN9[1] + .8, FURN9[0] + 1.3, FURN9[1] + 2.4, .01, E.mat(0));
     const an = new T.Mesh(new T.BoxGeometry(1.6, .6, 1.2), ironMat(E)); R.place(an, ANV9[0], ANV9[1], .3);
     this.ham = new T.Group(); const head = new T.Mesh(new T.BoxGeometry(1.6, .9, 1.2), ironMat(E)); this.ham.add(head); R.place(this.ham, ANV9[0], ANV9[1], 4);
-    const q = new T.Mesh(new T.CylinderGeometry(.9, .8, 1, 14), E.mat(0x5a3a1a)); R.place(q, QUENCH9[0], QUENCH9[1], .5); const w = new T.Mesh(new T.CircleGeometry(.8, 14), new T.MeshStandardMaterial({ color: 0x4a8ac8, emissive: 0x1a3a6a })); w.rotation.x = -Math.PI / 2; R.place(w, QUENCH9[0], QUENCH9[1], 1.01); R.block(QUENCH9[0] - .9, QUENCH9[1] - .9, QUENCH9[0] + .9, QUENCH9[1] + .9, .01, E.mat(0));
+    const q = new T.Mesh(new T.CylinderGeometry(.9, .8, 1, 14), E.tex('keg_boards', { color: 0x5a3a1a, tile: 1.2 })); R.place(q, QUENCH9[0], QUENCH9[1], .5); const w = new T.Mesh(new T.CircleGeometry(.8, 14), new T.MeshStandardMaterial({ color: 0x4a8ac8, emissive: 0x1a3a6a })); w.rotation.x = -Math.PI / 2; R.place(w, QUENCH9[0], QUENCH9[1], 1.01); R.block(QUENCH9[0] - .9, QUENCH9[1] - .9, QUENCH9[0] + .9, QUENCH9[1] + .9, .01, E.mat(0));
     this.orbs = orbRow(E, R, 3, -1.3, 21.4, 1.3, 2.4);
   },
   init(){ return { t: 0, done: 0, items: ORE9.map(([x, lz], i) => mkItem('ore', x, lz, { n: i, heat: 0, blade: 0 })) }; },
@@ -334,6 +334,7 @@ const titan = {
 export default {
   level: 18,
   // texture pack in tex/level18/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'cluster', tex: 'obsidian', w: 1.4, every: 7, color: 0x1a1420, metalness: .3, roughness: .15, skip: 2 },   // wall dressing: obsidian shards (engine wallDecor)
   wallImg: 'forge_wall', trimImg: 'hot_iron', texVer: 1,
   texFloors: {
     "The Cracked Gate": "gate_basalt",

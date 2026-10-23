@@ -5,7 +5,7 @@ import { orbRow, setOrbs, near, inRect, textPlane, redraw, knight } from '../lib
 
 let EE = null;
 const solo = () => EE && EE.solo();
-const heartF = E => E.mat(0xffffff, { roughness: .8, map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#2a0a14'; x.fillRect(0, 0, w, h); x.strokeStyle = '#6a1a2a'; x.lineWidth = 3; for (let i = 0; i < 7; i++){ x.beginPath(); x.moveTo(Math.random() * w, 0); x.bezierCurveTo(Math.random() * w, h * .3, Math.random() * w, h * .7, Math.random() * w, h); x.stroke(); } x.strokeStyle = '#3a1020'; x.strokeRect(0, 0, w, h); }, 5, 5) });
+const heartF = E => E.tex('flesh_wall', { tile: 3, roughness: .8, fallback: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#2a0a14'; x.fillRect(0, 0, w, h); x.strokeStyle = '#6a1a2a'; x.lineWidth = 3; for (let i = 0; i < 7; i++){ x.beginPath(); x.moveTo(Math.random() * w, 0); x.bezierCurveTo(Math.random() * w, h * .3, Math.random() * w, h * .7, Math.random() * w, h); x.stroke(); } x.strokeStyle = '#3a1020'; x.strokeRect(0, 0, w, h); }, 5, 5) });
 const voidMat = E => new E.THREE.MeshBasicMaterial({ color: 0x080206 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
 const home = it => { it.s = 0; it.x = it.hx; it.lz = it.hlz; it.w = -1; it.y = 0; it.fuse = 0; };
@@ -47,7 +47,7 @@ const heartbeat = {
   hint: 'Every heartbeat sends a red ripple out across the floor. If it passes under your feet you\'re frozen — unless you DASH at that moment (dashing hops right over it). Watch the ring, dash as it reaches you. Collect the four heart fragments.',
   build(R, E){
     EE = E; const T = E.THREE;
-    this.heart = new T.Mesh(new T.SphereGeometry(1.2, 18, 14), new T.MeshStandardMaterial({ color: 0xc81a3a, emissive: 0x8a0a1a, emissiveIntensity: .8 })); R.place(this.heart, HC2[0], HC2[1], 1.4); R.block(-1, 10.5, 1, 12.5, .01, E.mat(0));
+    this.heart = new T.Mesh(new T.SphereGeometry(1.2, 18, 14), E.tex('flesh_wall', { color: 0xc81a3a, emissive: 0xff2a40, emissiveIntensity: .9, emissiveMap: true, tint: 0xff8a8a, rx: 2, ry: 1 })); R.place(this.heart, HC2[0], HC2[1], 1.4); R.block(-1, 10.5, 1, 12.5, .01, E.mat(0));
     this.ring = new T.Mesh(new T.RingGeometry(.97, 1, 64), new T.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: .8, side: T.DoubleSide, depthWrite: false })); this.ring.rotation.x = -Math.PI / 2; R.place(this.ring, HC2[0], HC2[1], .06);
     this.fm = FR2.map(([x, lz]) => { const m = gem(E, 0xff4a6a); R.place(m, x, lz, .6); return m; });
     this.orbs = orbRow(E, R, 4, -1.95, 21.3, 1.3, 2.4);
@@ -314,6 +314,7 @@ const lord = {
 export default {
   level: 20,
   // texture pack in tex/level20/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'panel', tex: 'flesh_wall', w: 1.6, h: 2, y: 1.2, every: 6, glow: .15, color: 0x5a0a14, skip: 3 },   // wall dressing: living flesh (engine wallDecor)
   wallImg: 'manor_wall', trimImg: 'manor_gold', texVer: 1,
   texFloors: {
     "The Grand Return": "return_checker",

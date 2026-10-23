@@ -7,9 +7,9 @@ const solo = () => EE && EE.solo();
 const carpet = E => E.mat(0xffffff, { roughness: .95, map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#6a1a24'; x.fillRect(0, 0, w, h); x.strokeStyle = '#c8a24a'; x.lineWidth = 2; x.strokeRect(4, 4, w - 8, h - 8); x.fillStyle = '#8a2a34'; x.beginPath(); x.arc(w / 2, h / 2, 10, 0, 7); x.fill(); }, 8, 8) });
 const marbleF = E => E.mat(0xffffff, { roughness: .3, map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#e8e2d8'; x.fillRect(0, 0, w, h); x.strokeStyle = 'rgba(120,110,100,.3)'; x.lineWidth = 2; for (let i = 0; i < 5; i++){ x.beginPath(); x.moveTo(Math.random() * w, 0); x.bezierCurveTo(Math.random() * w, h / 3, Math.random() * w, h * .6, Math.random() * w, h); x.stroke(); } x.strokeStyle = '#a89878'; x.strokeRect(0, 0, w, h); }, 6, 6) });
 const voidMat = E => new E.THREE.MeshBasicMaterial({ color: 0x0a0604 });
-const waxMat = E => E.mat(0xf0d8b8, { roughness: .4, emissive: 0x3a2a1a, emissiveIntensity: .2 });
+const waxMat = E => E.tex('wax_skin', { color: 0xf0d8b8, roughness: .4, emissive: 0x3a2a1a, emissiveIntensity: .2, tile: 1 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
-const rope = (R, E, x1, lz1, x2, lz2) => { R.low(x1, lz1, x2, lz2); const T = E.THREE; const horiz = Math.abs(x2 - x1) > Math.abs(lz2 - lz1); const len = horiz ? Math.abs(x2 - x1) : Math.abs(lz2 - lz1); const n = Math.max(2, Math.round(len / 2.2)); for (let i = 0; i <= n; i++){ const f = i / n, px = horiz ? x1 + (x2 - x1) * f : (x1 + x2) / 2, pl = horiz ? (lz1 + lz2) / 2 : lz1 + (lz2 - lz1) * f; const post = new T.Mesh(new T.CylinderGeometry(.07, .1, .9, 8), E.mat(0xd4af37, { metalness: .8 })); R.place(post, px, pl, .45); } const r = new T.Mesh(new T.BoxGeometry(horiz ? len : .1, .1, horiz ? .1 : len), E.mat(0xa81a2a)); R.place(r, (x1 + x2) / 2, (lz1 + lz2) / 2, .8); };
+const rope = (R, E, x1, lz1, x2, lz2) => { R.low(x1, lz1, x2, lz2); const T = E.THREE; const horiz = Math.abs(x2 - x1) > Math.abs(lz2 - lz1); const len = horiz ? Math.abs(x2 - x1) : Math.abs(lz2 - lz1); const n = Math.max(2, Math.round(len / 2.2)); for (let i = 0; i <= n; i++){ const f = i / n, px = horiz ? x1 + (x2 - x1) * f : (x1 + x2) / 2, pl = horiz ? (lz1 + lz2) / 2 : lz1 + (lz2 - lz1) * f; const post = new T.Mesh(new T.CylinderGeometry(.07, .1, .9, 8), E.mat(0xd4af37, { metalness: .8 })); R.place(post, px, pl, .45); } const r = new T.Mesh(new T.BoxGeometry(horiz ? len : .1, .1, horiz ? .1 : len), E.tex('rope_velvet', { color: 0xa81a2a, tile: .6 })); R.place(r, (x1 + x2) / 2, (lz1 + lz2) / 2, .8); };
 const vaultTip = '<b>Dash</b> (Space / ⚡) into a low barrier to vault over it';
 
 /* ---------- wax figures: frozen while anyone looks at them, terrifyingly quick when nobody does ---------- */
@@ -292,6 +292,7 @@ const madame = {
 export default {
   level: 16,
   // texture pack in tex/level16/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'drape', tex: 'rope_velvet', w: 1.8, h: 2.2, y: 1.15, every: 7, color: 0x6a1020, skip: 3 },   // wall dressing: velvet hangings (engine wallDecor)
   wallImg: 'museum_wall', trimImg: 'museum_gilt', texVer: 1,
   texFloors: {
     "The Velvet Ropes": "rope_carpet",

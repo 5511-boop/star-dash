@@ -537,21 +537,90 @@ const TL = new THREE.TextureLoader();
 const TEX_DIR = LEVEL === 1 ? './tex/' : '../tex/level' + LEVEL + '/';   // Level 1's pack predates the per-level folders
 const TEX_VER = CFG.texVer || 1;   // bump in the level file when its textures change so browsers don't show cached ones
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
-function loadInto(m, slot, file, rx, ry, srgb){
-  TL.load(TEX_DIR + file + '?v=' + TEX_VER, t => {
-    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = MAX_ANISO;
-    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    m[slot] = t; if (slot === 'map') m.color.setHex(m.userData.tint ?? 0xffffff);
-    m.needsUpdate = true;
-  }, undefined, () => {});
+const TEX_ROOT = LEVEL === 1 ? './tex/' : '../tex/';   // Level 1's pack sits in the root; shared maps in tex/common/
+const COMMON_VER = 1;
+// one texture per file + repeat, shared by every material that asks for it (many props each make their own material)
+const TEXC = new Map();
+function loadInto(m, slot, file, rx, ry, srgb, dir){
+  const url = (dir || TEX_DIR) + file + '?v=' + (dir ? COMMON_VER : TEX_VER), key = url + '|' + rx + '|' + ry;
+  let e = TEXC.get(key);
+  if (!e){
+    e = { t: null, wait: [] }; TEXC.set(key, e);
+    TL.load(url, t => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = MAX_ANISO;
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      e.t = t; e.wait.forEach(f => f(t)); e.wait = null;
+    }, undefined, () => { e.wait = null; });
+  }
+  const put = t => { m[slot] = t; if (slot === 'map') m.color.setHex(m.userData.tint ?? 0xffffff); m.needsUpdate = true; };
+  if (e.t) put(e.t); else if (e.wait) e.wait.push(put);
 }
 function pbr(name, rx = 1, ry = 1, o = {}){
   const m = new THREE.MeshStandardMaterial({ color: o.color ?? 0xffffff, roughness: o.roughness ?? .85, metalness: o.metalness ?? 0, map: o.fallback || null });
-  m.userData.tint = o.tint ?? 0xffffff; if (o.tile) m.userData.tile = o.tile; if (o.fullHeight) m.userData.fullHeight = true;
-  if (o.emissive !== undefined){ m.emissive = new THREE.Color(o.emissive); m.emissiveIntensity = o.emissiveIntensity ?? .3; }
-  loadInto(m, 'map', name + '.jpg', rx, ry, true);
-  if (o.normal !== 0){ loadInto(m, 'normalMap', name + '_n.jpg', rx, ry, false); m.normalScale = new THREE.Vector2(o.normal ?? 1, o.normal ?? 1); }
+  m.userData.tint = o.tint ?? 0xffffff; m.userData.pbr = true; if (o.tile) m.userData.tile = o.tile; if (o.fullHeight) m.userData.fullHeight = true;
+  if (o.emissive !== undefined){ m.emissive = new THREE.Color(o.emissive); m.emissiveIntensity = o.emissiveIntensity ?? .3; if (o.emissiveMap) loadInto(m, 'emissiveMap', name + '.jpg', rx, ry, true, o.dir); }
+  if (o.transparent){ m.transparent = true; m.opacity = o.opacity ?? .85; m.depthWrite = false; }
+  loadInto(m, 'map', name + '.jpg', rx, ry, true, o.dir);
+  if (o.normal !== 0){ loadInto(m, 'normalMap', name + '_n.jpg', rx, ry, false, o.dir); m.normalScale = new THREE.Vector2(o.normal ?? 1, o.normal ?? 1); }
   return m;
+}
+// another level's texture (pbrFrom(1, 'door') = Level 1's pack, pbrFrom('common', …) = tex/common/)
+const pbrFrom = (lv, name, rx, ry, o = {}) => pbr(name, rx, ry, { ...o, dir: lv === 'common' ? TEX_ROOT + 'common/' : lv === 1 ? TEX_ROOT : TEX_ROOT + 'level' + lv + '/' });
+// a level-pack texture for a prop (rooms call E.tex('pew_oak', { color })): keeps the colour as the fallback look
+// Without rx/ry the texture repeats every o.tile metres (default 1.5) on whatever mesh uses it (UVs are scaled per mesh by detailPass).
+const propTex = (name, o = {}) => {
+  const m = pbr(name, o.rx || 1, o.ry || 1, { color: o.color ?? 0xffffff, roughness: o.roughness ?? .75, metalness: o.metalness ?? 0, tint: o.tint, normal: o.normal, emissive: o.emissive, emissiveIntensity: o.emissiveIntensity, emissiveMap: o.emissiveMap, transparent: o.transparent, opacity: o.opacity, tile: o.tile, dir: o.dir, fallback: o.fallback });
+  if (o.side !== undefined) m.side = o.side;
+  if (!o.rx && !o.ry) m.userData.autoUV = o.tile || 1.5;
+  return m;
+};
+
+/* ----- detail pass: every plain-coloured prop (no texture of its own) gets a shared detail map that multiplies over its colour
+   (wood grain, stone pits and cracks, brushed metal, or soft grime, chosen from the colour), repeated about once a metre ----- */
+const DETAIL = {};
+function detailMats(kind){
+  if (DETAIL[kind]) return DETAIL[kind];
+  const mk = (f, srgb) => { const t = TL.load(TEX_ROOT + 'common/' + f + '?v=' + COMMON_VER); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = Math.min(8, MAX_ANISO); if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return DETAIL[kind] = { map: mk('detail_' + kind + '.jpg', true), normal: OPT.qual === 'low' ? null : mk('detail_' + kind + '_n.jpg', false) };
+}
+const _hsl = {}, _ws = new THREE.Vector3(), _bb = new THREE.Box3(), _sz = new THREE.Vector3();
+function detailKind(m){
+  if (m.metalness > .45) return 'metal';
+  m.color.getHSL(_hsl);
+  if (_hsl.s > .2 && _hsl.h > .02 && _hsl.h < .13 && _hsl.l < .55) return 'wood';
+  if (_hsl.s < .2) return 'stone';
+  return 'grime';
+}
+function detailUV(mesh, tile = 1.4){
+  const geo = mesh.geometry; if (!geo || geo.userData.duv || !geo.attributes.uv) return;
+  geo.userData.duv = true;
+  mesh.getWorldScale(_ws); const p = geo.parameters || {};
+  if (geo.type === 'BoxGeometry'){ boxUV(geo, p.width * _ws.x, p.height * _ws.y, p.depth * _ws.z, tile, false); return; }
+  if (!geo.boundingBox) geo.computeBoundingBox(); _bb.copy(geo.boundingBox).getSize(_sz).multiply(_ws);
+  let su, sv;
+  if (geo.type === 'CylinderGeometry' || geo.type === 'ConeGeometry'){ const r = Math.max(p.radiusTop ?? p.radius ?? .5, p.radiusBottom ?? p.radius ?? .5) * Math.max(_ws.x, _ws.z); su = 2 * Math.PI * r / tile; sv = (p.height || 1) * _ws.y / tile; }
+  else if (geo.type === 'SphereGeometry'){ const r = (p.radius || .5) * Math.max(_ws.x, _ws.y, _ws.z); su = 2 * Math.PI * r / tile; sv = Math.PI * r / tile; }
+  else if (geo.type === 'PlaneGeometry'){ su = (p.width || 1) * _ws.x / tile; sv = (p.height || 1) * _ws.y / tile; }
+  else { const d = Math.max(_sz.x, _sz.y, _sz.z); su = sv = d / tile; }
+  su = Math.max(.35, su); sv = Math.max(.35, sv);
+  const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv); uv.needsUpdate = true;
+}
+function detailPass(root = scene){
+  if (CFG.detail === false) return;
+  const walk = o => {
+    if (o.userData.noDetail) return;
+    if (o.isMesh && !Array.isArray(o.material)){
+      const m = o.material;
+      if (m && m.isMeshStandardMaterial && !m.map && !m.userData.pbr && !m.userData.noDetail && !m.transparent && !(m.emissiveIntensity > .05 && m.emissive && m.emissive.getHex()))
+      {
+        if (!m.userData.detail){ const d = detailMats(detailKind(m)); m.map = d.map; if (d.normal && !m.normalMap){ m.normalMap = d.normal; m.normalScale = new THREE.Vector2(.8, .8); } m.color.multiplyScalar(1.07); m.userData.detail = true; m.needsUpdate = true; }
+        if (m.userData.detail) detailUV(o);
+      } else if (m && m.userData.detail) detailUV(o);
+      else if (m && m.userData.autoUV) detailUV(o, m.userData.autoUV);
+    }
+    for (const c of o.children) walk(c);
+  };
+  walk(root);
 }
 // rescale a box's UVs so its texture repeats every `tile` metres instead of stretching once per face
 function boxUV(geo, sx, sy, sz, tile, fullHeight){
@@ -572,7 +641,7 @@ const trimMat = CFG.trimImg ? pbr(CFG.trimImg, 1, 1, { color: CFG.trimColor || 0
 function block(x1, z1, x2, z2, h, m, collide = true){
   if (x1 > x2) [x1, x2] = [x2, x1]; if (z1 > z2) [z1, z2] = [z2, z1];
   const geo = new THREE.BoxGeometry(x2 - x1, h, z2 - z1);
-  if (m.userData && m.userData.tile) boxUV(geo, x2 - x1, h, z2 - z1, m.userData.tile, !!m.userData.fullHeight);
+  if (m.userData && m.userData.tile){ boxUV(geo, x2 - x1, h, z2 - z1, m.userData.tile, !!m.userData.fullHeight); geo.userData.duv = true; }
   const mesh = new THREE.Mesh(geo, m);
   mesh.position.set((x1 + x2) / 2, h / 2, (z1 + z2) / 2); scene.add(mesh);
   if (collide) RECTS.push({ x1, x2, z1, z2 });
@@ -600,7 +669,9 @@ const _doorMats = {};   // CFG.doorImg / CFG.frontDoorImg give doors an image te
 function doorMat(front){
   const k = front ? 'f' : 'd'; if (_doorMats[k]) return _doorMats[k];
   const img = front ? CFG.frontDoorImg : CFG.doorImg, col = front ? 0x5a1f1f : (CFG.doorColor || 0x5b3a22);
-  return _doorMats[k] = img ? pbr(img, 1, 1, { color: col, roughness: front ? .6 : .7, normal: 1.4 }) : mat(col);
+  // levels without their own door art borrow Level 1's carved doors (tinted toward the level's door colour)
+  return _doorMats[k] = img ? pbr(img, 1, 1, { color: col, roughness: front ? .6 : .7, normal: 1.4 })
+    : pbrFrom(1, front ? 'frontdoor' : 'door', 1, 1, { color: col, roughness: front ? .6 : .7, normal: 1.4, tint: front ? 0xffffff : new THREE.Color(col).lerp(new THREE.Color(0xffffff), .55).getHex() });
 }
 function makeDoor(id, x1, z1, x2, z2, style = 'wood'){
   if (x1 > x2) [x1, x2] = [x2, x1]; if (z1 > z2) [z1, z2] = [z2, z1];
@@ -670,7 +741,7 @@ function loadSkin(i){
     kit.loader.load(SKINS[i].url + '?v=' + MODEL_VER, g => res({ scene: g.scene, env: kit.env }), undefined, e => { console.warn('skin failed', SKINS[i].url, e); res(null); })));
 }
 function makeChar(color, ghostly = false){
-  const group = new THREE.Group(), rig = new THREE.Group(); group.add(rig);
+  const group = new THREE.Group(), rig = new THREE.Group(); group.add(rig); group.userData.noDetail = true;
   const bodyMat = mat(color, { roughness: .5, transparent: ghostly, opacity: ghostly ? .4 : 1 });
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(.4, .5, 6, 14), bodyMat); body.position.y = .68; rig.add(body);
   const eyeW = mat(0xffffff, { roughness: .3, transparent: ghostly, opacity: ghostly ? .5 : 1 }), eyeB = mat(0x111111);
@@ -743,7 +814,7 @@ const GHOSTS = [];
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0xeaf2ff, emissive: 0x9fc4ff, emissiveIntensity: .55, transparent: true, opacity: .82, roughness: .5, side: THREE.DoubleSide });
 function ghostMesh(look, tint){
   const gm = tint ? new THREE.MeshStandardMaterial({ color: tint, emissive: tint, emissiveIntensity: .5, transparent: true, opacity: .85, roughness: .5, side: THREE.DoubleSide }) : ghostMat;
-  const grp = new THREE.Group();
+  const grp = new THREE.Group(); grp.userData.noDetail = true;
   const eye = new THREE.MeshBasicMaterial({ color: 0x0b0710 });
   if (look === 'wisp' || look === 'small'){
     const b = new THREE.Mesh(new THREE.SphereGeometry(.45, 16, 12), gm); b.position.y = .9; b.scale.set(1.2, .9, 1.5); grp.add(b);
@@ -917,9 +988,10 @@ ROOMS.forEach((R, i) => {
   hwall(R.zN, x, 11);
   (R.def.exits || [R.def.exitX || [-1.5, 1.5]]).forEach(([dx1, dx2], k) => makeDoor('X' + i + (k ? '_' + k : ''), dx1, R.zN - .4, dx2, R.zN + .4, i === ROOMS.length - 1 ? 'front' : 'wood'));
 });
-floor(-25, OUT_Z - 40, 25, OUT_Z, mat(0x1d3322), .002);
+// the garden you escape into (every level): Level 1's grass and hedge textures
+floor(-25, OUT_Z - 40, 25, OUT_Z, pbrFrom(1, 'grass', 12, 10, { color: 0x1d3322, tint: 0xd8e8d0, roughness: .95 }), .002);
 {
-  const hedge = mat(0x234a2a);
+  const hedge = pbrFrom(1, 'hedge', 1, 1, { color: 0x234a2a, tint: 0xe0f0e0, tile: 1.5, roughness: .9 });
   block(-5, OUT_Z - 20, -4, OUT_Z - .5, 1.2, hedge); block(4, OUT_Z - 20, 5, OUT_Z - .5, 1.2, hedge); block(-5, OUT_Z - 21, 5, OUT_Z - 20, 1.2, hedge);
   for (let i = 0; i < 16; i++){
     const side = i % 2 ? 1 : -1, x = side * (8 + Math.random() * 12), z = OUT_Z - 3 - Math.random() * 28;
@@ -928,13 +1000,71 @@ floor(-25, OUT_Z - 40, 25, OUT_Z, mat(0x1d3322), .002);
   const m = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff6d8, fog: false })); m.position.set(-30, 30, OUT_Z - 70); scene.add(m);
 }
 
+/* ----- wall dressing (CFG.decor): the level's theme repeated along the side walls of every room — stained glass,
+   curtains, shelves, dials, crystals… Purely visual (no colliders); a spot is skipped when anything already stands
+   against the wall there, or the room sets noDecor.
+   decor: { kind: 'panel' | 'drape' | 'disc' | 'ring' | 'cluster', tex, w, h, y, every, skip, glow, frame, mullion, color, tint } (no lights: they'd slow every material) ----- */
+function wallDecor(){
+  const D = CFG.decor; if (!D) return;
+  const list = Array.isArray(D) ? D : [D];
+  // what already touches the side walls (props and blocks within 1.1 m of them), so dressing never clips through it
+  const near = [];
+  const bb = new THREE.Box3();
+  scene.traverse(o => { if (!o.isMesh || o.material === wallMat || o.material === trimMat || o.geometry.type === 'PlaneGeometry' && Math.abs(o.rotation.x + Math.PI / 2) < .01) return; bb.setFromObject(o); if (bb.max.y < .15 || bb.isEmpty()) return; if (bb.max.x > 8.9 || bb.min.x < -8.9){ if (bb.max.x - bb.min.x > 18) return; near.push(bb.clone()); } });
+  const blocked = (s, z1, z2) => near.some(b => (s > 0 ? b.max.x > 8.9 : b.min.x < -8.9) && b.max.z > z1 - .2 && b.min.z < z2 + .2);
+  const frameMat = trimMat;
+  ROOMS.forEach((R, ri) => {
+    if (R.def.noDecor) return;
+    list.forEach((d, di) => {
+      const every = d.every || 5, w = d.w || 1.6, h = d.h || 1.6, y = d.y ?? 1.3, inset = 9.96;
+      const m = d.tex ? propTex(d.tex, { color: d.color ?? 0x888888, tint: d.tint, rx: d.rx || 1, ry: d.ry || 1, emissive: d.glow ? 0xffffff : undefined, emissiveIntensity: d.glow, emissiveMap: !!d.glow, side: THREE.DoubleSide, roughness: d.roughness, metalness: d.metalness, transparent: d.transparent, opacity: d.opacity })
+        : mat(d.color || 0x888888);
+      const n = Math.floor((R.depth - 4) / every);
+      for (let k = 0; k <= n; k++){
+        const lz = 2 + (R.depth - 4) * (n ? k / n : .5) + (di ? every / 2 : 0);
+        if (lz > R.depth - 1.5) continue;
+        for (const s of [-1, 1]){
+          const z = R.Z(lz), z1 = z - w / 2, z2 = z + w / 2;
+          if (blocked(s, z1, z2)) continue;
+          if (d.skip && (ri + k + (s > 0 ? 1 : 0) + di) % d.skip === 0) continue;   // thin the pattern out
+          const g = new THREE.Group(); g.position.set(s * inset, 0, z); g.rotation.y = -s * Math.PI / 2; g.userData.decor = true;
+          if (d.kind === 'drape'){
+            const geo = new THREE.PlaneGeometry(w, h, 24, 1), p = geo.attributes.position;
+            for (let i = 0; i < p.count; i++){ const u = p.getX(i) / w; p.setZ(i, Math.abs(Math.sin(u * Math.PI * 6)) * .12 + (p.getY(i) < 0 ? Math.sin(u * Math.PI * 3) * .05 : 0)); }
+            geo.computeVertexNormals(); const c = new THREE.Mesh(geo, m); c.position.set(0, y, .08); g.add(c);
+            const rod = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, w + .3, 8), frameMat); rod.rotation.z = Math.PI / 2; rod.position.set(0, y + h / 2 + .04, .14); g.add(rod);
+          } else if (d.kind === 'disc' || d.kind === 'ring'){
+            const r = w / 2;
+            const disc = new THREE.Mesh(d.kind === 'ring' ? new THREE.TorusGeometry(r, r * .22, 10, 24) : new THREE.CircleGeometry(r, 32), m); disc.position.set(0, y, .06); g.add(disc);
+            if (d.frame && d.kind === 'disc'){ const rim = new THREE.Mesh(new THREE.TorusGeometry(r, .06, 8, 32), frameMat); rim.position.set(0, y, .07); g.add(rim); }
+          } else if (d.kind === 'cluster'){
+            const rnd = mulberry32(ri * 97 + k * 13 + (s > 0 ? 7 : 0));
+            for (let i = 0; i < 6; i++){
+              const cs = .25 + rnd() * .4, c = new THREE.Mesh(d.shape === 'coral' ? new THREE.CylinderGeometry(cs * .25, cs * .4, cs * 2.4, 6) : new THREE.ConeGeometry(cs * .45, cs * 2.4, 5), m);
+              c.position.set((rnd() - .5) * w, cs * 1.1 + (i > 3 ? rnd() * 1.2 : 0), .15 + rnd() * .25); c.rotation.set((rnd() - .2) * .6, rnd() * 3, (rnd() - .5) * .8); g.add(c);
+            }
+          } else {
+            const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); p.position.set(0, y, .06); g.add(p);
+            if (d.frame){ const f = .09; for (const [fx, fy, fw, fh] of [[0, h / 2, w + f * 2, f], [0, -h / 2, w + f * 2, f], [-w / 2, 0, f, h], [w / 2, 0, f, h]]){ const b = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, .1), frameMat); b.position.set(fx, y + fy, .07); g.add(b); } }
+            if (d.mullion){ const b = new THREE.Mesh(new THREE.BoxGeometry(.06, h, .06), frameMat); b.position.set(0, y, .1); g.add(b); const b2 = new THREE.Mesh(new THREE.BoxGeometry(w, .06, .06), frameMat); b2.position.set(0, y + h * .1, .1); g.add(b2); }
+          }
+          scene.add(g);
+        }
+      }
+    });
+  });
+}
+
 /* ===================== engine API for rooms ===================== */
 let lockMove = false;
 let _api = null;
 function EAPI(){
   if (_api) return _api;
   _api = {
-    THREE, scene, mat, glow, canvasTex, tiledTex, pbr, boxUV, symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
+    THREE, scene, mat, glow, canvasTex, tiledTex, pbr, pbrFrom, tex: propTex, detailPass, boxUV,
+    common: (name, o = {}) => propTex('detail_' + name, { tint: o.color, ...o, dir: TEX_ROOT + 'common/' }),   // shared detail map that keeps the prop's colour
+    texFrom: (lv, name, o = {}) => propTex(name, { ...o, dir: lv === 1 ? TEX_ROOT : TEX_ROOT + 'level' + lv + '/' }),   // another level's pack
+    symTex, sector, sfx, beep, noise, clamp, damp, shuffle, mulberry32, esc, fmtTime, COLORS, CSSCOL,
     makeChar, animChar, nameSprite, flameMat, WALL_H, has, LEVEL, FREEZE, glassMat, camera, renderer,
     get GMULT(){ return GMULT; },
     get P(){ return curP; },
@@ -1039,6 +1169,8 @@ for (const r of LOWS){ const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x
 const crackTex = canvasTex(128, 128, (x, w, h) => { x.fillStyle = '#5a4a40'; x.fillRect(0, 0, w, h); x.strokeStyle = '#1a1210'; x.lineWidth = 4; for (let i = 0; i < 6; i++){ x.beginPath(); x.moveTo(w / 2, h / 2); x.lineTo(Math.random() * w, Math.random() * h); x.stroke(); } });
 for (const c of CRACKED){ const r = c.rect; c.mesh = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, WALL_H, r.z2 - r.z1), mat(0xffffff, { map: crackTex })); c.mesh.position.set((r.x1 + r.x2) / 2, WALL_H / 2, (r.z1 + r.z2) / 2); scene.add(c.mesh); }
 const hookMat = mat(0xd4af37, { metalness: .8, roughness: .3, emissive: 0x6a5010, emissiveIntensity: .5 });
+wallDecor();
+detailPass(); setTimeout(detailPass, 2500);   // and again for anything rooms build lazily
 for (const h of HOOKS){ h.mat = hookMat.clone(); const ring = new THREE.Mesh(new THREE.TorusGeometry(.45, .08, 8, 20), h.mat); ring.position.set(h.x, 2.6, h.z); scene.add(ring); h.mesh = ring; const post = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 2.2, 6), h.mat); post.position.set(h.x, 1.1, h.z); scene.add(post); h.post = post; if (h.noPost) post.visible = false; }
 
 /* ===================== chars ===================== */

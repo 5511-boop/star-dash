@@ -5,7 +5,7 @@ import { orbRow, setOrbs, near, inRect, textPlane, redraw } from '../lib.js';
 let EE = null;
 const solo = () => EE && EE.solo();
 const seabed = E => E.mat(0xffffff, { roughness: .95, map: E.tiledTex(128, 128, (x, w, h) => { x.fillStyle = '#123040'; x.fillRect(0, 0, w, h); for (let i = 0; i < 70; i++){ x.fillStyle = ['#0e2836', '#1a4050', '#2a5060', '#0a1a24'][i % 4]; x.beginPath(); x.arc(Math.random() * w, Math.random() * h, 2 + Math.random() * 6, 0, 7); x.fill(); } }, 6, 6) });
-const rockMat = E => E.mat(0x1a2a34, { roughness: 1 });
+const rockMat = E => E.tex('angler_rock', { color: 0x1a2a34, roughness: 1, tile: 2 });
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
 const segL = (px, pl, x1, l1, x2, l2) => { const dx = x2 - x1, dl = l2 - l1, L2 = dx * dx + dl * dl || 1e-6, t = Math.max(0, Math.min(1, ((px - x1) * dx + (pl - l1) * dl) / L2)); return Math.hypot(px - x1 - dx * t, pl - l1 - dl * t); };
 const shadowTip = () => solo() ? 'Stand in the deep shadows (dark patches) to hide.' : 'Stand right behind your partner\'s back — or in a deep shadow — to hide.';
@@ -141,12 +141,12 @@ const galleon = {
   hint: 'Your air (bar) drains while you\'re out of the bubbles; run out and you\'re hauled back up to the start. Hold still on a valve wheel to open the hatch past it. Fetch the captain\'s key from the stern and open the treasure chest. Morays lurk in the holes in the hull — hide from them!',
   build(R, E){
     EE = E; const T = E.THREE;
-    HULL5.forEach(([a, b, c, d]) => R.block(a, b, c, d, 2.6, E.mat(0x4a3420)));
+    HULL5.forEach(([a, b, c, d]) => R.block(a, b, c, d, 2.6, E.tex('galleon_deck', { color: 0x4a3420, tile: 1.6 })));
     R.door('d0', -2, 5.9, 2, 6.7, 'gate'); R.door('d1', -2.5, 13.9, 2, 14.7, 'gate');
     WHEEL5.forEach(([x, lz, n], i) => R.plate('w' + i, x, lz, 0xd4af37, 1.2, '⎈'));
     this.bb = AIR5.flatMap(([a, b, c, d]) => bubbles(E, R, 10, (a + c) / 2, (b + d) / 2, Math.min(c - a, d - b)));
     AIR5.forEach(([a, b, c, d]) => { const m = new T.Mesh(new T.CylinderGeometry(Math.min(c - a, d - b) / 2, Math.min(c - a, d - b) / 2, .05, 16), new T.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: .25 })); R.place(m, (a + c) / 2, (b + d) / 2, .03); });
-    const chest = new T.Mesh(new T.BoxGeometry(1.6, 1, 1), E.mat(0x6a4a1a)); R.place(chest, 6, 20, .5); R.block(5.2, 19.5, 6.8, 20.5, .01, E.mat(0));
+    const chest = new T.Mesh(new T.BoxGeometry(1.6, 1, 1), E.tex('galleon_deck', { color: 0x6a4a1a, tint: 0xd8b890, tile: 1 })); R.place(chest, 6, 20, .5); R.block(5.2, 19.5, 6.8, 20.5, .01, E.mat(0));
     [[-9.6, 4, Math.PI / 2], [9.6, 10, -Math.PI / 2], [-9.6, 16, Math.PI / 2]].forEach(([x, lz]) => R.ghost({ home: [x + (x < 0 ? .6 : -.6), lz], look: 'wisp', tint: 0x4a5a2a, sp: 0, label: 'a moray eel', think: E.AI.lunger(4, 11, 1.6) }));
   },
   init(){ return { done: 0, pr: [0, 0], items: [mkItem('key', -7.5, 18.5)] }; },
@@ -340,6 +340,7 @@ const leviathan = {
 export default {
   level: 17,
   // texture pack in tex/level17/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'cluster', shape: 'coral', tex: 'coral', w: 1.6, every: 6, color: 0xd8705a },   // wall dressing: coral (engine wallDecor)
   wallImg: 'abyss_wall', trimImg: 'abyss_copper', texVer: 1,
   texFloors: {
     "The Diving Bell": "bell_plate",

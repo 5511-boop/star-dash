@@ -5,7 +5,7 @@ const bogFloor = E => E.mat(0xffffff, { map: E.tiledTex(128, 128, (x, w, h) => {
 const grassFloor = E => E.mat(0xffffff, { map: E.tiledTex(64, 64, (x, w, h) => { x.fillStyle = '#2e4a24'; x.fillRect(0, 0, w, h); for (let i = 0; i < 40; i++){ x.fillStyle = '#3a5a2c'; x.fillRect(Math.random() * w, Math.random() * h, 2, 5); } }, 8, 8) });
 let _mud = null;
 const mudMat = E => _mud || (_mud = new E.THREE.MeshStandardMaterial({ color: 0x3a2a14, roughness: .3, metalness: .1, emissive: 0x1a1006, emissiveIntensity: .4 }));
-const bogWater = E => new E.THREE.MeshStandardMaterial({ color: 0x1e3a1a, roughness: .2, emissive: 0x0a1a08, emissiveIntensity: .5 });
+const bogWater = E => E.tex('bog_water', { color: 0x1e3a1a, roughness: .2, emissive: 0x0a1a08, emissiveIntensity: .5, tile: 4, tint: 0xc8d8c0 });
 const itemAt = (R, it) => ({ x: it.x, z: R.Z(it.lz) });
 const home = it => { it.s = 0; it.x = it.hx; it.lz = it.hlz; it.w = -1; it.y = 0; };
 const mkItem = (k, x, lz, extra = {}) => ({ k, s: 0, x, lz, hx: x, hlz: lz, w: -1, ...extra });
@@ -76,12 +76,12 @@ const scarecrows = {
     this.heads = SC.map(([x, lz]) => {
       const post = new T.Mesh(new T.CylinderGeometry(.08, .08, 2.4, 6), E.mat(0x6a4a2a)); R.place(post, x, lz, 1.2);
       const arm = new T.Mesh(new T.BoxGeometry(1.8, .1, .1), E.mat(0x6a4a2a)); R.place(arm, x, lz, 1.7);
-      const shirt = new T.Mesh(new T.BoxGeometry(.9, .9, .3), E.mat(0x8a3a2a)); R.place(shirt, x, lz, 1.4);
-      const head = new T.Mesh(new T.SphereGeometry(.38, 12, 10), E.mat(0xd08a3a)); R.place(head, x, lz, 2.4);
+      const shirt = new T.Mesh(new T.BoxGeometry(.9, .9, .3), E.tex('burlap', { color: 0x8a3a2a, tile: .8, tint: 0xd0a090 })); R.place(shirt, x, lz, 1.4);
+      const head = new T.Mesh(new T.SphereGeometry(.38, 12, 10), E.tex('pumpkin_skin', { color: 0xd08a3a, rx: 1, ry: 1 })); R.place(head, x, lz, 2.4);
       const hat = new T.Mesh(new T.ConeGeometry(.45, .6, 10), E.mat(0x2a2a1a)); head.add(hat); hat.position.y = .45;
       return head;
     });
-    this.bridge = R.floor(-1.6, 6.4, 1.6, 11.6, E.mat(0x8a6238), .03);
+    this.bridge = R.floor(-1.6, 6.4, 1.6, 11.6, E.tex('boardwalk', { color: 0x8a6238, tile: 2 }), .03);
   },
   init(){ return { down: 0, items: [mkItem('stone', -3, 3.5), mkItem('stone', 0, 4.2), mkItem('stone', 3, 3.5)] }; },
   solve(st){ st.down = 15; },
@@ -110,8 +110,8 @@ const banks = {
   build(R, E){
     const T = E.THREE;
     R.floor(-3, 0, 3, 19, bogWater(E), .015);
-    R.floor(-1.6, .4, 1.6, 3.4, E.mat(0x8a6238), .03);
-    this.planks = [R.floor(-3, 1.2, -1.6, 2.6, E.mat(0x9a7448), .035), R.floor(1.6, 1.2, 3, 2.6, E.mat(0x9a7448), .035)];
+    R.floor(-1.6, .4, 1.6, 3.4, E.tex('boardwalk', { color: 0x8a6238, tile: 2 }), .03);
+    this.planks = [R.floor(-3, 1.2, -1.6, 2.6, E.tex('moss_wood', { color: 0x9a7448, tile: 1.4 }), .035), R.floor(1.6, 1.2, 3, 2.6, E.tex('moss_wood', { color: 0x9a7448, tile: 1.4 }), .035)];
     R.door('gw', -10, 10.8, -3, 11.2, 'gate'); R.door('ge', 3, 14.8, 10, 15.2, 'gate');
     for (const [n, [x, lz]] of [['L1', TB.L1], ['L2', TB.L2]]){ const lock = new T.Mesh(new T.BoxGeometry(.7, 1, .4), E.mat(0xb08a3a, { metalness: .6 })); R.place(lock, x, lz, .5); }
     R.plate('RW', -8.5, 2, 0xff5050, 1.2, '↺'); R.plate('RE', 8.5, 2, 0xff5050, 1.2, '↺');
@@ -185,7 +185,7 @@ const brambles = {
   notes: [[3, 1.6, '“A lit key burns the thorns — for a little while.”', 1.4]],
   hint: 'Each lock burns away a bramble wall in the OTHER corridor for 10 seconds. Carry the key to a lock, then throw it over the hedge to your partner so they can reach the next lock. Order: right lock first, then left, then right again.',
   build(R, E){
-    const T = E.THREE, hedge = E.mat(0x1e3a18);
+    const T = E.THREE, hedge = E.tex('bog_hedge', { color: 0x1e3a18, tile: 1.6, roughness: .9 });
     R.block(-.4, 3, .4, 19, 2.6, hedge);
     for (const [x1, l1, x2, l2] of [[-10, 11.5, -6, 12.3], [-4, 5, -2.5, 6.5], [6, 6.2, 10, 7], [2.5, 9, 4, 10.5], [-6.5, 14, -5, 15]]) R.block(x1, l1, x2, l2, 2.2, hedge);
     this.br = Object.entries(BR).map(([k, [x1, l1, x2, l2]]) => {
@@ -273,7 +273,7 @@ const cottage = {
     const arch = new T.Mesh(new T.TorusGeometry(.5, .1, 6, 12, Math.PI), E.mat(0x2a1a10)); R.place(arch, -7.5, 14.25, 0);
     R.plate('LV', -7.5, 19.5, 0xffa040, 1.2, '⇩');
     R.plate('HV', 7, 18, 0x9a5aff, 2.4, '⬇');
-    for (const [x, lz] of [[-8.5, 4], [8.5, 4]]){ const sh = new T.Mesh(new T.BoxGeometry(1.8, .9, .8), E.mat(0x4a2a1a)); R.place(sh, x, lz - .9, .45); }
+    for (const [x, lz] of [[-8.5, 4], [8.5, 4]]){ const sh = new T.Mesh(new T.BoxGeometry(1.8, .9, .8), E.tex('burlap', { color: 0x4a2a1a, tile: .9 })); R.place(sh, x, lz - .9, .45); }
     const pot = new T.Mesh(new T.CylinderGeometry(1, .8, 1, 14), E.mat(0x1a1a1a)); R.place(pot, 2, 10, .5); R.block(1, 9, 3, 11, .01, E.mat(0));
     R.ghost({ home: [3, 15], look: 'small', tint: 0x2a1a3a, sp: 2.7, radius: 9, label: 'the witch\'s cat', scale: 1.1 });
   },
@@ -364,7 +364,7 @@ const hollow = {
   notes: [[-6, 1.8, '“The old hag is curious. Throw a stone and she\'ll go and look.”', 1.5]],
   hint: 'Throw a stone somewhere away from the key — the hag walks over to investigate it. While she\'s looking the other way, the other one sneaks in, grabs the key and carries it to the lock at the north end. Hedges block her lantern.',
   build(R, E){
-    const T = E.THREE, hedge = E.mat(0x1e3a18);
+    const T = E.THREE, hedge = E.tex('bog_hedge', { color: 0x1e3a18, tile: 1.6, roughness: .9 });
     for (const [x1, l1, x2, l2] of [[-2.5, 9, -1.5, 13], [1.5, 9, 2.5, 13], [-8.5, 10.5, -7, 11.5], [7, 10.5, 8.5, 11.5], [-3, 18, 3, 18.8], [-9, 4, -6, 4.8], [6, 4, 9, 4.8]]) R.block(x1, l1, x2, l2, 1.8, hedge);
     const ped = new T.Mesh(new T.CylinderGeometry(.5, .6, .7, 10), E.mat(0x7a7a8a)); R.place(ped, 0, 11, .35);
     const lock = new T.Mesh(new T.BoxGeometry(1, 1.2, .5), E.mat(0xb08a3a, { metalness: .6 })); R.place(lock, 0, 21, .6);
@@ -409,7 +409,7 @@ const patch = {
   build(R, E){
     const T = E.THREE;
     MUDS.forEach(([x1, l1, x2, l2]) => R.floor(x1, l1, x2, l2, mudMat(E), .014));
-    this.pk = PUMPS.map(([x, lz]) => { const g = new T.Group(); const b = new T.Mesh(new T.SphereGeometry(.6, 14, 10), new T.MeshStandardMaterial({ color: 0xd8701a, emissive: 0xff9a2a, emissiveIntensity: 0 })); b.scale.y = .8; b.position.y = .45; g.add(b); const st = new T.Mesh(new T.CylinderGeometry(.06, .08, .25, 6), E.mat(0x3a5a1a)); st.position.y = .95; g.add(st); const l = new T.PointLight(0xff9a2a, 0, 6, 1.4); l.position.y = 1; g.add(l); return R.place(g, x, lz); });
+    this.pk = PUMPS.map(([x, lz]) => { const g = new T.Group(); const b = new T.Mesh(new T.SphereGeometry(.6, 14, 10), E.tex('pumpkin_skin', { color: 0xd8701a, emissive: 0xff9a2a, emissiveIntensity: 0, rx: 1, ry: 1, tint: 0xffc890 })); b.scale.y = .8; b.position.y = .45; g.add(b); const st = new T.Mesh(new T.CylinderGeometry(.06, .08, .25, 6), E.mat(0x3a5a1a)); st.position.y = .95; g.add(st); const l = new T.PointLight(0xff9a2a, 0, 6, 1.4); l.position.y = 1; g.add(l); return R.place(g, x, lz); });
     const bowl = new T.Mesh(new T.CylinderGeometry(.8, .5, .6, 14), E.mat(0x3a3a44, { metalness: .5 })); R.place(bowl, BOWL[0], BOWL[1] - 1.2, .3);
     const fire = new T.Mesh(new T.ConeGeometry(.5, 1, 10), E.flameMat); R.place(fire, BOWL[0], BOWL[1] - 1.2, .9);
     this.hm = handMeshes(E);

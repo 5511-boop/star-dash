@@ -120,7 +120,7 @@ const thornMaze = {
   notes: [[0, 1.6, '“The thorns grow while you watch. Light is the only thing they fear.”', 1.5]],
   hint: 'Thorn vines creep across the paths — if a growing tip reaches you, you\'re snagged. Flash near a vine (or shoot a light step along it) and it withers back to its root for a few seconds. Burn your way to the three seeds.',
   build(R, E){
-    EE = E; HEDGE4.forEach(([a, b, c, d]) => R.block(a, b, c, d, 1.8, E.mat(0x2a5a2a)));
+    EE = E; HEDGE4.forEach(([a, b, c, d]) => R.block(a, b, c, d, 1.8, E.tex('topiary', { color: 0x2a5a2a, tile: 1.4 })));
     this.v = vineSet(R, E, VINES4);
     this.sm = SEED4.map(([x, lz]) => { const m = new E.THREE.Mesh(new E.THREE.SphereGeometry(.25, 10, 8), E.glow(0xffd34a, 1)); R.place(m, x, lz, .4); return m; });
     this.orbs = orbRow(E, R, 3, -1.3, 21.5, 1.3, 2.2);
@@ -184,7 +184,7 @@ const sundial = {
     this.ring = RING6.map(([x, lz]) => isle(R, E, x - 1.2, lz - 1.2, x + 1.2, lz + 1.2, stone(E)));
     for (const s of [-1, 1]){ isle(R, E, s > 0 ? 8.6 : -10, 2.6, s > 0 ? 10 : -8.6, 19.4); }
     for (let i = 0; i < 6; i++){ const [x, lz] = RING6[i], ex = x > 1 ? 8.6 : x < -1 ? -8.6 : 0; if (ex){ isle(R, E, Math.min(x, ex), lz - .5, Math.max(x, ex), lz + .5); } }
-    this.bm = BEDS6.map(([x, lz]) => { const g = new T.Group(); const soil = new T.Mesh(new T.CylinderGeometry(.75, .6, .3, 12), E.mat(0x4a3a2a)); g.add(soil); const fl = []; for (let k = 0; k < 6; k++){ const f = new T.Mesh(new T.SphereGeometry(.16, 8, 6), E.glow([0xff6aa8, 0xffd34a, 0xa86aff][k % 3], .8)); f.position.set(Math.cos(k) * .4, .3, Math.sin(k) * .4); f.visible = false; g.add(f); fl.push(f); } g.userData.fl = fl; R.place(g, x, lz, -.2); return g; });
+    this.bm = BEDS6.map(([x, lz]) => { const g = new T.Group(); const soil = new T.Mesh(new T.CylinderGeometry(.75, .6, .3, 12), E.tex('terracotta', { color: 0x9a5a3a, tile: 1 })); g.add(soil); const fl = []; for (let k = 0; k < 6; k++){ const f = new T.Mesh(new T.SphereGeometry(.16, 8, 6), E.glow([0xff6aa8, 0xffd34a, 0xa86aff][k % 3], .8)); f.position.set(Math.cos(k) * .4, .3, Math.sin(k) * .4); f.visible = false; g.add(f); fl.push(f); } g.userData.fl = fl; R.place(g, x, lz, -.2); return g; });
     this.sun = new T.Mesh(new T.SphereGeometry(1.2, 16, 12), E.glow(0xffd34a, .2)); R.place(this.sun, 0, 11, 7);
     this.w = [windSpirit(R, E, [9.3, 11], { sp: 1.3, b: [-10, 10, 2.6, 19.4] })];
   },
@@ -213,7 +213,7 @@ const bramble = {
   get hint(){ return solo() ? 'Face the bramble and tap ☀: your light bridge burns a tunnel through. Walk it before it grows back — and don\'t be inside when it does!' : 'A light step burns a 5-long tunnel, but the bramble is 7 deep. One of you burns in, then the other walks to the end of that tunnel and burns the rest — quickly, before the first part grows back. (Or make a long bridge between you, if one of you is already through.)'; },
   build(R, E){
     EE = E; const T = E.THREE;
-    this.cells = brambleCells.map(([x, l1, l2]) => { const m = new T.Mesh(new T.BoxGeometry(.98, 1.6, l2 - l1 - .02), E.mat(0x2a4a1a)); R.place(m, x + .5, (l1 + l2) / 2, .8); for (let k = 0; k < 2; k++){ const th = new T.Mesh(new T.ConeGeometry(.08, .35, 4), E.mat(0x8a2a4a)); th.position.set((Math.random() - .5) * .8, (Math.random() - .5) * 1.2, (Math.random() - .5) * .8); th.rotation.set(Math.random() * 3, 0, Math.random() * 3); m.add(th); } return m; });
+    this.cells = brambleCells.map(([x, l1, l2]) => { const m = new T.Mesh(new T.BoxGeometry(.98, 1.6, l2 - l1 - .02), E.tex('topiary', { color: 0x2a4a1a, tint: 0xb0c0a0, tile: 1.2 })); R.place(m, x + .5, (l1 + l2) / 2, .8); for (let k = 0; k < 2; k++){ const th = new T.Mesh(new T.ConeGeometry(.08, .35, 4), E.mat(0x8a2a4a)); th.position.set((Math.random() - .5) * .8, (Math.random() - .5) * 1.2, (Math.random() - .5) * .8); th.rotation.set(Math.random() * 3, 0, Math.random() * 3); m.add(th); } return m; });
     this.rose = new T.Mesh(new T.SphereGeometry(.45, 12, 8), E.glow(0xff3a6a, 1)); R.place(this.rose, 0, 16.3, .8);
   },
   init(){ return { burn: brambleCells.map(() => 0), rose: 0 }; },
@@ -338,6 +338,7 @@ const queenRoom = {
 export default {
   level: 14,
   // texture pack in tex/level14/ (Poly Haven + Blender-baked by Claude Desktop; see README.txt there)
+  decor: { kind: 'panel', tex: 'topiary', w: 2, h: 2.2, y: 1.1, every: 6, color: 0x2a5a2a, skip: 3 },   // wall dressing: ivy (engine wallDecor)
   wallImg: 'garden_wall', trimImg: 'sky_gilt', texVer: 1,
   texFloors: {
     "The Cloud Steps": "cloud_steps",
